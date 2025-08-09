@@ -1,0 +1,85 @@
+import React from "react";
+import { Badge } from "./badge";
+import { Button } from "./button";
+import { Card } from "./card";
+import {
+  BarChart3,
+  Settings,
+  TrendingUp,
+  Link2,
+  Crown,
+  Home,
+} from "lucide-react";
+
+interface AppSidebarProps {
+  activeTab: string;
+  onTabChange: (tab: string) => void;
+  isMobile?: boolean;
+}
+
+export function AppSidebar({
+  activeTab,
+  onTabChange,
+  isMobile = false,
+}: AppSidebarProps) {
+  const menuItems = [
+    { id: "dashboard", label: "대시보드", icon: Home },
+    { id: "exchanges", label: "거래소 연동", icon: Link2 },
+    { id: "autotrading", label: "자동매매", icon: TrendingUp },
+    { id: "plans", label: "플랜 관리", icon: Crown },
+  ];
+
+  const sidebarClasses = isMobile
+    ? "h-full w-full bg-sidebar border-r border-sidebar-border"
+    : "fixed left-0 top-0 h-full w-64 bg-sidebar border-r border-sidebar-border";
+
+  return (
+    <div className={sidebarClasses}>
+      {/* Logo */}
+      <div className="p-6">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+            <BarChart3 className="w-5 h-5 text-primary-foreground text-white" />
+          </div>
+          <h1 className="text-xl font-medium">Karbit</h1>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="px-4 space-y-2">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Button
+              key={item.id}
+              variant={activeTab === item.id ? "secondary" : "ghost"}
+              className="w-full justify-start gap-3 h-11"
+              onClick={() => onTabChange(item.id)}
+            >
+              <Icon className="w-4 h-4" />
+              {item.label}
+            </Button>
+          );
+        })}
+      </nav>
+
+      {/* Current Plan */}
+      <div
+        className={`${isMobile ? "mt-8 mx-4" : "absolute bottom-6 left-4 right-4"}`}
+      >
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-muted-foreground">현재 플랜</span>
+            <Badge variant="secondary">Free</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            기본 환율 모니터링만 가능합니다
+          </p>
+          <Button size="sm" className="w-full text-white">
+            업그레이드
+          </Button>
+        </Card>
+      </div>
+    </div>
+  );
+}
