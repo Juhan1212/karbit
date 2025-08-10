@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type { Route } from "./+types/dashboard";
+import { useNavigate } from "react-router";
+import { useUser, useIsLoading, useAuthActions } from "~/stores";
 import {
   Card,
   CardContent,
@@ -46,8 +48,38 @@ export async function loader({ context }: Route.LoaderArgs) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+  const user = useUser();
+  const isLoading = useIsLoading();
+  const { checkAuth } = useAuthActions();
   const [selectedCoin, setSelectedCoin] = useState("XRP");
   const [seedAmount, setSeedAmount] = useState([10000000]); // 1천만원 기본값
+
+  // 인증 체크 및 리다이렉트
+  useEffect(() => {
+    if (!isLoading && !user) {
+      navigate("/auth", { replace: true });
+    } else if (!user) {
+      checkAuth();
+    }
+  }, [user, isLoading, navigate, checkAuth]);
+
+  // 로딩 중일 때
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p>로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 인증되지 않은 사용자
+  if (!user) {
+    return null; // useEffect에서 리다이렉트 처리
+  }
   const currentPlan = "Free"; // 현재 플랜 상태
 
   const formatKRW = (amount: number) => {
@@ -208,7 +240,8 @@ export default function Dashboard() {
         <div>
           <h1>김치 프리미엄 대시보드</h1>
           <p className="text-muted-foreground">
-            실시간 환율 모니터링 및 자동매매 현황
+            {user.name ? `${user.name}님, ` : ""}실시간 환율 모니터링 및
+            자동매매 현황
           </p>
         </div>
         <Button variant="outline" size="sm">

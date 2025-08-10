@@ -1,4 +1,6 @@
 import React from "react";
+import { useNavigate } from "react-router";
+import { useUser, useAuthActions } from "~/stores";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import { Card } from "./card";
@@ -9,6 +11,8 @@ import {
   Link2,
   Crown,
   Home,
+  LogOut,
+  User,
 } from "lucide-react";
 
 interface AppSidebarProps {
@@ -22,6 +26,14 @@ export function AppSidebar({
   onTabChange,
   isMobile = false,
 }: AppSidebarProps) {
+  const navigate = useNavigate();
+  const user = useUser();
+  const { logout } = useAuthActions();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/auth");
+  };
   const menuItems = [
     { id: "dashboard", label: "대시보드", icon: Home },
     { id: "exchanges", label: "거래소 연동", icon: Link2 },
@@ -62,6 +74,28 @@ export function AppSidebar({
           );
         })}
       </nav>
+
+      {/* User Info & Logout */}
+      <div className="px-4 mt-6">
+        <Card className="p-3 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <User className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">
+              {user?.name || "사용자"}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">{user?.email}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-3 h-3" />
+            로그아웃
+          </Button>
+        </Card>
+      </div>
 
       {/* Current Plan */}
       <div

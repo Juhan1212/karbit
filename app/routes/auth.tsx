@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import type { Route } from "./+types/auth";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
+import { useUser, useAuthActions } from "~/stores";
 import { Button } from "../components/button";
 import {
   Card,
@@ -30,14 +30,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-export async function loader({ context }: Route.LoaderArgs) {
-  return {
-    message: "Auth page loaded successfully",
-  };
-}
-
 export default function Auth() {
   const navigate = useNavigate();
+  const user = useUser();
+  const { login, signup } = useAuthActions();
   const [activeTab, setActiveTab] = useState("login");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -57,10 +53,18 @@ export default function Auth() {
     password: "",
     confirmPassword: "",
     agreeTerms: false,
+    agreePrivacy: false,
     agreeMarketing: false,
   });
 
   const [isLoading, setIsLoading] = useState(false);
+
+  // 이미 인증된 사용자는 대시보드로 리다이렉트
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user]); // navigate 종속성 제거로 무한 루프 방지
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,12 +77,21 @@ export default function Auth() {
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const success = await login(loginData.email, loginData.password);
+
+      if (success) {
+        toast.success("로그인에 성공했습니다!");
+        navigate("/dashboard");
+      } else {
+        toast.error("이메일 또는 비밀번호가 올바르지 않습니다.");
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error("로그인 중 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
       setIsLoading(false);
-      toast.success("로그인에 성공했습니다!");
-      navigate("/dashboard");
-    }, 1500);
+    }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -104,12 +117,31 @@ export default function Auth() {
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
+    if (!signupData.agreePrivacy) {
+      toast.error("개인정보처리방침에 동의해주세요.");
       setIsLoading(false);
-      toast.success("회원가입이 완료되었습니다!");
-      navigate("/dashboard");
-    }, 2000);
+      return;
+    }
+
+    try {
+      const success = await signup(
+        signupData.name,
+        signupData.email,
+        signupData.password
+      );
+
+      if (success) {
+        toast.success("회원가입이 완료되었습니다!");
+        navigate("/dashboard");
+      } else {
+        toast.error("회원가입 중 오류가 발생했습니다.");
+      }
+    } catch (error) {
+      console.error("Signup error:", error);
+      toast.error("회원가입 중 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -225,7 +257,7 @@ export default function Auth() {
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <Checkbox
+                      {/* <Checkbox
                         id="remember"
                         checked={loginData.remember}
                         onCheckedChange={(checked) =>
@@ -237,7 +269,7 @@ export default function Auth() {
                       />
                       <Label htmlFor="remember" className="text-sm">
                         로그인 상태 유지
-                      </Label>
+                      </Label> */}
                     </div>
                     <Button
                       variant="link"
@@ -410,17 +442,49 @@ export default function Auth() {
                       />
                       <Label
                         htmlFor="agree-terms"
-                        className="text-sm leading-tight"
+                        className="text-sm leading-tight flex items-center gap-1"
                       >
-                        <span className="text-destructive">*</span> 이용약관 및
-                        개인정보처리방침에 동의합니다
+                        <span className="text-destructive">*</span>
                         <Button
                           variant="link"
                           size="sm"
-                          className="p-0 ml-1 text-sm underline"
+                          className="p-0 h-auto text-sm underline"
+                          onClick={() => navigate("/terms-service")}
+                          type="button"
                         >
-                          내용 보기
+                          이용약관
                         </Button>
+                        에 동의합니다
+                      </Label>
+                    </div>
+
+                    <div className="flex items-start space-x-2">
+                      <Checkbox
+                        id="agree-privacy"
+                        checked={signupData.agreePrivacy}
+                        onCheckedChange={(checked) =>
+                          setSignupData({
+                            ...signupData,
+                            agreePrivacy: checked as boolean,
+                          })
+                        }
+                        required
+                      />
+                      <Label
+                        htmlFor="agree-privacy"
+                        className="text-sm leading-tight flex items-center gap-1"
+                      >
+                        <span className="text-destructive">*</span>
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="p-0 h-auto text-sm underline"
+                          onClick={() => navigate("/privacy-policy")}
+                          type="button"
+                        >
+                          개인정보처리방침
+                        </Button>
+                        에 동의합니다
                       </Label>
                     </div>
 
@@ -505,11 +569,21 @@ export default function Auth() {
         <div className="mt-6 text-center text-xs text-muted-foreground">
           <p>
             가입 시 Karbit의{" "}
-            <Button variant="link" size="sm" className="p-0 text-xs underline">
+            <Button
+              variant="link"
+              size="sm"
+              className="p-0 text-xs underline"
+              onClick={() => navigate("/terms-service")}
+            >
               이용약관
             </Button>{" "}
             및{" "}
-            <Button variant="link" size="sm" className="p-0 text-xs underline">
+            <Button
+              variant="link"
+              size="sm"
+              className="p-0 text-xs underline"
+              onClick={() => navigate("/privacy-policy")}
+            >
               개인정보처리방침
             </Button>
             에 동의하게 됩니다.
