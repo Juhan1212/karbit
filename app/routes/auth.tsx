@@ -239,7 +239,12 @@ export default function Auth() {
                         로그인 상태 유지
                       </Label>
                     </div>
-                    <Button variant="link" size="sm" className="p-0 text-sm">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="p-0 text-sm"
+                      onClick={() => navigate("/forgot-password")}
+                    >
                       비밀번호 찾기
                     </Button>
                   </div>
