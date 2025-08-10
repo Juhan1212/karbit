@@ -45,7 +45,7 @@ export default function Home() {
   const navigate = useNavigate();
 
   const handleGetStarted = () => {
-    navigate("/dashboard");
+    navigate("/auth");
   };
 
   // Mock real-time data for preview
