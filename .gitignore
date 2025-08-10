@@ -95,3 +95,8 @@ ehthumbs.db
 Thumbs.db
 
 postgres-data
+
+# Database
+drizzle/meta
+*.db
+*.sqlite
