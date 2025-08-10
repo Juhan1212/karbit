@@ -97,7 +97,7 @@ export default function PlanManagement() {
   const PlanCard = ({ plan }: PlanCardProps) => (
     <Card className={`relative ${plan.popular ? "border-primary" : ""} h-full`}>
       {plan.popular && (
-        <Badge className="absolute -top-2 left-1/2 -translate-x-1/2">
+        <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 text-white">
           추천
         </Badge>
       )}
@@ -154,7 +154,7 @@ export default function PlanManagement() {
         {/* Action Button */}
         <div className="pt-4">
           <Button
-            className="w-full"
+            className={`w-full ${plan.popular ? "text-white" : ""}`}
             variant={
               plan.current ? "outline" : plan.popular ? "default" : "outline"
             }
