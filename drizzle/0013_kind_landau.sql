@@ -1,0 +1,1 @@
+ALTER TABLE "coins_exchanges" ADD COLUMN "net_type" varchar(20);

@@ -5,6 +5,7 @@ export {
   useIsLoading,
   useIsAuthenticated,
   useIsHydrated,
+  useUserPlan,
   useAuthActions,
   type AuthUser,
 } from "./auth-store";

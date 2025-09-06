@@ -6,7 +6,9 @@
     "app/**/.server/**/*",
     "app/**/.client/**/*",
     "database/**/*",
-    "server/**/*"
+    "server/**/*",
+    "utils/**/*",
+    "exchanges/**/*"
   ],
   "compilerOptions": {
     "composite": true,
@@ -21,7 +23,9 @@
     "rootDirs": [".", "./.react-router/types"],
     "paths": {
       "~/database/*": ["./database/*"],
-      "~/*": ["./app/*"]
+      "~/utils/*": ["./utils/*"],
+      "~/*": ["./app/*"],
+      "@icons/*": ["./app/assets/icons/*"]
     },
     "esModuleInterop": true,
     "resolveJsonModule": true

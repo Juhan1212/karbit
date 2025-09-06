@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router";
-import { useUser, useAuthActions } from "~/stores";
+import { useUser, useUserPlan, useAuthActions } from "~/stores";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import { Card } from "./card";
@@ -28,11 +28,34 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const navigate = useNavigate();
   const user = useUser();
+  const userPlan = useUserPlan();
   const { logout } = useAuthActions();
 
   const handleLogout = async () => {
     await logout();
     navigate("/auth");
+  };
+
+  const getPlanBadgeVariant = (planName: string) => {
+    switch (planName?.toLowerCase()) {
+      case "free":
+        return "secondary";
+      case "starter":
+        return "default";
+      case "premium":
+        return "default";
+      default:
+        return "secondary";
+    }
+  };
+
+  const getPlanDescription = (plan: any) => {
+    if (!plan) return "기본 환율 모니터링만 가능합니다";
+    return plan.description || "고급 기능을 이용할 수 있습니다";
+  };
+
+  const handleUpgrade = () => {
+    onTabChange("plans");
   };
   const menuItems = [
     { id: "dashboard", label: "대시보드", icon: Home },
@@ -104,12 +127,25 @@ export function AppSidebar({
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-muted-foreground">현재 플랜</span>
-            <Badge variant="secondary">Free</Badge>
+            <Badge
+              variant={
+                getPlanBadgeVariant(userPlan?.name || "Free") as
+                  | "secondary"
+                  | "default"
+              }
+              className="text-white"
+            >
+              {userPlan?.name || "Free"}
+            </Badge>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            기본 환율 모니터링만 가능합니다
+            {getPlanDescription(userPlan)}
           </p>
-          <Button size="sm" className="w-full text-white">
+          <Button
+            size="sm"
+            className="w-full text-white"
+            onClick={handleUpgrade}
+          >
             업그레이드
           </Button>
         </Card>

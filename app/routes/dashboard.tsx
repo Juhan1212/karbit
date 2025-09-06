@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import type { Route } from "./+types/dashboard";
 import { useNavigate } from "react-router";
-import { useUser, useIsLoading, useAuthActions } from "~/stores";
+import { useUser, useIsLoading } from "~/stores";
 import {
   Card,
   CardContent,
@@ -51,7 +51,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const user = useUser();
   const isLoading = useIsLoading();
-  const { checkAuth } = useAuthActions();
   const [selectedCoin, setSelectedCoin] = useState("XRP");
   const [seedAmount, setSeedAmount] = useState([10000000]); // 1천만원 기본값
 
@@ -59,10 +58,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (!isLoading && !user) {
       navigate("/auth", { replace: true });
-    } else if (!user) {
-      checkAuth();
     }
-  }, [user, isLoading, navigate, checkAuth]);
+  }, [user, isLoading, navigate]);
 
   // 로딩 중일 때
   if (isLoading) {

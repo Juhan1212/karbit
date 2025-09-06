@@ -1,0 +1,1 @@
+ALTER TABLE "coins_exchanges" ADD COLUMN "dw_pos_yn" boolean DEFAULT true;

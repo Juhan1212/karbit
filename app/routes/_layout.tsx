@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { AppSidebar } from "../components/app-sidebar";
 import { Toaster } from "../components/sonner";
 import { Button } from "../components/button";
 import { Sheet, SheetContent, SheetTrigger } from "../components/sheet";
 import { Menu } from "lucide-react";
+import { useUser, useIsLoading, useAuthActions } from "~/stores";
 
 export function meta() {
   return [
@@ -26,6 +27,17 @@ export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const user = useUser();
+  const isLoading = useIsLoading();
+  const { checkAuth } = useAuthActions();
+
+  // 페이지 로드 시 사용자 인증 상태 확인
+  useEffect(() => {
+    // 사용자 정보가 없는 경우에만 인증 체크
+    if (!user && !isLoading) {
+      checkAuth();
+    }
+  }, [user, isLoading, checkAuth]);
 
   // 현재 경로에서 활성 탭 결정
   const getActiveTab = () => {

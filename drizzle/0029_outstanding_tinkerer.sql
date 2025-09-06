@@ -1,0 +1,1 @@
+ALTER TABLE "positions" ADD COLUMN "usdt_price" numeric(10, 2);

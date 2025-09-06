@@ -5,13 +5,17 @@ import { users, plans } from "~/database/schema";
 import {
   hashPassword,
   verifyPassword,
-  createSession,
-  deleteSession,
-  validateSession,
   isValidEmail,
   isValidPassword,
   isValidName,
-} from "../../server/auth";
+} from "~/utils/auth";
+import {
+  createSession,
+  validateSession,
+  deleteSession,
+} from "~/database/session";
+import { createUser, getUserByEmail } from "~/database/user";
+import { getAuthTokenFromRequest } from "~/utils/cookies";
 
 export async function action({ request }: ActionFunctionArgs) {
   const url = new URL(request.url);
@@ -60,7 +64,7 @@ async function handleSignup(request: Request) {
       return Response.json(
         {
           success: false,
-          message: "이름, 이메일, 비밀번호를 모두 입력해주세요.",
+          message: "닉네임, 이메일, 비밀번호를 모두 입력해주세요.",
         },
         { status: 400 }
       );
@@ -70,7 +74,23 @@ async function handleSignup(request: Request) {
       return Response.json(
         {
           success: false,
-          message: "이름은 2자 이상 50자 이하로 입력해주세요.",
+          message: "닉네임은 2자 이상 50자 이하로 입력해주세요.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // 닉네임 중복 검사
+    const db = database();
+    const existingUser = await db.query.users.findFirst({
+      where: eq(users.name, name),
+    });
+
+    if (existingUser) {
+      return Response.json(
+        {
+          success: false,
+          message: "이미 사용 중인 닉네임입니다. 다른 닉네임을 선택해주세요.",
         },
         { status: 400 }
       );
@@ -97,41 +117,12 @@ async function handleSignup(request: Request) {
       );
     }
 
-    const db = database();
-
-    // 이메일 중복 확인
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.email, email),
-    });
-
-    if (existingUser) {
-      return Response.json(
-        {
-          success: false,
-          message: "이미 사용 중인 이메일입니다.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // 기본 플랜 조회
-    const defaultPlan = await db.query.plans.findFirst({
-      orderBy: plans.id,
-    });
-
-    // 비밀번호 해싱
-    const hashedPassword = await hashPassword(password);
-
     // 사용자 생성
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        name: name.trim(),
-        email: email.toLowerCase().trim(),
-        passwordHash: hashedPassword,
-        planId: defaultPlan?.id || null,
-      })
-      .returning();
+    const newUser = await createUser({
+      name,
+      email,
+      password,
+    });
 
     // 세션 생성
     const token = await createSession(newUser.id);
@@ -159,12 +150,25 @@ async function handleSignup(request: Request) {
           name: newUser.name,
           email: newUser.email,
           planId: newUser.planId,
+          plan: newUser.plan,
         },
       },
       { headers }
     );
   } catch (error) {
     console.error("Signup error:", error);
+
+    // 사용자 정의 에러 메시지 처리
+    if (error instanceof Error) {
+      return Response.json(
+        {
+          success: false,
+          message: error.message,
+        },
+        { status: 400 }
+      );
+    }
+
     return Response.json(
       {
         success: false,
@@ -202,12 +206,8 @@ async function handleLogin(request: Request) {
       );
     }
 
-    const db = database();
-
     // 사용자 조회
-    const user = await db.query.users.findFirst({
-      where: eq(users.email, email.toLowerCase().trim()),
-    });
+    const user = await getUserByEmail(email);
 
     if (!user) {
       return Response.json(
@@ -219,8 +219,27 @@ async function handleLogin(request: Request) {
       );
     }
 
+    // 사용자 정보에서 passwordHash 가져오기
+    const db = database();
+    const userWithPassword = await db.query.users.findFirst({
+      where: eq(users.email, email.toLowerCase().trim()),
+    });
+
+    if (!userWithPassword) {
+      return Response.json(
+        {
+          success: false,
+          message: "이메일 또는 비밀번호가 올바르지 않습니다.",
+        },
+        { status: 400 }
+      );
+    }
+
     // 비밀번호 확인
-    const isPasswordValid = await verifyPassword(password, user.passwordHash);
+    const isPasswordValid = await verifyPassword(
+      password,
+      userWithPassword.passwordHash
+    );
     if (!isPasswordValid) {
       return Response.json(
         {
@@ -248,6 +267,7 @@ async function handleLogin(request: Request) {
           name: user.name,
           email: user.email,
           planId: user.planId,
+          plan: user.plan,
         },
       },
       { headers }
@@ -266,11 +286,8 @@ async function handleLogin(request: Request) {
 
 async function handleLogout(request: Request) {
   try {
-    const cookieHeader = request.headers.get("Cookie");
-    const cookies = Object.fromEntries(
-      cookieHeader?.split("; ").map((cookie) => cookie.split("=")) || []
-    );
-    const token = cookies["auth-token"];
+    // 쿠키에서 토큰 추출
+    const token = getAuthTokenFromRequest(request);
 
     if (token) {
       await deleteSession(token);
@@ -304,11 +321,8 @@ async function handleLogout(request: Request) {
 
 async function handleGetUser(request: Request) {
   try {
-    const cookieHeader = request.headers.get("Cookie");
-    const cookies = Object.fromEntries(
-      cookieHeader?.split("; ").map((cookie) => cookie.split("=")) || []
-    );
-    const token = cookies["auth-token"];
+    // 쿠키에서 토큰 추출
+    const token = getAuthTokenFromRequest(request);
 
     if (!token) {
       return Response.json(
@@ -350,11 +364,8 @@ async function handleGetUser(request: Request) {
 
 async function handleRefresh(request: Request) {
   try {
-    const cookieHeader = request.headers.get("Cookie");
-    const cookies = Object.fromEntries(
-      cookieHeader?.split("; ").map((cookie) => cookie.split("=")) || []
-    );
-    const token = cookies["auth-token"];
+    // 쿠키에서 토큰 추출
+    const token = getAuthTokenFromRequest(request);
 
     if (!token) {
       return Response.json(

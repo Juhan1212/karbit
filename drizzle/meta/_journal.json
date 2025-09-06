@@ -22,6 +22,195 @@
       "when": 1754809838456,
       "tag": "0002_unusual_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1755191090968,
+      "tag": "0003_pale_norrin_radd",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1755942651007,
+      "tag": "0004_far_logan",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1755945463074,
+      "tag": "0005_faithful_ben_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1755952968418,
+      "tag": "0006_round_invisible_woman",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1756023962105,
+      "tag": "0007_windy_white_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1756034960642,
+      "tag": "0008_light_charles_xavier",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1756213003947,
+      "tag": "0009_brainy_alex_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1756216322298,
+      "tag": "0010_cloudy_ken_ellis",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1756302340690,
+      "tag": "0011_fantastic_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1756385719981,
+      "tag": "0012_ancient_vampiro",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1756389010122,
+      "tag": "0013_kind_landau",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1756395962235,
+      "tag": "0014_strange_la_nuit",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1756552258673,
+      "tag": "0015_lively_firebrand",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1756552799523,
+      "tag": "0016_gorgeous_speedball",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1756568383548,
+      "tag": "0017_amusing_frightful_four",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1756568491168,
+      "tag": "0018_wise_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1756569391864,
+      "tag": "0019_cultured_the_anarchist",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1756610612300,
+      "tag": "0020_damp_serpent_society",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1756611524253,
+      "tag": "0021_previous_dust",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1756649782592,
+      "tag": "0022_yellow_may_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1756652823493,
+      "tag": "0023_early_silver_samurai",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1756659377897,
+      "tag": "0024_tearful_turbo",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1756660003068,
+      "tag": "0025_overconfident_swarm",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1756828034700,
+      "tag": "0026_easy_gorilla_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1756831575584,
+      "tag": "0027_odd_cassandra_nova",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1756831993554,
+      "tag": "0028_left_calypso",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1756911283007,
+      "tag": "0029_outstanding_tinkerer",
+      "breakpoints": true
     }
   ]
 }

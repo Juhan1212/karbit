@@ -1,0 +1,1 @@
+ALTER TABLE "coins_exchanges" ADD COLUMN "display_name" varchar(100) NOT NULL;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
-import { useUser, useAuthActions } from "~/stores";
+import { useNavigate, redirect } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
+import { useAuthActions } from "~/stores";
 import { Button } from "../components/button";
 import {
   Card,
@@ -29,10 +30,38 @@ import {
   Star,
 } from "lucide-react";
 import { toast } from "sonner";
+import { getAuthTokenFromRequest } from "~/utils/cookies";
+
+// Loader 함수: 라우트 진입 전에 인증 상태 확인
+export async function loader({ request }: LoaderFunctionArgs) {
+  try {
+    // 쿠키에서 토큰 추출
+    const token = getAuthTokenFromRequest(request);
+
+    if (token) {
+      // 서버에서만 동적으로 import
+      const { validateSession } = await import("~/database/session");
+      const user = await validateSession(token);
+
+      if (user) {
+        // 이미 인증된 사용자는 대시보드로 리다이렉트
+        throw redirect("/dashboard");
+      }
+    }
+  } catch (error) {
+    // redirect는 throw해야 하므로 여기서 다시 throw
+    if (error instanceof Response) {
+      throw error;
+    }
+    // 다른 에러는 무시하고 auth 페이지로 진행
+    console.error("Auth loader error:", error);
+  }
+
+  return null;
+}
 
 export default function Auth() {
   const navigate = useNavigate();
-  const user = useUser();
   const { login, signup } = useAuthActions();
   const [activeTab, setActiveTab] = useState("login");
   const [showPassword, setShowPassword] = useState(false);
@@ -47,9 +76,8 @@ export default function Auth() {
 
   // Signup form state
   const [signupData, setSignupData] = useState({
-    name: "",
+    username: "",
     email: "",
-    phone: "",
     password: "",
     confirmPassword: "",
     agreeTerms: false,
@@ -59,12 +87,9 @@ export default function Auth() {
 
   const [isLoading, setIsLoading] = useState(false);
 
-  // 이미 인증된 사용자는 대시보드로 리다이렉트
-  useEffect(() => {
-    if (user) {
-      navigate("/dashboard", { replace: true });
-    }
-  }, [user]); // navigate 종속성 제거로 무한 루프 방지
+  // 비밀번호 일치 여부 확인
+  const passwordsMatch = signupData.password === signupData.confirmPassword;
+  const showPasswordMatch = signupData.confirmPassword.length > 0;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,13 +103,15 @@ export default function Auth() {
     }
 
     try {
-      const success = await login(loginData.email, loginData.password);
+      const result = await login(loginData.email, loginData.password);
 
-      if (success) {
+      if (result.success) {
         toast.success("로그인에 성공했습니다!");
         navigate("/dashboard");
       } else {
-        toast.error("이메일 또는 비밀번호가 올바르지 않습니다.");
+        toast.error(
+          result.message || "이메일 또는 비밀번호가 올바르지 않습니다."
+        );
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -99,13 +126,13 @@ export default function Auth() {
     setIsLoading(true);
 
     // Basic validation
-    if (!signupData.name || !signupData.email || !signupData.password) {
+    if (!signupData.username || !signupData.email || !signupData.password) {
       toast.error("필수 정보를 모두 입력해주세요.");
       setIsLoading(false);
       return;
     }
 
-    if (signupData.password !== signupData.confirmPassword) {
+    if (!passwordsMatch) {
       toast.error("비밀번호가 일치하지 않습니다.");
       setIsLoading(false);
       return;
@@ -124,17 +151,17 @@ export default function Auth() {
     }
 
     try {
-      const success = await signup(
-        signupData.name,
+      const result = await signup(
+        signupData.username,
         signupData.email,
         signupData.password
       );
 
-      if (success) {
+      if (result.success) {
         toast.success("회원가입이 완료되었습니다!");
         navigate("/dashboard");
       } else {
-        toast.error("회원가입 중 오류가 발생했습니다.");
+        toast.error(result.message || "회원가입 중 오류가 발생했습니다.");
       }
     } catch (error) {
       console.error("Signup error:", error);
@@ -272,6 +299,7 @@ export default function Auth() {
                       </Label> */}
                     </div>
                     <Button
+                      type="button"
                       variant="link"
                       size="sm"
                       className="p-0 text-sm"
@@ -295,16 +323,19 @@ export default function Auth() {
               <TabsContent value="signup" className="space-y-4">
                 <form onSubmit={handleSignup} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="signup-name">이름 *</Label>
+                    <Label htmlFor="signup-username">닉네임 *</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
-                        id="signup-name"
+                        id="signup-username"
                         type="text"
-                        placeholder="실명을 입력하세요"
-                        value={signupData.name}
+                        placeholder="닉네임을 입력하세요"
+                        value={signupData.username}
                         onChange={(e) =>
-                          setSignupData({ ...signupData, name: e.target.value })
+                          setSignupData({
+                            ...signupData,
+                            username: e.target.value,
+                          })
                         }
                         className="pl-10"
                         required
@@ -329,26 +360,6 @@ export default function Auth() {
                         }
                         className="pl-10"
                         required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-phone">휴대폰 번호</Label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        id="signup-phone"
-                        type="tel"
-                        placeholder="010-0000-0000"
-                        value={signupData.phone}
-                        onChange={(e) =>
-                          setSignupData({
-                            ...signupData,
-                            phone: e.target.value,
-                          })
-                        }
-                        className="pl-10"
                       />
                     </div>
                   </div>
@@ -424,6 +435,23 @@ export default function Auth() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* 비밀번호 일치 확인 메시지 */}
+                  {showPasswordMatch && (
+                    <div className="text-sm">
+                      {passwordsMatch ? (
+                        <span className="text-green-600 flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4" />
+                          비밀번호가 일치합니다.
+                        </span>
+                      ) : (
+                        <span className="text-red-600 flex items-center gap-1">
+                          <Lock className="w-4 h-4" />
+                          비밀번호가 불일치합니다.
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <Separator />
 
@@ -511,7 +539,16 @@ export default function Auth() {
                   <Button
                     type="submit"
                     className="w-full text-white"
-                    disabled={isLoading}
+                    disabled={
+                      isLoading ||
+                      !passwordsMatch ||
+                      !signupData.agreeTerms ||
+                      !signupData.agreePrivacy ||
+                      !signupData.username ||
+                      !signupData.email ||
+                      !signupData.password ||
+                      !signupData.confirmPassword
+                    }
                   >
                     {isLoading ? "계정 생성 중..." : "계정 만들기"}
                   </Button>

@@ -36,6 +36,14 @@ const client = postgres(process.env.DATABASE_URL, {
 const db = drizzle(client, { schema });
 app.use((_, __, next) => DatabaseContext.run(db, next));
 
+// .well-known 경로들 처리 (Chrome DevTools, 보안 관련 등)
+app.use((req, res, next) => {
+  if (req.path.startsWith("/.well-known/")) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  next();
+});
+
 app.use(
   createRequestHandler({
     build: () => import("virtual:react-router/server-build"),

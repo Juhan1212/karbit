@@ -77,24 +77,42 @@ export default function ForgotPassword() {
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      setCurrentStep("verification");
-      setCountdown(300); // 5 minutes countdown
-      toast.success("인증코드가 이메일로 발송되었습니다.");
+    try {
+      // API 호출
+      const formData = new FormData();
+      formData.append("email", email);
 
-      // Start countdown
-      const interval = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }, 1500);
+      const response = await fetch("/api/password-reset?action=send-code", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCurrentStep("verification");
+        setCountdown(300); // 5 minutes countdown
+        toast.success("인증코드가 이메일로 발송되었습니다.");
+
+        // Start countdown
+        const interval = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        toast.error(data.message || "이메일 발송에 실패했습니다.");
+      }
+    } catch (error) {
+      console.error("Email send error:", error);
+      toast.error("서버 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleVerificationSubmit = async (e: React.FormEvent) => {
@@ -113,12 +131,31 @@ export default function ForgotPassword() {
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // API 호출
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("verificationCode", verificationCode);
+
+      const response = await fetch("/api/password-reset?action=verify-code", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCurrentStep("reset");
+        toast.success("인증이 완료되었습니다.");
+      } else {
+        toast.error(data.message || "인증코드가 올바르지 않습니다.");
+      }
+    } catch (error) {
+      console.error("Verification error:", error);
+      toast.error("서버 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
       setIsLoading(false);
-      setCurrentStep("reset");
-      toast.success("인증이 완료되었습니다.");
-    }, 1000);
+    }
   };
 
   const handlePasswordReset = async (e: React.FormEvent) => {
@@ -143,32 +180,75 @@ export default function ForgotPassword() {
       return;
     }
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // API 호출
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("verificationCode", verificationCode);
+      formData.append("newPassword", newPassword);
+
+      const response = await fetch(
+        "/api/password-reset?action=reset-password",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success("비밀번호가 성공적으로 변경되었습니다.");
+        navigate("/auth");
+      } else {
+        toast.error(data.message || "비밀번호 변경에 실패했습니다.");
+      }
+    } catch (error) {
+      console.error("Password reset error:", error);
+      toast.error("서버 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
       setIsLoading(false);
-      toast.success("비밀번호가 성공적으로 변경되었습니다.");
-      navigate("/auth");
-    }, 1500);
+    }
   };
 
-  const handleResendCode = () => {
+  const handleResendCode = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      setCountdown(300);
-      toast.success("인증코드가 재발송되었습니다.");
 
-      // Restart countdown
-      const interval = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }, 1000);
+    try {
+      // API 호출
+      const formData = new FormData();
+      formData.append("email", email);
+
+      const response = await fetch("/api/password-reset?action=send-code", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCountdown(300);
+        toast.success("인증코드가 재발송되었습니다.");
+
+        // Restart countdown
+        const interval = setInterval(() => {
+          setCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        toast.error(data.message || "인증코드 재발송에 실패했습니다.");
+      }
+    } catch (error) {
+      console.error("Resend code error:", error);
+      toast.error("서버 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -360,7 +440,7 @@ export default function ForgotPassword() {
 
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full text-white"
                   disabled={isLoading || verificationCode.length !== 6}
                 >
                   {isLoading ? "인증 중..." : "인증하기"}
@@ -447,7 +527,11 @@ export default function ForgotPassword() {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button
+                  type="submit"
+                  className="w-full text-white"
+                  disabled={isLoading}
+                >
                   {isLoading ? "비밀번호 변경 중..." : "비밀번호 변경 완료"}
                 </Button>
               </form>
