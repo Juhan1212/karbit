@@ -10,6 +10,7 @@ export interface CreateStrategyData {
   entryRate: number;
   exitRate: number;
   seedDivision: number;
+  leverage: number;
   allowAverageDown: boolean;
   allowAverageUp: boolean;
   aiMode: boolean;
@@ -41,6 +42,7 @@ export async function createStrategy(userId: number, data: CreateStrategyData) {
         entryRate: data.entryRate.toString(),
         exitRate: data.exitRate.toString(),
         seedDivision: data.seedDivision,
+        leverage: data.leverage,
         allowAverageDown: data.allowAverageDown,
         allowAverageUp: data.allowAverageUp,
         aiMode: data.aiMode,
@@ -301,6 +303,7 @@ export function formatStrategyForFrontend(strategy: any) {
 
     // 리스크 관리 설정
     seedDivision: strategy.seedDivision,
+    leverage: strategy.leverage,
     allowAverageDown: strategy.allowAverageDown,
     allowAverageUp: strategy.allowAverageUp,
 

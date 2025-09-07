@@ -1,8 +1,13 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { UpbitAdapter } from "../../exchanges/upbit";
 import { BybitAdapter } from "../../exchanges/bybit";
-import { createExchangeAdapter, KoreanExchangeType } from "../../exchanges";
 import type { CandleData } from "../../exchanges/upbit";
+import {
+  createExchangeAdapter,
+  KoreanExchangeType,
+  LowercaseExchangeType,
+  UppercaseExchangeType,
+} from "exchanges";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -19,23 +24,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const promises: Promise<CandleData[]>[] = [];
     const exchangeNames: string[] = [];
 
-    // 거래소명 매핑 함수
-    const getExchangeAdapter = (exchangeName: string) => {
-      switch (exchangeName) {
-        case "upbit":
-          return { name: KoreanExchangeType.업비트, adapter: UpbitAdapter };
-        case "bybit":
-          return { name: KoreanExchangeType.바이빗, adapter: BybitAdapter };
-        default:
-          return null;
-      }
-    };
-
-    exchanges.forEach((exchangeName) => {
-      const exchangeInfo = getExchangeAdapter(exchangeName);
-      if (exchangeInfo) {
-        promises.push(exchangeInfo.adapter.getTickerCandles(symbol, interval, to));
-        exchangeNames.push(exchangeName);
+    exchangeNames.forEach((name) => {
+      const adapter = createExchangeAdapter(
+        name as
+          | KoreanExchangeType
+          | UppercaseExchangeType
+          | LowercaseExchangeType
+      );
+      if (adapter) {
+        promises.push(adapter.getTickerCandles(symbol, interval, to));
+        exchangeNames.push(name);
       }
     });
 

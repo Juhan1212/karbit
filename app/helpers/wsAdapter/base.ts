@@ -3,10 +3,11 @@ import type {
   TickerData,
   PositionData,
 } from "../../types/marketInfo";
-import { ExchangeType } from "../../types/exchange";
+import { UppercaseExchangeType } from "../../types/exchange";
 import { BybitWebSocketAdapter } from "./bybit";
 import { GateioAdapter } from "./gateio";
 import { UpbitWebSocketAdapter } from "./upbit";
+import { BithumbWebSocketAdapter } from "./bithumb";
 
 export interface WebSocketAdapter {
   getResponseMessage(
@@ -21,14 +22,16 @@ export interface WebSocketParams {
 }
 
 export class WebSocketAdapterFactory {
-  static getAdapter(exchange: ExchangeType): WebSocketAdapter {
+  static getAdapter(exchange: UppercaseExchangeType): WebSocketAdapter {
     switch (exchange) {
-      case ExchangeType.GATEIO:
+      case UppercaseExchangeType.GATEIO:
         return new GateioAdapter();
-      case ExchangeType.UPBIT:
+      case UppercaseExchangeType.UPBIT:
         return new UpbitWebSocketAdapter();
-      case ExchangeType.BYBIT:
+      case UppercaseExchangeType.BYBIT:
         return new BybitWebSocketAdapter();
+      case UppercaseExchangeType.BITHUMB:
+        return new BithumbWebSocketAdapter();
       default:
         throw new Error(`No adapter found for exchange: ${exchange}`);
     }

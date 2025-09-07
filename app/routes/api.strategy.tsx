@@ -78,6 +78,7 @@ export async function action({ request }: ActionFunctionArgs) {
           seedDivision: parseInt(
             formData.get("seedDivision")?.toString() || "1"
           ),
+          leverage: parseInt(formData.get("leverage")?.toString() || "1"),
           allowAverageDown: formData.get("allowAverageDown") === "true",
           allowAverageUp: formData.get("allowAverageUp") === "true",
           aiMode: formData.get("aiMode") === "true",
@@ -153,6 +154,7 @@ export async function action({ request }: ActionFunctionArgs) {
           seedDivision: parseInt(
             formData.get("seedDivision")?.toString() || "1"
           ),
+          leverage: parseInt(formData.get("leverage")?.toString() || "1"),
           allowAverageDown: formData.get("allowAverageDown") === "true",
           allowAverageUp: formData.get("allowAverageUp") === "true",
           aiMode: formData.get("aiMode") === "true",

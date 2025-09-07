@@ -64,8 +64,10 @@ import {
   CollapsibleTrigger,
 } from "../components/collapsible";
 import { ActivePositionDisplay } from "../components/active-position-display";
+import { ActivePositionManagement } from "../components/active-position-management";
 import { TradingStats } from "../components/trading-stats";
 import { TradingHistoryTable } from "../components/trading-history-table";
+import { AutoComplete, AutoCompleteOption } from "../components/autocomplete";
 import {
   AlertTriangle,
   AlertCircle,
@@ -285,6 +287,7 @@ export default function AutoTrading() {
   const [seedDivision, setSeedDivision] = useState(
     activeStrategy?.seedDivision || 2
   );
+  const [leverage, setLeverage] = useState(activeStrategy?.leverage || 1);
   const [allowAverageDown, setAllowAverageDown] = useState(
     activeStrategy?.allowAverageDown || false
   );
@@ -301,7 +304,8 @@ export default function AutoTrading() {
   const [showRestrictedCoins, setShowRestrictedCoins] = useState(true);
 
   // 동적으로 업데이트되는 제한된 코인 목록 상태
-  const [currentRestrictedCoins, setCurrentRestrictedCoins] = useState(restrictedCoins);
+  const [currentRestrictedCoins, setCurrentRestrictedCoins] =
+    useState(restrictedCoins);
 
   // 선택된 티커에 해당하는 포지션 찾기
   const selectedPosition = useMemo(() => {
@@ -327,9 +331,9 @@ export default function AutoTrading() {
   useEffect(() => {
     const fetchRestrictedCoins = async () => {
       try {
-        const response = await fetch('/autotrading?_data', {
+        const response = await fetch("/autotrading?_data", {
           headers: {
-            'Accept': 'application/json',
+            Accept: "application/json",
           },
         });
         if (response.ok) {
@@ -339,7 +343,7 @@ export default function AutoTrading() {
           }
         }
       } catch (error) {
-        console.error('제한된 코인 목록 갱신 오류:', error);
+        console.error("제한된 코인 목록 갱신 오류:", error);
       }
     };
 
@@ -620,6 +624,62 @@ export default function AutoTrading() {
     return availableCoins.filter((coin) => !selectedCoins.includes(coin.id));
   };
 
+  // 거래소 이름을 한국어로 변환하는 함수
+  const formatExchangeNames = (exchangeNames: string[]) => {
+    const exchangeMapping: Record<string, string> = {
+      업비트: "업비트",
+      빗썸: "빗썸",
+      바이낸스: "바이낸스",
+      바이빗: "바이빗",
+      OKX: "OKX",
+    };
+
+    const formattedNames = exchangeNames
+      .map((name) => exchangeMapping[name] || name)
+      .sort();
+
+    return formattedNames.join("&");
+  };
+
+  // AutoComplete 옵션 생성 함수
+  const createAutoCompleteOptions = (
+    coins: typeof availableCoins
+  ): AutoCompleteOption[] => {
+    return coins.map((coin) => ({
+      value: coin.id,
+      label: coin.symbol,
+      searchText: `${coin.symbol} ${coin.name} ${coin.availableExchanges?.join(" ") || ""}`,
+      metadata: coin,
+    }));
+  };
+
+  // 사용 가능한 코인 옵션을 AutoComplete 형태로 변환
+  const getAutoCompleteOptions = (
+    currentValue: string
+  ): AutoCompleteOption[] => {
+    const selectedCoins = [selectedCoin1, selectedCoin2, selectedCoin3].filter(
+      (coin) => coin !== "" && coin !== "none" && coin !== currentValue
+    );
+    const filteredCoins = availableCoins.filter(
+      (coin) => !selectedCoins.includes(coin.id)
+    );
+    return createAutoCompleteOptions(filteredCoins);
+  };
+
+  // "선택 안함" 옵션이 포함된 AutoComplete 옵션 (코인 2, 3용)
+  const getOptionalAutoCompleteOptions = (
+    currentValue: string
+  ): AutoCompleteOption[] => {
+    const noneOption: AutoCompleteOption = {
+      value: "none",
+      label: "선택 안함",
+      searchText: "선택 안함 none",
+      metadata: { symbol: "", name: "선택 안함", availableExchanges: [] },
+    };
+
+    return [noneOption, ...getAutoCompleteOptions(currentValue)];
+  };
+
   // 자동매매 시작 조건 확인
   const conditions = useMemo(() => {
     const hasKoreanExchange = connections.some(
@@ -718,6 +778,7 @@ export default function AutoTrading() {
       formData.append("entryRate", entryRate.toString());
       formData.append("exitRate", exitRate.toString());
       formData.append("seedDivision", seedDivision.toString());
+      formData.append("leverage", leverage.toString());
       formData.append("allowAverageDown", allowAverageDown.toString());
       formData.append("allowAverageUp", allowAverageUp.toString());
     }
@@ -934,6 +995,16 @@ export default function AutoTrading() {
           isLoading={isLoadingPositions}
         />
       </div>
+
+      {/* Active Position Management - Full width section */}
+      <ActivePositionManagement
+        positions={polledActivePositions}
+        isLoading={isLoadingPositions}
+        onPositionClose={(coinSymbol) => {
+          // 포지션 종료 후 새로고침
+          pollActivePositions();
+        }}
+      />
 
       {/* Exchange Rate Chart - Only show when there are active positions */}
       {activePositionCount > 0 && (
@@ -1172,19 +1243,24 @@ export default function AutoTrading() {
                 <p className="text-xs text-muted-foreground mt-1">
                   거래할 암호화폐를 선택하세요
                 </p>
-                
+
                 {/* 입출금 제한 코인 표시 */}
                 {currentRestrictedCoins.length > 0 && (
                   <div className="mt-3">
-                    <Collapsible 
-                      open={showRestrictedCoins} 
+                    <Collapsible
+                      open={showRestrictedCoins}
                       onOpenChange={setShowRestrictedCoins}
                     >
                       <CollapsibleTrigger asChild>
-                        <Button variant="ghost" className="p-0 h-auto text-xs text-muted-foreground hover:text-foreground">
+                        <Button
+                          variant="ghost"
+                          className="p-0 h-auto text-xs text-muted-foreground hover:text-foreground"
+                        >
                           <div className="flex items-center gap-2">
                             <AlertTriangle className="w-3 h-3 text-amber-500" />
-                            <span>입출금 제한 코인 {currentRestrictedCoins.length}개</span>
+                            <span>
+                              입출금 제한 코인 {currentRestrictedCoins.length}개
+                            </span>
                             {showRestrictedCoins ? (
                               <ChevronUp className="w-3 h-3" />
                             ) : (
@@ -1195,55 +1271,74 @@ export default function AutoTrading() {
                       </CollapsibleTrigger>
                       <CollapsibleContent className="space-y-2 mt-2">
                         <div className="text-xs text-muted-foreground mb-2">
-                          다음 코인들은 입출금 제한이 있어 거래에 주의가 필요합니다. 또한, 입출금 제한 코인은 5분마다 최신화됩니다.
+                          다음 코인들은 입출금 제한이 있어 거래에 주의가
+                          필요합니다. 또한, 입출금 제한 코인은 5분마다
+                          최신화됩니다.
                         </div>
                         <div className="border rounded-lg overflow-hidden">
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="h-8 text-xs">거래소</TableHead>
-                                <TableHead className="h-8 text-xs">코인</TableHead>
-                                <TableHead className="h-8 text-xs">입금</TableHead>
-                                <TableHead className="h-8 text-xs">출금</TableHead>
-                                <TableHead className="h-8 text-xs">네트워크</TableHead>
+                                <TableHead className="h-8 text-xs">
+                                  거래소
+                                </TableHead>
+                                <TableHead className="h-8 text-xs">
+                                  코인
+                                </TableHead>
+                                <TableHead className="h-8 text-xs">
+                                  입금
+                                </TableHead>
+                                <TableHead className="h-8 text-xs">
+                                  출금
+                                </TableHead>
+                                <TableHead className="h-8 text-xs">
+                                  네트워크
+                                </TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {currentRestrictedCoins.slice(0, 20).map((coin, index) => (
-                                <TableRow key={index} className="text-xs">
-                                  <TableCell className="py-2">{coin.exchangeName}</TableCell>
-                                  <TableCell className="py-2">
-                                    <div>
-                                      <div className="font-medium">{coin.coinSymbol}</div>
-                                      <div className="text-muted-foreground text-xs truncate max-w-[100px]">
-                                        {coin.displayName}
+                              {currentRestrictedCoins
+                                .slice(0, 20)
+                                .map((coin, index) => (
+                                  <TableRow key={index} className="text-xs">
+                                    <TableCell className="py-2">
+                                      {coin.exchangeName}
+                                    </TableCell>
+                                    <TableCell className="py-2">
+                                      <div>
+                                        <div className="font-medium">
+                                          {coin.coinSymbol}
+                                        </div>
+                                        <div className="text-muted-foreground text-xs truncate max-w-[100px]">
+                                          {coin.displayName}
+                                        </div>
                                       </div>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="py-2">
-                                    {coin.depositYn ? (
-                                      <Check className="w-3 h-3 text-green-500" />
-                                    ) : (
-                                      <X className="w-3 h-3 text-red-500" />
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="py-2">
-                                    {coin.withdrawYn ? (
-                                      <Check className="w-3 h-3 text-green-500" />
-                                    ) : (
-                                      <X className="w-3 h-3 text-red-500" />
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="py-2 text-muted-foreground">
-                                    {coin.netType || "-"}
-                                  </TableCell>
-                                </TableRow>
-                              ))}
+                                    </TableCell>
+                                    <TableCell className="py-2">
+                                      {coin.depositYn ? (
+                                        <Check className="w-3 h-3 text-green-500" />
+                                      ) : (
+                                        <X className="w-3 h-3 text-red-500" />
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="py-2">
+                                      {coin.withdrawYn ? (
+                                        <Check className="w-3 h-3 text-green-500" />
+                                      ) : (
+                                        <X className="w-3 h-3 text-red-500" />
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="py-2 text-muted-foreground">
+                                      {coin.netType || "-"}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
                             </TableBody>
                           </Table>
                           {currentRestrictedCoins.length > 20 && (
                             <div className="text-xs text-muted-foreground text-center py-2 bg-muted/30">
-                              {currentRestrictedCoins.length - 20}개 코인 더 있음...
+                              {currentRestrictedCoins.length - 20}개 코인 더
+                              있음...
                             </div>
                           )}
                         </div>
@@ -1307,103 +1402,121 @@ export default function AutoTrading() {
 
                   <div className="space-y-2">
                     <Label className="text-sm">코인 1 (필수)</Label>
-                    <Select
+                    <AutoComplete
                       value={selectedCoin1}
-                      onValueChange={setSelectedCoin1}
+                      onSelect={setSelectedCoin1}
+                      options={getAutoCompleteOptions(selectedCoin1)}
+                      placeholder={
+                        hasConnectedExchanges
+                          ? "코인을 검색하거나 선택하세요"
+                          : "거래소를 먼저 연결해주세요"
+                      }
                       disabled={!hasConnectedExchanges}
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            hasConnectedExchanges
-                              ? "코인을 선택하세요"
-                              : "거래소를 먼저 연결해주세요"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getAvailableCoinsForSelect(selectedCoin1).map(
-                          (coin) => (
-                            <SelectItem key={coin.id} value={coin.id}>
-                              <div className="flex items-center gap-2">
-                                <span>{coin.symbol}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {coin.name}
+                      renderOption={(option) => (
+                        <div className="flex items-center gap-2">
+                          <span>{option.metadata.symbol}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {option.metadata.name}
+                            {option.metadata.availableExchanges &&
+                              option.metadata.availableExchanges.length > 0 && (
+                                <span className="ml-1">
+                                  (
+                                  {formatExchangeNames(
+                                    option.metadata.availableExchanges
+                                  )}
+                                  )
                                 </span>
-                              </div>
-                            </SelectItem>
-                          )
-                        )}
-                      </SelectContent>
-                    </Select>
+                              )}
+                          </span>
+                        </div>
+                      )}
+                    />
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-sm">코인 2 (선택)</Label>
-                    <Select
+                    <AutoComplete
                       value={selectedCoin2}
-                      onValueChange={setSelectedCoin2}
+                      onSelect={setSelectedCoin2}
+                      options={getOptionalAutoCompleteOptions(selectedCoin2)}
+                      placeholder={
+                        hasConnectedExchanges
+                          ? "코인을 검색하거나 선택하세요"
+                          : "거래소를 먼저 연결해주세요"
+                      }
                       disabled={!hasConnectedExchanges}
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            hasConnectedExchanges
-                              ? "코인을 선택하세요"
-                              : "거래소를 먼저 연결해주세요"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">선택 안함</SelectItem>
-                        {getAvailableCoinsForSelect(selectedCoin2).map(
-                          (coin) => (
-                            <SelectItem key={coin.id} value={coin.id}>
-                              <div className="flex items-center gap-2">
-                                <span>{coin.symbol}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {coin.name}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          )
-                        )}
-                      </SelectContent>
-                    </Select>
+                      renderOption={(option) => {
+                        if (option.value === "none") {
+                          return (
+                            <span className="text-muted-foreground">
+                              선택 안함
+                            </span>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span>{option.metadata.symbol}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {option.metadata.name}
+                              {option.metadata.availableExchanges &&
+                                option.metadata.availableExchanges.length >
+                                  0 && (
+                                  <span className="ml-1">
+                                    (
+                                    {formatExchangeNames(
+                                      option.metadata.availableExchanges
+                                    )}
+                                    )
+                                  </span>
+                                )}
+                            </span>
+                          </div>
+                        );
+                      }}
+                    />
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-sm">코인 3 (선택)</Label>
-                    <Select
+                    <AutoComplete
                       value={selectedCoin3}
-                      onValueChange={setSelectedCoin3}
+                      onSelect={setSelectedCoin3}
+                      options={getOptionalAutoCompleteOptions(selectedCoin3)}
+                      placeholder={
+                        hasConnectedExchanges
+                          ? "코인을 검색하거나 선택하세요"
+                          : "거래소를 먼저 연결해주세요"
+                      }
                       disabled={!hasConnectedExchanges}
-                    >
-                      <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            hasConnectedExchanges
-                              ? "코인을 선택하세요"
-                              : "거래소를 먼저 연결해주세요"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">선택 안함</SelectItem>
-                        {getAvailableCoinsForSelect(selectedCoin3).map(
-                          (coin) => (
-                            <SelectItem key={coin.id} value={coin.id}>
-                              <div className="flex items-center gap-2">
-                                <span>{coin.symbol}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {coin.name}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          )
-                        )}
-                      </SelectContent>
-                    </Select>
+                      renderOption={(option) => {
+                        if (option.value === "none") {
+                          return (
+                            <span className="text-muted-foreground">
+                              선택 안함
+                            </span>
+                          );
+                        }
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span>{option.metadata.symbol}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {option.metadata.name}
+                              {option.metadata.availableExchanges &&
+                                option.metadata.availableExchanges.length >
+                                  0 && (
+                                  <span className="ml-1">
+                                    (
+                                    {formatExchangeNames(
+                                      option.metadata.availableExchanges
+                                    )}
+                                    )
+                                  </span>
+                                )}
+                            </span>
+                          </div>
+                        );
+                      }}
+                    />
                   </div>
 
                   {getSelectedCoins().length > 0 && (
@@ -1447,6 +1560,13 @@ export default function AutoTrading() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   포지션 진입과 종료 기준 환율을 설정하세요
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  현재 환율: 1 USD ={" "}
+                  {currentExchangeRate
+                    ? currentExchangeRate.toLocaleString()
+                    : "-"}{" "}
+                  KRW
                 </p>
               </div>
 
@@ -1589,6 +1709,65 @@ export default function AutoTrading() {
                 <AlertDescription className="text-xs">
                   거래소에 주문 가능한 잔액이 부족하거나 소진되면 포지션 주문이
                   실패할 수 있습니다. 충분한 잔액을 유지해 주세요.
+                </AlertDescription>
+              </Alert>
+            </div>
+
+            {/* Leverage Settings */}
+            <div className="space-y-4">
+              <div className="border-b border-border pb-2 mb-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-foreground">
+                    해외거래소 레버리지 설정
+                  </h3>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-3 h-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-sm text-white">
+                          해외거래소(바이낸스, 바이비트, OKX)에서 사용할
+                          레버리지 배수를 설정합니다. 높은 레버리지는 높은
+                          수익률과 함께 높은 리스크를 동반합니다.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  해외거래소 선물거래 레버리지 배수를 설정하세요
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm">레버리지 배수</Label>
+                <Select
+                  value={leverage.toString()}
+                  onValueChange={(value) => setLeverage(parseInt(value))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1배</SelectItem>
+                    <SelectItem value="2">2배</SelectItem>
+                    <SelectItem value="3">3배</SelectItem>
+                    <SelectItem value="5">5배</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="text-xs text-muted-foreground">
+                  {leverage === 1
+                    ? "현물거래로 진행됩니다 (레버리지 없음)"
+                    : `${leverage}배 레버리지가 적용됩니다`}
+                </div>
+              </div>
+
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  레버리지는 수익과 손실을 모두 증폭시킵니다. 높은 레버리지 사용
+                  시 충분한 마진을 유지하여 강제청산을 방지하세요.
                 </AlertDescription>
               </Alert>
             </div>
@@ -1865,12 +2044,17 @@ export default function AutoTrading() {
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4">
             <Button
-              disabled={!isEnabled}
+              disabled={!isEnabled || activePositionCount === 0}
               variant="destructive"
               className="flex-1 gap-2"
+              title={
+                activePositionCount === 0
+                  ? "종료할 포지션이 없습니다"
+                  : `모든 활성 포지션 ${activePositionCount}개 강제 종료`
+              }
             >
               <StopCircle className="w-4 h-4" />
-              포지션 강제 종료
+              전체 포지션 강제 종료 ({activePositionCount})
             </Button>
             <Button
               disabled={userPlan?.name !== "Premium"}

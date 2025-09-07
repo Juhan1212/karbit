@@ -2,13 +2,13 @@
 import { RestClientV5 } from "bybit-api";
 import axios from "axios";
 import type { CandleData } from "./upbit";
+import { ExchangeAdapter } from "./base";
 
-export class BybitAdapter {
+export class BybitAdapter extends ExchangeAdapter {
   private client: RestClientV5;
-  constructor(
-    private apiKey: string,
-    private apiSecret: string
-  ) {
+
+  constructor(apiKey: string, apiSecret: string) {
+    super(apiKey, apiSecret);
     this.client = new RestClientV5({
       key: apiKey,
       secret: apiSecret,
@@ -22,6 +22,27 @@ export class BybitAdapter {
     });
     const usdt = res.result.list?.[0]?.totalAvailableBalance;
     return usdt ? parseFloat(usdt) : 0;
+  }
+
+  // Instance method for getting candle data
+  async getTickerCandles(
+    ticker: string,
+    interval: string = "1m",
+    to: number = 0,
+    count: number = 200
+  ): Promise<CandleData[]> {
+    // Static 메서드를 호출 (인증이 필요 없는 공개 데이터이므로)
+    return BybitAdapter.getTickerCandles(ticker, interval, to, count);
+  }
+
+  // Instance method for getting USDT candle data
+  async getUSDTCandles(
+    interval: string = "1m",
+    to: number = 0,
+    count: number = 200
+  ): Promise<CandleData[]> {
+    // Bybit에서는 USDT 캔들 데이터를 직접 제공하지 않으므로 빈 배열 반환
+    return [];
   }
 
   // Static method for getting candle data (no authentication needed for public data)

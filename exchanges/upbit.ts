@@ -4,6 +4,7 @@ import axios from "axios";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
+import { ExchangeAdapter } from "./base";
 
 export interface CandleData {
   timestamp: number;
@@ -14,11 +15,10 @@ export interface CandleData {
   volume: number;
 }
 
-export class UpbitAdapter {
-  constructor(
-    private apiKey: string,
-    private apiSecret: string
-  ) {}
+export class UpbitAdapter extends ExchangeAdapter {
+  constructor(apiKey: string, apiSecret: string) {
+    super(apiKey, apiSecret);
+  }
 
   async getBalance(): Promise<number> {
     const BASE_URL = "https://api.upbit.com";
@@ -59,6 +59,27 @@ export class UpbitAdapter {
       );
       return 0;
     }
+  }
+
+  // Instance method for getting candle data
+  async getTickerCandles(
+    ticker: string,
+    interval: string = "1m",
+    to: number = 0,
+    count: number = 200
+  ): Promise<CandleData[]> {
+    // Static 메서드를 호출 (인증이 필요 없는 공개 데이터이므로)
+    return UpbitAdapter.getTickerCandles(ticker, interval, to, count);
+  }
+
+  // Instance method for getting USDT candle data
+  async getUSDTCandles(
+    interval: string = "1m",
+    to: number = 0,
+    count: number = 200
+  ): Promise<CandleData[]> {
+    // Static 메서드를 호출
+    return UpbitAdapter.getUSDTCandles(interval, to, count);
   }
 
   // Static method for getting candle data (no authentication needed)

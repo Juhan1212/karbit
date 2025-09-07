@@ -3,12 +3,12 @@ import axios from "axios";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { CandleData } from "./upbit";
+import { ExchangeAdapter } from "./base";
 
-export class BithumbAdapter {
-  constructor(
-    private apiKey: string,
-    private apiSecret: string
-  ) {}
+export class BithumbAdapter extends ExchangeAdapter {
+  constructor(apiKey: string, apiSecret: string) {
+    super(apiKey, apiSecret);
+  }
 
   async getBalance(): Promise<number> {
     const BASE_URL = "https://api.bithumb.com";
@@ -38,6 +38,27 @@ export class BithumbAdapter {
       );
       return 0;
     }
+  }
+
+  // Instance method for getting candle data
+  async getTickerCandles(
+    ticker: string,
+    interval: string = "1m",
+    to: number = 0,
+    count: number = 200
+  ): Promise<CandleData[]> {
+    // Static 메서드를 호출 (인증이 필요 없는 공개 데이터이므로)
+    return BithumbAdapter.getTickerCandles(ticker, interval, to, count);
+  }
+
+  // Instance method for getting USDT candle data
+  async getUSDTCandles(
+    interval: string = "1m",
+    to: number = 0,
+    count: number = 200
+  ): Promise<CandleData[]> {
+    // Bithumb은 KRW 기준이므로 USDT 캔들 데이터를 제공하지 않음
+    return [];
   }
 
   // Static method for getting candle data (no authentication needed)

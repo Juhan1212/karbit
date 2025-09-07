@@ -6,6 +6,7 @@ export interface AvailableCoin {
   id: string;
   name: string;
   symbol: string;
+  availableExchanges?: string[]; // 추가: 이 코인을 지원하는 거래소 목록
 }
 
 export interface RestrictedCoin {
@@ -75,11 +76,14 @@ export async function getCommonCoinsByExchanges(
 
     // 지정된 거래소들의 ID 조회
     const targetExchanges = await db
-      .select({ id: exchanges.id })
+      .select({ id: exchanges.id, name: exchanges.name })
       .from(exchanges)
       .where(inArray(exchanges.name, exchangeNames));
 
     const exchangeIds = targetExchanges.map((ex) => ex.id);
+    const exchangeIdToNameMap = new Map(
+      targetExchanges.map((ex) => [ex.id, ex.name])
+    );
 
     if (exchangeIds.length === 0) {
       return [];
@@ -98,11 +102,31 @@ export async function getCommonCoinsByExchanges(
       .having(sql`count(distinct ${coinsExchanges.exchangeId}) >= 2`)
       .orderBy(coinsExchanges.coinSymbol);
 
-    return commonCoinsResult.map((coin) => ({
-      id: coin.coinSymbol,
-      name: coin.displayName,
-      symbol: coin.coinSymbol,
-    }));
+    // 각 코인별로 지원하는 거래소 목록 조회
+    const coinsWithExchanges: AvailableCoin[] = [];
+
+    for (const coin of commonCoinsResult) {
+      // 이 코인을 지원하는 거래소 목록 조회
+      const coinExchanges = await db
+        .select({ exchangeId: coinsExchanges.exchangeId })
+        .from(coinsExchanges)
+        .where(
+          sql`${coinsExchanges.coinSymbol} = ${coin.coinSymbol} AND ${coinsExchanges.exchangeId} IN (${sql.raw(exchangeIds.join(","))})`
+        );
+
+      const availableExchanges = coinExchanges
+        .map((ce) => exchangeIdToNameMap.get(ce.exchangeId))
+        .filter(Boolean) as string[];
+
+      coinsWithExchanges.push({
+        id: coin.coinSymbol,
+        name: coin.displayName,
+        symbol: coin.coinSymbol,
+        availableExchanges,
+      });
+    }
+
+    return coinsWithExchanges;
   } catch (error) {
     console.error("거래소별 공통 코인 조회 오류:", error);
     return [];

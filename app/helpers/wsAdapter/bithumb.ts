@@ -2,7 +2,7 @@ import type { WebSocketAdapter, WebSocketParams } from "./base";
 import type { CandleBarData } from "../../types/marketInfo";
 import { toUppercaseKRWSymbol } from "../common";
 
-export class UpbitWebSocketAdapter implements WebSocketAdapter {
+export class BithumbWebSocketAdapter implements WebSocketAdapter {
   getRequestMessage(type: string, params: WebSocketParams) {
     switch (type) {
       case "kline": {

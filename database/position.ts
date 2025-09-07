@@ -16,7 +16,7 @@ export async function getUserActivePositionCount(
     WITH latest_closed AS (
       SELECT 
         coin_symbol,
-        MAX(exit_time) as latest_exit_time
+        MAX(entry_time) as latest_exit_time
       FROM positions 
       WHERE user_id = ${userId} AND status = 'CLOSED'
       GROUP BY coin_symbol
@@ -58,7 +58,9 @@ export async function getUserActivePositions(userId: number) {
       WHERE user_id = ${userId} AND status = 'CLOSED'
       GROUP BY coin_symbol
     )
-    SELECT p.coin_symbol, p.kr_exchange, p.fr_exchange
+    SELECT p.coin_symbol, 
+           p.kr_exchange, 
+           p.fr_exchange
     FROM positions p
     LEFT JOIN latest_closed lc ON p.coin_symbol = lc.coin_symbol
     WHERE p.user_id = ${userId} 
@@ -207,4 +209,40 @@ export async function getUserTradingStats(userId: number) {
     closedTrades,
     totalProfit,
   };
+}
+
+/**
+ * 특정 코인 심볼의 활성 포지션을 강제 종료합니다
+ */
+export async function closePositionByCoinSymbol(
+  userId: number,
+  coinSymbol: string
+): Promise<void> {
+  const db = database();
+
+  // 해당 코인의 활성 포지션을 찾아서 CLOSED 상태로 변경
+  const result = await db.execute(sql`
+    WITH latest_closed AS (
+      SELECT 
+        coin_symbol,
+        MAX(exit_time) as latest_exit_time
+      FROM positions 
+      WHERE user_id = ${userId} AND status = 'CLOSED'
+      GROUP BY coin_symbol
+    )
+    UPDATE positions 
+    SET 
+      status = 'CLOSED',
+      exit_time = NOW(),
+      updated_at = NOW()
+    WHERE user_id = ${userId} 
+      AND coin_symbol = ${coinSymbol}
+      AND status = 'OPEN'
+      AND (
+        (SELECT latest_exit_time FROM latest_closed WHERE coin_symbol = ${coinSymbol}) IS NULL 
+        OR entry_time > (SELECT latest_exit_time FROM latest_closed WHERE coin_symbol = ${coinSymbol})
+      )
+  `);
+
+  console.log(`포지션 종료 완료: ${coinSymbol}, 사용자: ${userId}`);
 }

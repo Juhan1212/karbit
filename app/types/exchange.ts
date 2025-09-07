@@ -4,7 +4,7 @@
  */
 
 // 영어 대문자 거래소 타입 (차트, API 등에서 사용)
-export const ExchangeType = {
+export const UppercaseExchangeType = {
   BINANCE: "BINANCE",
   BYBIT: "BYBIT",
   BINGX: "BINGX",
@@ -14,18 +14,19 @@ export const ExchangeType = {
   UPBIT: "UPBIT",
   BITHUMB: "BITHUMB",
 } as const;
-export type ExchangeType = (typeof ExchangeType)[keyof typeof ExchangeType];
+export type UppercaseExchangeType =
+  (typeof UppercaseExchangeType)[keyof typeof UppercaseExchangeType];
 
 // 영어 소문자 거래소 타입 (WebSocket 등에서 사용)
-export const WebSocketExchangeType = {
+export const LowercaseExchangeType = {
   upbit: "upbit",
   binance: "binance",
   bybit: "bybit",
   okx: "okx",
   bithumb: "bithumb",
 } as const;
-export type WebSocketExchangeType =
-  (typeof WebSocketExchangeType)[keyof typeof WebSocketExchangeType];
+export type LowercaseExchangeType =
+  (typeof LowercaseExchangeType)[keyof typeof LowercaseExchangeType];
 
 // 한국어 거래소 타입 (UI 표시용)
 export const KoreanExchangeType = {
@@ -41,55 +42,63 @@ export type KoreanExchangeType =
 // 거래소 타입 간 변환 유틸리티
 export const ExchangeTypeConverter = {
   // 영어 대문자 → 소문자 변환
-  fromUppercaseToLowercase: (exchange: ExchangeType): WebSocketExchangeType => {
-    const mapping: Record<ExchangeType, WebSocketExchangeType> = {
-      [ExchangeType.UPBIT]: WebSocketExchangeType.upbit,
-      [ExchangeType.BINANCE]: WebSocketExchangeType.binance,
-      [ExchangeType.BYBIT]: WebSocketExchangeType.bybit,
-      [ExchangeType.OKX]: WebSocketExchangeType.okx,
-      [ExchangeType.BITHUMB]: WebSocketExchangeType.bithumb,
-      [ExchangeType.BINGX]: WebSocketExchangeType.binance, // fallback
-      [ExchangeType.BITGET]: WebSocketExchangeType.binance, // fallback
-      [ExchangeType.GATEIO]: WebSocketExchangeType.binance, // fallback
+  fromUppercaseToLowercase: (
+    exchange: UppercaseExchangeType
+  ): LowercaseExchangeType => {
+    const mapping: Record<UppercaseExchangeType, LowercaseExchangeType> = {
+      [UppercaseExchangeType.UPBIT]: LowercaseExchangeType.upbit,
+      [UppercaseExchangeType.BINANCE]: LowercaseExchangeType.binance,
+      [UppercaseExchangeType.BYBIT]: LowercaseExchangeType.bybit,
+      [UppercaseExchangeType.OKX]: LowercaseExchangeType.okx,
+      [UppercaseExchangeType.BITHUMB]: LowercaseExchangeType.bithumb,
+      [UppercaseExchangeType.BINGX]: LowercaseExchangeType.binance, // fallback
+      [UppercaseExchangeType.BITGET]: LowercaseExchangeType.binance, // fallback
+      [UppercaseExchangeType.GATEIO]: LowercaseExchangeType.binance, // fallback
     };
     return mapping[exchange];
   },
 
   // 영어 대문자 → 한국어 변환
-  fromUppercaseToKorean: (exchange: ExchangeType): KoreanExchangeType => {
-    const mapping: Record<ExchangeType, KoreanExchangeType> = {
-      [ExchangeType.UPBIT]: KoreanExchangeType.업비트,
-      [ExchangeType.BINANCE]: KoreanExchangeType.바이낸스,
-      [ExchangeType.BYBIT]: KoreanExchangeType.바이빗,
-      [ExchangeType.OKX]: KoreanExchangeType.OKX,
-      [ExchangeType.BITHUMB]: KoreanExchangeType.빗썸,
-      [ExchangeType.BINGX]: KoreanExchangeType.바이낸스, // fallback
-      [ExchangeType.BITGET]: KoreanExchangeType.바이낸스, // fallback
-      [ExchangeType.GATEIO]: KoreanExchangeType.바이낸스, // fallback
+  fromUppercaseToKorean: (
+    exchange: UppercaseExchangeType
+  ): KoreanExchangeType => {
+    const mapping: Record<UppercaseExchangeType, KoreanExchangeType> = {
+      [UppercaseExchangeType.UPBIT]: KoreanExchangeType.업비트,
+      [UppercaseExchangeType.BINANCE]: KoreanExchangeType.바이낸스,
+      [UppercaseExchangeType.BYBIT]: KoreanExchangeType.바이빗,
+      [UppercaseExchangeType.OKX]: KoreanExchangeType.OKX,
+      [UppercaseExchangeType.BITHUMB]: KoreanExchangeType.빗썸,
+      [UppercaseExchangeType.BINGX]: KoreanExchangeType.바이낸스, // fallback
+      [UppercaseExchangeType.BITGET]: KoreanExchangeType.바이낸스, // fallback
+      [UppercaseExchangeType.GATEIO]: KoreanExchangeType.바이낸스, // fallback
     };
     return mapping[exchange];
   },
 
   // 한국어 → 영어 대문자 변환
-  fromKoreanToUppercase: (exchange: KoreanExchangeType): ExchangeType => {
-    const mapping: Record<KoreanExchangeType, ExchangeType> = {
-      [KoreanExchangeType.업비트]: ExchangeType.UPBIT,
-      [KoreanExchangeType.바이낸스]: ExchangeType.BINANCE,
-      [KoreanExchangeType.바이빗]: ExchangeType.BYBIT,
-      [KoreanExchangeType.OKX]: ExchangeType.OKX,
-      [KoreanExchangeType.빗썸]: ExchangeType.BITHUMB,
+  fromKoreanToUppercase: (
+    exchange: KoreanExchangeType
+  ): UppercaseExchangeType => {
+    const mapping: Record<KoreanExchangeType, UppercaseExchangeType> = {
+      [KoreanExchangeType.업비트]: UppercaseExchangeType.UPBIT,
+      [KoreanExchangeType.바이낸스]: UppercaseExchangeType.BINANCE,
+      [KoreanExchangeType.바이빗]: UppercaseExchangeType.BYBIT,
+      [KoreanExchangeType.OKX]: UppercaseExchangeType.OKX,
+      [KoreanExchangeType.빗썸]: UppercaseExchangeType.BITHUMB,
     };
     return mapping[exchange];
   },
 
   // 소문자 → 영어 대문자 변환
-  fromLowercaseToUppercase: (exchange: WebSocketExchangeType): ExchangeType => {
-    const mapping: Record<WebSocketExchangeType, ExchangeType> = {
-      [WebSocketExchangeType.upbit]: ExchangeType.UPBIT,
-      [WebSocketExchangeType.binance]: ExchangeType.BINANCE,
-      [WebSocketExchangeType.bybit]: ExchangeType.BYBIT,
-      [WebSocketExchangeType.okx]: ExchangeType.OKX,
-      [WebSocketExchangeType.bithumb]: ExchangeType.BITHUMB,
+  fromLowercaseToUppercase: (
+    exchange: LowercaseExchangeType
+  ): UppercaseExchangeType => {
+    const mapping: Record<LowercaseExchangeType, UppercaseExchangeType> = {
+      [LowercaseExchangeType.upbit]: UppercaseExchangeType.UPBIT,
+      [LowercaseExchangeType.binance]: UppercaseExchangeType.BINANCE,
+      [LowercaseExchangeType.bybit]: UppercaseExchangeType.BYBIT,
+      [LowercaseExchangeType.okx]: UppercaseExchangeType.OKX,
+      [LowercaseExchangeType.bithumb]: UppercaseExchangeType.BITHUMB,
     };
     return mapping[exchange];
   },
@@ -97,68 +106,79 @@ export const ExchangeTypeConverter = {
 
 // 거래소별 추가 정보
 export interface ExchangeInfo {
-  id: ExchangeType;
+  id: UppercaseExchangeType;
   name: KoreanExchangeType;
-  websocketName: WebSocketExchangeType;
+  websocketName: LowercaseExchangeType;
   isKorean: boolean;
   isForeign: boolean;
 }
 
-export const ExchangeInfoMap: Record<ExchangeType, ExchangeInfo> = {
-  [ExchangeType.UPBIT]: {
-    id: ExchangeType.UPBIT,
+export const ExchangeInfoMap: Record<UppercaseExchangeType, ExchangeInfo> = {
+  [UppercaseExchangeType.UPBIT]: {
+    id: UppercaseExchangeType.UPBIT,
     name: KoreanExchangeType.업비트,
-    websocketName: WebSocketExchangeType.upbit,
+    websocketName: LowercaseExchangeType.upbit,
     isKorean: true,
     isForeign: false,
   },
-  [ExchangeType.BITHUMB]: {
-    id: ExchangeType.BITHUMB,
+  [UppercaseExchangeType.BITHUMB]: {
+    id: UppercaseExchangeType.BITHUMB,
     name: KoreanExchangeType.빗썸,
-    websocketName: WebSocketExchangeType.bithumb,
+    websocketName: LowercaseExchangeType.bithumb,
     isKorean: true,
     isForeign: false,
   },
-  [ExchangeType.BINANCE]: {
-    id: ExchangeType.BINANCE,
+  [UppercaseExchangeType.BINANCE]: {
+    id: UppercaseExchangeType.BINANCE,
     name: KoreanExchangeType.바이낸스,
-    websocketName: WebSocketExchangeType.binance,
+    websocketName: LowercaseExchangeType.binance,
     isKorean: false,
     isForeign: true,
   },
-  [ExchangeType.BYBIT]: {
-    id: ExchangeType.BYBIT,
+  [UppercaseExchangeType.BYBIT]: {
+    id: UppercaseExchangeType.BYBIT,
     name: KoreanExchangeType.바이빗,
-    websocketName: WebSocketExchangeType.bybit,
+    websocketName: LowercaseExchangeType.bybit,
     isKorean: false,
     isForeign: true,
   },
-  [ExchangeType.OKX]: {
-    id: ExchangeType.OKX,
+  [UppercaseExchangeType.OKX]: {
+    id: UppercaseExchangeType.OKX,
     name: KoreanExchangeType.OKX,
-    websocketName: WebSocketExchangeType.okx,
+    websocketName: LowercaseExchangeType.okx,
     isKorean: false,
     isForeign: true,
   },
-  [ExchangeType.BINGX]: {
-    id: ExchangeType.BINGX,
+  [UppercaseExchangeType.BINGX]: {
+    id: UppercaseExchangeType.BINGX,
     name: KoreanExchangeType.바이낸스, // UI에서는 바이낸스로 표시
-    websocketName: WebSocketExchangeType.binance,
+    websocketName: LowercaseExchangeType.binance,
     isKorean: false,
     isForeign: true,
   },
-  [ExchangeType.BITGET]: {
-    id: ExchangeType.BITGET,
+  [UppercaseExchangeType.BITGET]: {
+    id: UppercaseExchangeType.BITGET,
     name: KoreanExchangeType.바이낸스, // UI에서는 바이낸스로 표시
-    websocketName: WebSocketExchangeType.binance,
+    websocketName: LowercaseExchangeType.binance,
     isKorean: false,
     isForeign: true,
   },
-  [ExchangeType.GATEIO]: {
-    id: ExchangeType.GATEIO,
+  [UppercaseExchangeType.GATEIO]: {
+    id: UppercaseExchangeType.GATEIO,
     name: KoreanExchangeType.바이낸스, // UI에서는 바이낸스로 표시
-    websocketName: WebSocketExchangeType.binance,
+    websocketName: LowercaseExchangeType.binance,
     isKorean: false,
     isForeign: true,
   },
 };
+
+// 하위 호환성을 위한 별칭 (점진적 마이그레이션용)
+/** @deprecated Use UppercaseExchangeType instead */
+export const ExchangeType = UppercaseExchangeType;
+/** @deprecated Use UppercaseExchangeType instead */
+export type ExchangeType = UppercaseExchangeType;
+
+/** @deprecated Use LowercaseExchangeType instead */
+export const WebSocketExchangeType = LowercaseExchangeType;
+/** @deprecated Use LowercaseExchangeType instead */
+export type WebSocketExchangeType = LowercaseExchangeType;
