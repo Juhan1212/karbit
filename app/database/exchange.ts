@@ -2,8 +2,8 @@ import { eq, and } from "drizzle-orm";
 import { database } from "~/database/context";
 import { userExchanges, exchanges } from "~/database/schema";
 import { encrypt, decrypt } from "~/utils/encryption";
-import { createExchangeAdapter } from "../exchanges";
-import { KoreanExchangeType } from "../app/types/exchange";
+import { createExchangeAdapter } from "~/exchanges";
+import { KoreanExchangeType } from "~/types/exchange";
 
 export interface ExchangeConnection {
   exchangeName: string;
@@ -292,5 +292,50 @@ export async function getUserExchangeBalances(
     if (a.type === "overseas" && b.type === "domestic") return 1;
     return 0;
   });
+}
+
+// 사용자의 특정 거래소 인증 정보 조회
+export async function getUserExchangeCredentials(
+  userId: number,
+  exchangeName: KoreanExchangeType
+): Promise<{ apiKey: string; apiSecret: string } | null> {
+  try {
+    const db = database();
+
+    // 거래소 이름으로 거래소 ID 조회
+    const exchange = await db.query.exchanges.findFirst({
+      where: eq(exchanges.name, exchangeName),
+    });
+
+    if (!exchange) {
+      console.error(`거래소 '${exchangeName}'을 찾을 수 없습니다.`);
+      return null;
+    }
+
+    // 사용자의 해당 거래소 인증 정보 조회
+    const userExchange = await db.query.userExchanges.findFirst({
+      where: and(
+        eq(userExchanges.userId, userId),
+        eq(userExchanges.exchangeId, exchange.id),
+        eq(userExchanges.isActive, true)
+      ),
+    });
+
+    if (!userExchange || !userExchange.apiKey || !userExchange.apiSecret) {
+      console.error(
+        `사용자 ${userId}의 거래소 '${exchangeName}' 인증 정보를 찾을 수 없습니다.`
+      );
+      return null;
+    }
+
+    // 암호화된 키들을 복호화
+    const apiKey = decrypt(userExchange.apiKey);
+    const apiSecret = decrypt(userExchange.apiSecret);
+
+    return { apiKey, apiSecret };
+  } catch (error) {
+    console.error("거래소 인증 정보 조회 오류:", error);
+    return null;
+  }
 }
 // ...existing code...

@@ -331,7 +331,7 @@ export default function AutoTrading() {
   useEffect(() => {
     const fetchRestrictedCoins = async () => {
       try {
-        const response = await fetch("/autotrading?_data", {
+        const response = await fetch("/api/inquiry-restricted-coin", {
           headers: {
             Accept: "application/json",
           },
@@ -339,7 +339,15 @@ export default function AutoTrading() {
         if (response.ok) {
           const data = await response.json();
           if (data.restrictedCoins) {
-            setCurrentRestrictedCoins(data.restrictedCoins);
+            // 데이터가 실제로 변경되었는지 확인
+            const hasChanged =
+              JSON.stringify(currentRestrictedCoins) !==
+              JSON.stringify(data.restrictedCoins);
+
+            // 변경된 경우에만 상태 업데이트
+            if (hasChanged) {
+              setCurrentRestrictedCoins(data.restrictedCoins);
+            }
           }
         }
       } catch (error) {
@@ -347,11 +355,14 @@ export default function AutoTrading() {
       }
     };
 
+    // 초기 로딩 시 한 번 실행
+    fetchRestrictedCoins();
+
     // 5분(300초)마다 실행
     const interval = setInterval(fetchRestrictedCoins, 5 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [currentRestrictedCoins]);
 
   // 연결된 거래소 확인
   const hasConnectedExchanges = connections.some((conn) => conn.isConnected);
@@ -508,60 +519,102 @@ export default function AutoTrading() {
   }, []);
 
   // 활성 포지션 폴링 (5초 간격)
-  const pollActivePositions = useCallback(async () => {
-    setIsLoadingPositions(true);
-    try {
-      const response = await fetch("/api/active-positions");
-      if (response.ok) {
-        const data = await response.json();
-        // 전체 활성 포지션 데이터를 받아와서 변환
-        const transformedPositions = data.activePositions.map(
-          (position: any) => ({
-            coinSymbol: position.coin_symbol,
-            krExchange: position.kr_exchange,
-            frExchange: position.fr_exchange,
-          })
-        );
-
-        setPolledActivePositions(transformedPositions);
-        setActivePositionCount(data.activePositionCount);
+  const pollActivePositions = useCallback(
+    async (showLoading = false) => {
+      if (showLoading) {
+        setIsLoadingPositions(true);
       }
-    } catch (error) {
-      console.error("Active positions polling error:", error);
-    } finally {
-      setIsLoadingPositions(false);
-    }
-  }, []);
+      try {
+        const response = await fetch("/api/active-positions");
+        if (response.ok) {
+          const data = await response.json();
+          // 전체 활성 포지션 데이터를 받아와서 변환
+          const transformedPositions = data.activePositions.map(
+            (position: any) => ({
+              coinSymbol: position.coin_symbol,
+              krExchange: position.kr_exchange,
+              frExchange: position.fr_exchange,
+            })
+          );
+
+          // 데이터가 실제로 변경되었는지 확인
+          const hasChanged =
+            JSON.stringify(polledActivePositions) !==
+              JSON.stringify(transformedPositions) ||
+            activePositionCount !== data.activePositionCount;
+
+          // 변경된 경우에만 상태 업데이트
+          if (hasChanged) {
+            setPolledActivePositions(transformedPositions);
+            setActivePositionCount(data.activePositionCount);
+          }
+        }
+      } catch (error) {
+        console.error("Active positions polling error:", error);
+      } finally {
+        if (showLoading) {
+          setIsLoadingPositions(false);
+        }
+      }
+    },
+    [polledActivePositions, activePositionCount]
+  );
 
   // 거래 데이터 폴링 (30초 간격)
   const pollTradingData = useCallback(
-    async (page?: number) => {
-      setIsLoadingTradingData(true);
+    async (page?: number, showLoading = false) => {
+      if (showLoading) {
+        setIsLoadingTradingData(true);
+      }
       try {
         const targetPage = page || currentPage;
         const response = await fetch(`/api/trading-data?page=${targetPage}`);
         if (response.ok) {
           const data = await response.json();
-          setTradingHistory(data.tradingHistory);
-          setTradingStats(data.tradingStats);
-          setPagination(data.pagination);
+
+          // 데이터가 실제로 변경되었는지 확인
+          const hasChanged =
+            JSON.stringify(tradingHistory) !==
+              JSON.stringify(data.tradingHistory) ||
+            JSON.stringify(tradingStats) !==
+              JSON.stringify(data.tradingStats) ||
+            JSON.stringify(pagination) !== JSON.stringify(data.pagination);
+
+          // 변경된 경우에만 상태 업데이트
+          if (hasChanged) {
+            setTradingHistory(data.tradingHistory);
+            setTradingStats(data.tradingStats);
+            setPagination(data.pagination);
+          }
         }
       } catch (error) {
         console.error("Trading data polling error:", error);
       } finally {
-        setIsLoadingTradingData(false);
+        if (showLoading) {
+          setIsLoadingTradingData(false);
+        }
       }
     },
-    [currentPage]
+    [currentPage, tradingHistory, tradingStats, pagination]
   );
 
   // 폴링 설정
   useEffect(() => {
-    // 활성 포지션 폴링 (5초 간격)
-    const positionsInterval = setInterval(pollActivePositions, 5000);
+    // 초기 로딩 시에만 로딩 상태 표시
+    pollActivePositions(true);
+    pollTradingData(undefined, true);
 
-    // 거래 데이터 폴링 (30초 간격)
-    const tradingDataInterval = setInterval(pollTradingData, 30000);
+    // 활성 포지션 폴링 (5초 간격) - 백그라운드에서는 로딩 표시 없음
+    const positionsInterval = setInterval(
+      () => pollActivePositions(false),
+      5000
+    );
+
+    // 거래 데이터 폴링 (30초 간격) - 백그라운드에서는 로딩 표시 없음
+    const tradingDataInterval = setInterval(
+      () => pollTradingData(undefined, false),
+      30000
+    );
 
     // 페이지 가시성 변경 시 폴링 제어
     const handleVisibilityChange = () => {
@@ -569,11 +622,17 @@ export default function AutoTrading() {
         clearInterval(positionsInterval);
         clearInterval(tradingDataInterval);
       } else if (document.visibilityState === "visible") {
-        // 페이지가 다시 보이면 즉시 한 번 업데이트하고 폴링 재시작
-        pollActivePositions();
-        pollTradingData();
-        const newPositionsInterval = setInterval(pollActivePositions, 5000);
-        const newTradingDataInterval = setInterval(pollTradingData, 30000);
+        // 페이지가 다시 보이면 즉시 한 번 업데이트하고 폴링 재시작 (로딩 표시)
+        pollActivePositions(true);
+        pollTradingData(undefined, true);
+        const newPositionsInterval = setInterval(
+          () => pollActivePositions(false),
+          5000
+        );
+        const newTradingDataInterval = setInterval(
+          () => pollTradingData(undefined, false),
+          30000
+        );
         return { newPositionsInterval, newTradingDataInterval };
       }
     };
@@ -587,9 +646,9 @@ export default function AutoTrading() {
     };
   }, [pollActivePositions, pollTradingData]);
 
-  // 페이지 변경 시 거래 데이터 즉시 업데이트
+  // 페이지 변경 시 거래 데이터 즉시 업데이트 (로딩 표시)
   useEffect(() => {
-    pollTradingData(currentPage);
+    pollTradingData(currentPage, true);
   }, [currentPage, pollTradingData]);
 
   const adjustRate = (
@@ -1001,8 +1060,8 @@ export default function AutoTrading() {
         positions={polledActivePositions}
         isLoading={isLoadingPositions}
         onPositionClose={(coinSymbol) => {
-          // 포지션 종료 후 새로고침
-          pollActivePositions();
+          // 포지션 종료 후 새로고침 (로딩 표시)
+          pollActivePositions(true);
         }}
       />
 

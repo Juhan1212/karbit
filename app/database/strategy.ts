@@ -1,6 +1,7 @@
-import { eq, and, desc, isNull } from "drizzle-orm";
+import { eq, and, desc, isNull, sql } from "drizzle-orm";
 import { database } from "./context";
 import { strategies, users, userPlanHistory } from "./schema";
+import { preciseAdd, safeNumeric, CRYPTO_DECIMALS } from "~/utils/decimal";
 
 export interface CreateStrategyData {
   name: string;
@@ -320,4 +321,33 @@ export function formatStrategyForFrontend(strategy: any) {
     createdAt: strategy.createdAt,
     updatedAt: strategy.updatedAt,
   };
+}
+
+/**
+ * 포지션 종료 후 전략 성과 업데이트
+ */
+export async function updateStrategyStatsAfterPositionClose(
+  strategyId: number,
+  profit: number,
+  profitRate: number
+): Promise<void> {
+  const db = database();
+
+  try {
+    // 전략의 entryCount 증가 및 업데이트 시간 갱신
+    await db
+      .update(strategies)
+      .set({
+        entryCount: sql`${strategies.entryCount} - 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(strategies.id, strategyId));
+
+    console.log(
+      `전략 ${strategyId} 성과 업데이트 완료: 수익 ${profit}, 수익률 ${profitRate}%`
+    );
+  } catch (error) {
+    console.error("전략 성과 업데이트 실패:", error);
+    throw error;
+  }
 }

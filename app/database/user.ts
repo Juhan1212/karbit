@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { database } from "./context";
 import { users, plans, userPlanHistory } from "./schema";
 import { hashPassword } from "~/utils/auth";
+import { preciseAdd, safeNumeric, CRYPTO_DECIMALS } from "~/utils/decimal";
 
 export interface CreateUserInput {
   name: string;
@@ -268,4 +269,32 @@ export async function getUsers(
     limit,
     totalPages,
   };
+}
+
+/**
+ * 포지션 종료 후 사용자 누적 통계 업데이트
+ */
+export async function updateUserStatsAfterPositionClose(
+  userId: number,
+  orderAmount: number
+): Promise<void> {
+  const db = database();
+
+  try {
+    await db
+      .update(users)
+      .set({
+        totalEntryCount: sql`${users.totalEntryCount} + 1`,
+        totalOrderAmount: sql`${users.totalOrderAmount} + ${orderAmount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    console.log(
+      `사용자 ${userId} 누적 통계 업데이트 완료: 주문금액 ${orderAmount}`
+    );
+  } catch (error) {
+    console.error("사용자 누적 통계 업데이트 실패:", error);
+    throw error;
+  }
 }

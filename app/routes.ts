@@ -17,6 +17,11 @@ export default [
   route("/api/strategy", "routes/api.strategy.tsx"),
   route("/api/active-positions", "routes/api.active-positions.ts"),
   route("/api/trading-data", "routes/api.trading-data.ts"),
+  route(
+    "/api/inquiry-restricted-coin",
+    "routes/api.inquiry-restricted-coin.tsx"
+  ),
+  route("/api/close-position", "routes/api.close-position.tsx"),
   route("/terms-service", "routes/terms-service.tsx"),
   route("/privacy-policy", "routes/privacy-policy.tsx"),
   layout("routes/_layout.tsx", [

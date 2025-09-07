@@ -203,6 +203,9 @@ export const strategies = pgTable(
   "strategies",
   {
     id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     name: varchar({ length: 100 }).notNull(),
     isActive: boolean("is_active").default(false),
 

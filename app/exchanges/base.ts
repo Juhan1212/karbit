@@ -5,6 +5,32 @@
 
 import type { CandleData } from "./upbit";
 
+export interface OrderRequest {
+  symbol: string;
+  type: "market" | "limit";
+  side: "buy" | "sell";
+  amount: string;
+  price?: number;
+}
+
+export interface OrderResult {
+  id: string;
+  symbol: string;
+  type: string;
+  side: string;
+  amount: number;
+  filled: number;
+  price: number;
+  fee?: number;
+  timestamp: number;
+}
+
+export interface TickerResult {
+  symbol: string;
+  price: number;
+  timestamp: number;
+}
+
 export abstract class ExchangeAdapter {
   protected apiKey: string;
   protected apiSecret: string;
@@ -20,6 +46,16 @@ export abstract class ExchangeAdapter {
    * 거래소의 잔액을 조회합니다
    */
   abstract getBalance(): Promise<number>;
+
+  /**
+   * 주문을 실행합니다 (주문 UUID 반환)
+   */
+  abstract placeOrder(order: OrderRequest): Promise<string>;
+
+  /**
+   * 주문 상태를 조회합니다
+   */
+  abstract getOrder(orderId: string, symbol?: string): Promise<OrderResult>;
 
   /**
    * 티커 캔들 데이터를 조회합니다 (인스턴스 메서드)

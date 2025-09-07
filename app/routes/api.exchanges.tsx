@@ -7,7 +7,7 @@ import {
   getUserExchangeConnections,
 } from "~/database/exchange";
 import { KoreanExchangeType } from "~/types/exchange";
-import { createExchangeAdapter } from "../../exchanges";
+import { createExchangeAdapter } from "~/exchanges";
 
 // 거래소별 테스트 함수
 async function testExchangeConnection(

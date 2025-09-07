@@ -1,13 +1,13 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { UpbitAdapter } from "../../exchanges/upbit";
-import { BybitAdapter } from "../../exchanges/bybit";
-import type { CandleData } from "../../exchanges/upbit";
+import { UpbitAdapter } from "~/exchanges/upbit";
+import { BybitAdapter } from "~/exchanges/bybit";
+import type { CandleData } from "~/exchanges/upbit";
 import {
   createExchangeAdapter,
   KoreanExchangeType,
   LowercaseExchangeType,
   UppercaseExchangeType,
-} from "exchanges";
+} from "~/exchanges";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -24,7 +24,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const promises: Promise<CandleData[]>[] = [];
     const exchangeNames: string[] = [];
 
-    exchangeNames.forEach((name) => {
+    exchanges.forEach((name) => {
       const adapter = createExchangeAdapter(
         name as
           | KoreanExchangeType

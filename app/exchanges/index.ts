@@ -10,13 +10,13 @@ import {
   UppercaseExchangeType,
   LowercaseExchangeType,
   ExchangeTypeConverter,
-} from "../app/types/exchange";
+} from "~/types/exchange";
 
 export {
   KoreanExchangeType,
   UppercaseExchangeType,
   LowercaseExchangeType,
-} from "../app/types/exchange";
+} from "~/types/exchange";
 export { ExchangeAdapter } from "./base";
 
 export function createExchangeAdapter(

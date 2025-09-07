@@ -1,7 +1,26 @@
 import type { ActionFunctionArgs } from "react-router";
 import { validateSession } from "~/database/session";
 import { getAuthTokenFromRequest } from "~/utils/cookies";
-import { closePositionByCoinSymbol } from "~/database/position";
+import {
+  getUserPositionsForSettlement,
+  insertClosedPosition,
+  getCoinActivePositionDetails,
+} from "~/database/position";
+import { getUserExchangeCredentials } from "~/database/exchange";
+import { updateUserStatsAfterPositionClose } from "~/database/user";
+import { updateStrategyStatsAfterPositionClose } from "~/database/strategy";
+import { createExchangeAdapter } from "~/exchanges";
+import { UpbitAdapter } from "~/exchanges/upbit";
+import { ExchangeTypeConverter, UppercaseExchangeType } from "~/types/exchange";
+import {
+  preciseAdd,
+  preciseSubtract,
+  preciseMultiply,
+  preciseDivide,
+  preciseProfitRate,
+  safeNumeric,
+  CRYPTO_DECIMALS,
+} from "~/utils/decimal";
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
@@ -28,7 +47,15 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    const { coinSymbol } = await request.json();
+    const {
+      coinSymbol,
+      krExchange,
+      frExchange,
+    }: {
+      coinSymbol: string;
+      krExchange: UppercaseExchangeType;
+      frExchange: UppercaseExchangeType;
+    } = await request.json();
 
     if (!coinSymbol || typeof coinSymbol !== "string") {
       return Response.json(
@@ -40,13 +67,303 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // 해당 코인 심볼의 활성 포지션 종료
-    await closePositionByCoinSymbol(user.id, coinSymbol);
+    // 1. 정산용 활성 포지션 집계 정보 조회
+    const positionSettlement = await getUserPositionsForSettlement(
+      user.id,
+      coinSymbol
+    );
 
-    return Response.json({
-      success: true,
-      message: `${coinSymbol} 포지션이 성공적으로 종료되었습니다.`,
-    });
+    if (!positionSettlement) {
+      return Response.json(
+        {
+          success: false,
+          message: `${coinSymbol}에 대한 활성 포지션이 없습니다.`,
+        },
+        { status: 404 }
+      );
+    }
+
+    // 1-1. 실제 포지션 정보 조회 (strategyId, leverage 등을 위해)
+    const activePositions = await getCoinActivePositionDetails(
+      user.id,
+      coinSymbol
+    );
+
+    if (activePositions.length === 0) {
+      return Response.json(
+        {
+          success: false,
+          message: `${coinSymbol}에 대한 활성 포지션 상세 정보를 찾을 수 없습니다.`,
+        },
+        { status: 404 }
+      );
+    }
+
+    // 첫 번째 포지션의 strategyId와 leverage를 사용 (모든 포지션이 같은 전략이라고 가정)
+    const firstPosition = activePositions[0];
+    const strategyId = firstPosition.strategyId;
+    const leverage = firstPosition.leverage;
+
+    try {
+      // 2. 한국 거래소 인증 정보 조회
+      const krCredentials = await getUserExchangeCredentials(
+        user.id,
+        ExchangeTypeConverter.fromUppercaseToKorean(krExchange)
+      );
+      if (!krCredentials) {
+        return Response.json(
+          {
+            success: false,
+            message: `한국 거래소(${krExchange}) 인증 정보를 찾을 수 없습니다. 거래소 연결을 확인해주세요.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      // 해외 거래소 인증 정보 조회
+      const frCredentials = await getUserExchangeCredentials(
+        user.id,
+        ExchangeTypeConverter.fromUppercaseToKorean(frExchange)
+      );
+      if (!frCredentials) {
+        return Response.json(
+          {
+            success: false,
+            message: `해외 거래소(${frExchange}) 인증 정보를 찾을 수 없습니다. 거래소 연결을 확인해주세요.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      // 3. 한국 거래소와 해외 거래소 주문을 동시에 실행
+      console.log(
+        `한국 거래소(${krExchange})와 해외 거래소(${frExchange})에서 ${coinSymbol} 포지션 종료 주문을 동시에 실행`
+      );
+
+      const krAdapter = createExchangeAdapter(krExchange as any, krCredentials);
+      const frAdapter = createExchangeAdapter(frExchange as any, frCredentials);
+
+      // 동시에 주문 실행 (집계된 수량 사용)
+      //   const [krSellOrderId, frBuyOrderId] = await Promise.all([
+      //     // 한국 거래소 매도 주문 (집계된 전체 수량)
+      //     krAdapter.placeOrder({
+      //       symbol: coinSymbol,
+      //       type: "market",
+      //       side: "sell",
+      //       amount: String(positionSettlement.totalKrVolume),
+      //     }),
+      //     // 해외 거래소 매수 주문 (포지션 청산) - USDT 기준 계산 필요
+      //     frAdapter.placeOrder({
+      //       symbol: coinSymbol,
+      //       type: "market",
+      //       side: "buy",
+      //       amount: "0", // USDT 기준 투자액
+      //     }),
+      //   ]);
+
+      //   console.log(
+      //     `주문 완료 - 한국 거래소: ${krSellOrderId}, 해외 거래소: ${frBuyOrderId}`
+      //   );
+
+      // 4. 주문 완료 후 상세 정보 조회 (체결 정보 포함)
+      // 시장가 주문의 경우 즉시 체결되지만, 안전을 위해 짧은 대기 후 조회
+      await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms 대기
+
+      // for mock test
+      const krSellOrderId = "1fc437c5-4fb6-42f6-843e-b1d3a23eaa19";
+      const frBuyOrderId = "2560f9ff-2065-4c36-9ae4-ff3018e1e310";
+
+      // 동시에 주문 상세 정보 조회
+      const [krSellOrderResult, frBuyOrderResult] = await Promise.allSettled([
+        krAdapter.getOrder(krSellOrderId, coinSymbol),
+        frAdapter.getOrder(frBuyOrderId, coinSymbol),
+      ]);
+
+      // 한국 거래소 매도 주문 결과 처리
+      let krSellOrder;
+      if (krSellOrderResult.status === "fulfilled") {
+        krSellOrder = krSellOrderResult.value;
+      } else {
+        console.warn(
+          "한국 거래소 주문 조회 실패, 기본값 사용:",
+          krSellOrderResult.reason
+        );
+        throw new Error("한국 거래소 주문 정보를 조회할 수 없습니다.");
+      }
+
+      // 해외 거래소 매수 주문 결과 처리
+      let frBuyOrder;
+      if (frBuyOrderResult.status === "fulfilled") {
+        frBuyOrder = frBuyOrderResult.value;
+      } else {
+        console.warn(
+          "해외 거래소 주문 조회 실패, 기본값 사용:",
+          frBuyOrderResult.reason
+        );
+        throw new Error("해외 거래소 주문 정보를 조회할 수 없습니다.");
+      }
+
+      const res = await UpbitAdapter.getTicker("USDT");
+      const currentUsdtPrice = safeNumeric(res.price, 0);
+
+      // 5. 현재 환율 조회 (실제 수익률 계산용) - 정밀한 나눗셈 사용
+      const exitRate = preciseDivide(
+        safeNumeric(krSellOrder.filled, 0),
+        safeNumeric(frBuyOrder.filled, 0),
+        CRYPTO_DECIMALS.RATE
+      );
+
+      // 6. 수익률 계산 (실제 체결 결과 기반) - 정밀한 연산 사용
+      // 총 투자금액 = 한국 거래소 투자금 + 해외 거래소 투자금 * USDT 가격
+      const krFundsTotal = safeNumeric(positionSettlement.totalKrFunds, 0);
+      const frFundsInKrw = preciseMultiply(
+        safeNumeric(positionSettlement.totalFrFunds, 0),
+        currentUsdtPrice,
+        CRYPTO_DECIMALS.FUNDS
+      );
+      const totalInvested = preciseAdd(
+        krFundsTotal,
+        frFundsInKrw,
+        CRYPTO_DECIMALS.FUNDS
+      );
+
+      // 총 회수금액 = 한국 거래소 매도금 + 해외 거래소 매수금 * USDT 가격
+      const krSellAmount = safeNumeric(krSellOrder.filled, 0);
+      const frBuyAmountInKrw = preciseMultiply(
+        safeNumeric(frBuyOrder.filled, 0),
+        currentUsdtPrice,
+        CRYPTO_DECIMALS.FUNDS
+      );
+      const totalClosed = preciseAdd(
+        krSellAmount,
+        frBuyAmountInKrw,
+        CRYPTO_DECIMALS.FUNDS
+      );
+
+      // 총 수수료 = 기존 수수료 + 이번 거래 수수료
+      const existingKrFee = safeNumeric(positionSettlement.totalKrFee, 0);
+      const existingFrFeeInKrw = preciseMultiply(
+        safeNumeric(positionSettlement.totalFrFee, 0),
+        currentUsdtPrice,
+        CRYPTO_DECIMALS.FEE
+      );
+      const currentKrFee = safeNumeric(krSellOrder.fee, 0);
+      const currentFrFeeInKrw = preciseMultiply(
+        safeNumeric(frBuyOrder.fee, 0),
+        currentUsdtPrice,
+        CRYPTO_DECIMALS.FEE
+      );
+
+      let totalFees = preciseAdd(
+        existingKrFee,
+        existingFrFeeInKrw,
+        CRYPTO_DECIMALS.FEE
+      );
+      totalFees = preciseAdd(totalFees, currentKrFee, CRYPTO_DECIMALS.FEE);
+      totalFees = preciseAdd(totalFees, currentFrFeeInKrw, CRYPTO_DECIMALS.FEE);
+
+      // 최종 수익 = 회수금액 - 투자금액 - 수수료
+      let profit = preciseSubtract(
+        totalClosed,
+        totalInvested,
+        CRYPTO_DECIMALS.PROFIT
+      );
+      profit = preciseSubtract(profit, totalFees, CRYPTO_DECIMALS.PROFIT);
+
+      // 수익률 = (수익 / 투자금액) * 100
+      const profitRate =
+        totalInvested > 0
+          ? preciseProfitRate(
+              totalInvested,
+              preciseAdd(totalInvested, profit, CRYPTO_DECIMALS.PROFIT)
+            )
+          : 0;
+
+      console.log(
+        `[수익률 계산] 수수료: ${totalFees}, 수익: ${profit}, 수익률: ${profitRate}%`
+      );
+
+      // 7. 종료된 포지션을 DB에 기록
+      await insertClosedPosition({
+        userId: user.id,
+        strategyId: strategyId,
+        coinSymbol: coinSymbol,
+        leverage: leverage,
+        krExchange: krExchange,
+        krOrderId: krSellOrder.id,
+        krPrice: krSellOrder.price,
+        krVolume: krSellOrder.amount,
+        krFunds: krSellOrder.filled,
+        krFee: krSellOrder.fee || 0,
+        frExchange: frExchange,
+        frOrderId: frBuyOrder.id,
+        frPrice: frBuyOrder.price,
+        frVolume: frBuyOrder.amount,
+        frFunds: frBuyOrder.filled,
+        frFee: frBuyOrder.fee || 0,
+        entryRate: positionSettlement.avgEntryRate,
+        exitRate: exitRate,
+        usdtPrice: currentUsdtPrice,
+        profit: profit,
+        profitRate: profitRate,
+        entryTime: new Date(),
+        exitTime: new Date(),
+      });
+
+      // 사용자 통계 업데이트
+      await updateUserStatsAfterPositionClose(user.id, profit);
+
+      // 전략 성과 업데이트
+      await updateStrategyStatsAfterPositionClose(
+        strategyId,
+        profit,
+        profitRate
+      );
+
+      return Response.json({
+        success: true,
+        message: `${coinSymbol} 포지션이 성공적으로 종료되었습니다.`,
+        data: {
+          profit: profit.toFixed(2),
+          profitRate: profitRate.toFixed(2),
+          settlementInfo: {
+            avgEntryRate: positionSettlement.avgEntryRate,
+            totalKrVolume: positionSettlement.totalKrVolume,
+            totalKrFunds: positionSettlement.totalKrFunds,
+            totalFrFunds: positionSettlement.totalFrFunds,
+            positionsCount: positionSettlement.positionsCount,
+          },
+          krOrder: {
+            id: krSellOrder.id,
+            filled: krSellOrder.filled,
+            price: krSellOrder.price,
+            fee: krSellOrder.fee,
+          },
+          frOrder: {
+            id: frBuyOrder.id,
+            filled: frBuyOrder.filled,
+            price: frBuyOrder.price,
+            fee: frBuyOrder.fee,
+          },
+          exitRate: exitRate,
+        },
+      });
+    } catch (orderError) {
+      console.error("거래 실행 오류:", orderError);
+
+      return Response.json(
+        {
+          success: false,
+          message:
+            "거래 실행 중 오류가 발생했습니다. 포지션이 부분적으로 종료되었을 수 있습니다.",
+          error:
+            orderError instanceof Error
+              ? orderError.message
+              : String(orderError),
+        },
+        { status: 500 }
+      );
+    }
   } catch (error) {
     console.error("포지션 종료 오류:", error);
 
@@ -54,6 +371,7 @@ export async function action({ request }: ActionFunctionArgs) {
       {
         success: false,
         message: "포지션 종료 중 오류가 발생했습니다.",
+        error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 }
     );

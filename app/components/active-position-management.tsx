@@ -43,7 +43,11 @@ export const ActivePositionManagement = React.memo(
     );
     const [isExpanded, setIsExpanded] = useState(false);
 
-    const handleClosePosition = async (coinSymbol: string) => {
+    const handleClosePosition = async (
+      coinSymbol: string,
+      krExchange: string,
+      frExchange: string
+    ) => {
       if (closingPositions.has(coinSymbol)) return;
 
       setClosingPositions((prev) => new Set(prev).add(coinSymbol));
@@ -54,7 +58,7 @@ export const ActivePositionManagement = React.memo(
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ coinSymbol }),
+          body: JSON.stringify({ coinSymbol, krExchange, frExchange }),
         });
 
         if (response.ok) {
@@ -217,7 +221,11 @@ export const ActivePositionManagement = React.memo(
                                 variant="destructive"
                                 size="sm"
                                 onClick={() =>
-                                  handleClosePosition(position.coinSymbol)
+                                  handleClosePosition(
+                                    position.coinSymbol,
+                                    position.krExchange,
+                                    position.frExchange
+                                  )
                                 }
                                 disabled={isClosing}
                                 className="h-8 px-3"

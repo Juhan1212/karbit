@@ -5,10 +5,7 @@
     "app/**/*",
     "app/**/.server/**/*",
     "app/**/.client/**/*",
-    "database/**/*",
-    "server/**/*",
-    "utils/**/*",
-    "exchanges/**/*"
+    "server/**/*"
   ],
   "compilerOptions": {
     "composite": true,
@@ -22,8 +19,6 @@
     "baseUrl": ".",
     "rootDirs": [".", "./.react-router/types"],
     "paths": {
-      "~/database/*": ["./database/*"],
-      "~/utils/*": ["./utils/*"],
       "~/*": ["./app/*"],
       "@icons/*": ["./app/assets/icons/*"]
     },

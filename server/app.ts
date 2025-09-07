@@ -4,8 +4,8 @@ import express from "express";
 import postgres from "postgres";
 import "react-router";
 
-import { DatabaseContext } from "~/database/context";
-import * as schema from "~/database/schema";
+import { DatabaseContext } from "../app/database/context";
+import * as schema from "../app/database/schema";
 
 declare module "react-router" {
   interface AppLoadContext {
