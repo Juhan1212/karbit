@@ -4,6 +4,9 @@ import dotenv from "dotenv";
 // .env 파일 로드
 dotenv.config();
 
+const UPBIT_ACCESS_KEY = process.env.UPBIT_ACCESS_KEY || "";
+const UPBIT_SECRET_KEY = process.env.UPBIT_SECRET_KEY || "";
+
 /**
  * Upbit API E2E 테스트
  * 실제 Upbit API를 사용하여 getTicker 메소드를 테스트합니다.
@@ -13,6 +16,23 @@ dotenv.config();
  */
 
 describe("Upbit API E2E Tests", () => {
+  describe("getOrder 메서드 테스트", () => {
+    it("should get order book successfully", async () => {
+      console.log("📋 Upbit 주문서 조회 테스트 시작");
+      try {
+        const upbit = new UpbitAdapter(UPBIT_ACCESS_KEY, UPBIT_SECRET_KEY);
+        const result = await upbit.getOrder(
+          "1fc437c5-4fb6-42f6-843e-b1d3a23eaa19"
+        );
+        console.log("✅ 주문서 조회 성공!");
+        console.log("📊 주문서 정보:", JSON.stringify(result, null, 2));
+      } catch (error) {
+        console.error("❌ 주문서 조회 실패:", error);
+        throw error;
+      }
+    }, 10000); // 10초 타임아웃
+  });
+
   describe("getTicker 메서드 테스트", () => {
     it("should get USDT ticker successfully", async () => {
       console.log("💰 Upbit USDT 티커 조회 테스트 시작");

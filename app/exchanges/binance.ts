@@ -6,7 +6,7 @@ import {
   OrderResult,
   TickerResult,
 } from "./base";
-import type { CandleData } from "./upbit";
+import { UpbitAdapter, type CandleData } from "./upbit";
 
 export class BinanceAdapter extends ExchangeAdapter {
   private client: any;
@@ -24,6 +24,61 @@ export class BinanceAdapter extends ExchangeAdapter {
     const account = await this.client.futuresBalance();
     const usdt = account.find((a: any) => a.asset === "USDT");
     return usdt ? parseFloat(usdt.balance) : 0;
+  }
+
+  async getTotalBalance(): Promise<number> {
+    try {
+      // 모든 선물 잔액 조회
+      const futuresAccount = await this.client.futuresBalance();
+      let totalUsdtValue = 0;
+
+      for (const asset of futuresAccount) {
+        const balance = parseFloat(asset.balance || "0");
+        if (balance === 0) continue;
+
+        const assetSymbol = asset.asset;
+
+        if (assetSymbol === "USDT") {
+          // USDT는 그대로 추가
+          totalUsdtValue += balance;
+        } else {
+          // 다른 자산은 USDT로 변환
+          try {
+            const tickerSymbol = `${assetSymbol}USDT`;
+            const ticker = await this.client.futuresPrices(tickerSymbol);
+
+            if (ticker && ticker[tickerSymbol]) {
+              const currentPrice = parseFloat(ticker[tickerSymbol]);
+              const usdtValue = balance * currentPrice;
+              totalUsdtValue += usdtValue;
+            }
+          } catch (tickerError) {
+            console.warn(
+              `[BinanceAdapter] 티커 조회 실패 (${assetSymbol}):`,
+              tickerError
+            );
+            // 실패한 경우 0으로 처리
+          }
+        }
+      }
+
+      // USDT를 원화로 변환 (업비트 USDT-KRW 시세 사용)
+      try {
+        const usdtKrwRes = await UpbitAdapter.getTicker("USDT");
+        if (usdtKrwRes.price) {
+          return totalUsdtValue * usdtKrwRes.price;
+        }
+      } catch (usdtError) {
+        console.warn("[BinanceAdapter] USDT-KRW 시세 조회 실패:", usdtError);
+        // USDT-KRW 시세 조회 실패 시 대략적인 환율 사용 (1300원)
+        return totalUsdtValue * 1300;
+      }
+
+      return 0;
+    } catch (err: any) {
+      console.error("[BinanceAdapter] getTotalBalance error:", err);
+      return 0;
+    }
   }
 
   // Instance method for getting candle data

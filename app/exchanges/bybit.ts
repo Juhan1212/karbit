@@ -1,13 +1,14 @@
 // Bybit balance fetcher using Bybit Node.js SDK
 import { RestClientV5 } from "bybit-api";
 import axios from "axios";
-import type { CandleData } from "./upbit";
+import { UpbitAdapter, type CandleData } from "./upbit";
 import {
   ExchangeAdapter,
   OrderRequest,
   OrderResult,
   TickerResult,
 } from "./base";
+import { preciseMultiply } from "../utils/decimal";
 
 export class BybitAdapter extends ExchangeAdapter {
   private client: RestClientV5;
@@ -31,6 +32,39 @@ export class BybitAdapter extends ExchangeAdapter {
     });
     const usdt = res.result.list?.[0]?.totalAvailableBalance;
     return usdt ? parseFloat(usdt) : 0;
+  }
+
+  async getTotalBalance(): Promise<number> {
+    try {
+      // 모든 코인의 지갑 잔액 조회
+      const res = await this.client.getWalletBalance({
+        accountType: "UNIFIED",
+      });
+
+      if (!res.result.list || res.result.list.length === 0) {
+        return 0;
+      }
+
+      const walletInfo = res.result.list[0];
+      let totalUsdtValue = Number(walletInfo.totalEquity);
+
+      // USDT를 원화로 변환 (업비트 USDT-KRW 시세 사용)
+      try {
+        const usdtKrwRes = await UpbitAdapter.getTicker("USDT");
+        if (usdtKrwRes.price) {
+          return preciseMultiply(totalUsdtValue, usdtKrwRes.price, 2);
+        }
+      } catch (usdtError) {
+        console.warn("[BybitAdapter] USDT-KRW 시세 조회 실패:", usdtError);
+        // USDT-KRW 시세 조회 실패 시 대략적인 환율 사용 (1300원)
+        return totalUsdtValue * 1300;
+      }
+
+      return 0;
+    } catch (err: any) {
+      console.error("[BybitAdapter] getTotalBalance error:", err);
+      return 0;
+    }
   }
 
   // Instance method for getting candle data

@@ -85,6 +85,113 @@ export class BithumbAdapter extends ExchangeAdapter {
     }
   }
 
+  async getTotalBalance(): Promise<number> {
+    const BASE_URL = "https://api.bithumb.com";
+
+    // 계좌 조회는 쿼리 파라미터 없음
+    const token = this.createJwt();
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    };
+
+    try {
+      // 모든 계좌 정보 조회
+      const accountsRes = await axios.get(`${BASE_URL}/v1/accounts`, {
+        headers,
+      });
+      const accounts = accountsRes.data;
+
+      let totalKrwValue = 0;
+      const tickersToQuery: string[] = [];
+      const accountsToConvert: Array<{
+        currency: string;
+        totalBalance: number;
+      }> = [];
+
+      // 각 계좌별로 처리 - 1차: KRW 계산 및 티커 목록 수집
+      for (const account of accounts) {
+        const currency = account.currency;
+        const balance = parseFloat(account.balance);
+        const locked = parseFloat(account.locked || 0);
+        const totalBalance = balance + locked;
+
+        if (totalBalance === 0) continue;
+
+        if (currency === "KRW") {
+          // KRW는 그대로 추가
+          totalKrwValue += totalBalance;
+        } else {
+          // 다른 통화는 나중에 변환하기 위해 저장
+          const ticker = `${currency}-KRW`;
+          tickersToQuery.push(ticker);
+          accountsToConvert.push({ currency, totalBalance });
+        }
+      }
+
+      // 2차: 모든 티커를 한 번에 조회
+      if (tickersToQuery.length > 0) {
+        try {
+          const marketsParam = tickersToQuery.join(",");
+          const tickerRes = await axios.get(
+            `${BASE_URL}/v1/ticker?markets=${marketsParam}`
+          );
+
+          if (tickerRes.data && Array.isArray(tickerRes.data)) {
+            // 티커 데이터를 맵으로 변환 (빠른 조회를 위해)
+            const priceMap = new Map<string, number>();
+            for (const tickerData of tickerRes.data) {
+              priceMap.set(tickerData.market, tickerData.trade_price);
+            }
+
+            // 각 계좌의 KRW 가치 계산
+            for (const account of accountsToConvert) {
+              const ticker = `${account.currency}-KRW`;
+              const currentPrice = priceMap.get(ticker);
+
+              if (currentPrice) {
+                const krwValue = account.totalBalance * currentPrice;
+                totalKrwValue += krwValue;
+              } else {
+                console.warn(`[UpbitAdapter] 티커 가격 없음: ${ticker}`);
+              }
+            }
+          }
+        } catch (tickerError) {
+          console.error(`[UpbitAdapter] 일괄 티커 조회 실패:`, tickerError);
+          // 실패한 경우 개별적으로 조회하는 fallback 로직
+          for (const account of accountsToConvert) {
+            try {
+              const ticker = `${account.currency}-KRW`;
+              const tickerRes = await axios.get(
+                `${BASE_URL}/v1/ticker?markets=${ticker}`
+              );
+
+              if (tickerRes.data && tickerRes.data.length > 0) {
+                const currentPrice = tickerRes.data[0].trade_price;
+                const krwValue = account.totalBalance * currentPrice;
+                totalKrwValue += krwValue;
+              }
+            } catch (individualError) {
+              console.warn(
+                `[UpbitAdapter] 개별 티커 조회 실패 (${account.currency}):`,
+                individualError
+              );
+            }
+          }
+        }
+      }
+
+      return totalKrwValue;
+    } catch (err: any) {
+      console.error(
+        "[UpbitAdapter] getTotalBalance error:",
+        err.response?.data || err.message
+      );
+      return 0;
+    }
+  }
+
   // Instance method for getting candle data
   async getTickerCandles(
     ticker: string,

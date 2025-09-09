@@ -67,7 +67,13 @@ export async function getUserActivePositions(userId: number) {
     )
     SELECT p.coin_symbol, 
            p.kr_exchange, 
-           p.fr_exchange
+           p.fr_exchange,
+           sum(p.kr_volume) as total_kr_volume,
+           sum(p.fr_volume) as total_fr_volume,
+           sum(p.kr_funds) as total_kr_funds,
+           sum(p.fr_funds) as total_fr_funds,
+           COUNT(*) as position_count,
+           MAX(p.entry_time) as latest_entry_time
     FROM positions p
     LEFT JOIN latest_closed lc ON p.coin_symbol = lc.coin_symbol
     WHERE p.user_id = ${userId} 

@@ -48,6 +48,11 @@ export abstract class ExchangeAdapter {
   abstract getBalance(): Promise<number>;
 
   /**
+   * 거래소의 모든 자산을 원화 기준으로 조회합니다
+   */
+  abstract getTotalBalance(): Promise<number>;
+
+  /**
    * 주문을 실행합니다 (주문 UUID 반환)
    */
   abstract placeOrder(order: OrderRequest): Promise<string>;

@@ -6,7 +6,7 @@ import {
   OrderResult,
   TickerResult,
 } from "./base";
-import type { CandleData } from "./upbit";
+import { UpbitAdapter, type CandleData } from "./upbit";
 
 export class OkxAdapter extends ExchangeAdapter {
   private client: RestClient;
@@ -24,6 +24,66 @@ export class OkxAdapter extends ExchangeAdapter {
     const res = await this.client.getBalance();
     const usdt = res.find((a: any) => a.ccy === "USDT");
     return usdt ? parseFloat(usdt.notionalUsdForFutures) : 0;
+  }
+
+  async getTotalBalance(): Promise<number> {
+    try {
+      // 모든 자산 잔액 조회
+      const balances = await this.client.getBalance();
+      let totalUsdtValue = 0;
+
+      for (const balance of balances) {
+        const currency = (balance as any).ccy;
+        const totalBalance = parseFloat((balance as any).bal || "0");
+
+        if (totalBalance === 0) continue;
+
+        if (currency === "USDT") {
+          // USDT는 그대로 추가
+          totalUsdtValue += totalBalance;
+        } else {
+          // 다른 자산은 USDT로 변환
+          try {
+            const tickerSymbol = `${currency}-USDT`;
+            const tickerResponse = await this.client.getTicker({
+              instId: tickerSymbol,
+            });
+
+            if (Array.isArray(tickerResponse) && tickerResponse.length > 0) {
+              const ticker = tickerResponse[0] as any;
+              const currentPrice = parseFloat(ticker.last || "0");
+              if (currentPrice > 0) {
+                const usdtValue = totalBalance * currentPrice;
+                totalUsdtValue += usdtValue;
+              }
+            }
+          } catch (tickerError) {
+            console.warn(
+              `[OkxAdapter] 티커 조회 실패 (${currency}):`,
+              tickerError
+            );
+            // 실패한 경우 0으로 처리
+          }
+        }
+      }
+
+      // USDT를 원화로 변환 (업비트 USDT-KRW 시세 사용)
+      try {
+        const usdtKrwRes = await UpbitAdapter.getTicker("USDT");
+        if (usdtKrwRes.price) {
+          return totalUsdtValue * usdtKrwRes.price;
+        }
+      } catch (usdtError) {
+        console.warn("[OkxAdapter] USDT-KRW 시세 조회 실패:", usdtError);
+        // USDT-KRW 시세 조회 실패 시 대략적인 환율 사용 (1300원)
+        return totalUsdtValue * 1300;
+      }
+
+      return 0;
+    } catch (err: any) {
+      console.error("[OkxAdapter] getTotalBalance error:", err);
+      return 0;
+    }
   }
 
   // Instance method for getting candle data

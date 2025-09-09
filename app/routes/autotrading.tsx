@@ -238,6 +238,12 @@ export default function AutoTrading() {
       coinSymbol: position.coin_symbol,
       krExchange: position.kr_exchange,
       frExchange: position.fr_exchange,
+      totalKrVolume: position.total_kr_volume,
+      totalFrVolume: position.total_fr_volume,
+      totalKrFunds: position.total_kr_funds,
+      totalFrFunds: position.total_fr_funds,
+      positionCount: position.position_count,
+      latestEntryTime: position.latest_entry_time,
     }));
   }, [rawActivePositions]);
   const userPlan = useUserPlan();
@@ -534,6 +540,12 @@ export default function AutoTrading() {
               coinSymbol: position.coin_symbol,
               krExchange: position.kr_exchange,
               frExchange: position.fr_exchange,
+              totalKrVolume: position.total_kr_volume,
+              totalFrVolume: position.total_fr_volume,
+              totalKrFunds: position.total_kr_funds,
+              totalFrFunds: position.total_fr_funds,
+              positionCount: position.position_count,
+              latestEntryTime: position.latest_entry_time,
             })
           );
 
@@ -673,14 +685,6 @@ export default function AutoTrading() {
       (coin) => coin !== "" && coin !== "none"
     );
     return coins;
-  };
-
-  // 사용 가능한 코인 옵션 필터링 (이미 선택된 코인 제외)
-  const getAvailableCoinsForSelect = (currentValue: string) => {
-    const selectedCoins = [selectedCoin1, selectedCoin2, selectedCoin3].filter(
-      (coin) => coin !== "" && coin !== "none" && coin !== currentValue
-    );
-    return availableCoins.filter((coin) => !selectedCoins.includes(coin.id));
   };
 
   // 거래소 이름을 한국어로 변환하는 함수
@@ -1059,6 +1063,7 @@ export default function AutoTrading() {
       <ActivePositionManagement
         positions={polledActivePositions}
         isLoading={isLoadingPositions}
+        currentExchangeRate={currentExchangeRate || 1300}
         onPositionClose={(coinSymbol) => {
           // 포지션 종료 후 새로고침 (로딩 표시)
           pollActivePositions(true);

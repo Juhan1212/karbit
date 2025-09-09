@@ -144,34 +144,34 @@ export async function action({ request }: ActionFunctionArgs) {
       const frAdapter = createExchangeAdapter(frExchange as any, frCredentials);
 
       // 동시에 주문 실행 (집계된 수량 사용)
-      //   const [krSellOrderId, frBuyOrderId] = await Promise.all([
-      //     // 한국 거래소 매도 주문 (집계된 전체 수량)
-      //     krAdapter.placeOrder({
-      //       symbol: coinSymbol,
-      //       type: "market",
-      //       side: "sell",
-      //       amount: String(positionSettlement.totalKrVolume),
-      //     }),
-      //     // 해외 거래소 매수 주문 (포지션 청산) - USDT 기준 계산 필요
-      //     frAdapter.placeOrder({
-      //       symbol: coinSymbol,
-      //       type: "market",
-      //       side: "buy",
-      //       amount: "0", // USDT 기준 투자액
-      //     }),
-      //   ]);
+      const [krSellOrderId, frBuyOrderId] = await Promise.all([
+        // 한국 거래소 매도 주문 (집계된 전체 수량)
+        krAdapter.placeOrder({
+          symbol: coinSymbol,
+          type: "market",
+          side: "sell",
+          amount: String(positionSettlement.totalKrVolume),
+        }),
+        // 해외 거래소 매수 주문 (포지션 청산) - USDT 기준 계산 필요
+        frAdapter.placeOrder({
+          symbol: coinSymbol,
+          type: "market",
+          side: "buy",
+          amount: "0", // USDT 기준 투자액
+        }),
+      ]);
 
-      //   console.log(
-      //     `주문 완료 - 한국 거래소: ${krSellOrderId}, 해외 거래소: ${frBuyOrderId}`
-      //   );
+      console.log(
+        `주문 완료 - 한국 거래소: ${krSellOrderId}, 해외 거래소: ${frBuyOrderId}`
+      );
 
       // 4. 주문 완료 후 상세 정보 조회 (체결 정보 포함)
       // 시장가 주문의 경우 즉시 체결되지만, 안전을 위해 짧은 대기 후 조회
       await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms 대기
 
       // for mock test
-      const krSellOrderId = "1fc437c5-4fb6-42f6-843e-b1d3a23eaa19";
-      const frBuyOrderId = "2560f9ff-2065-4c36-9ae4-ff3018e1e310";
+      // const krSellOrderId = "1fc437c5-4fb6-42f6-843e-b1d3a23eaa19";
+      // const frBuyOrderId = "2560f9ff-2065-4c36-9ae4-ff3018e1e310";
 
       // 동시에 주문 상세 정보 조회
       const [krSellOrderResult, frBuyOrderResult] = await Promise.allSettled([

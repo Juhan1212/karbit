@@ -59,4 +59,15 @@ describe("Bybit API E2E Tests", () => {
       expect(orderId.length).toBeGreaterThan(0);
     }, 60000); // 60초 타임아웃
   });
+
+  describe("잔고 조회 테스트", () => {
+    it("should fetch total balance in KRW successfully", async () => {
+      console.log("🚀 Bybit getTotalBalance E2E 테스트 시작");
+      const totalBalance = await bybitAdapter.getTotalBalance();
+      console.log("✅ 잔고 조회 성공!");
+      console.log("📦 총 잔고 (KRW):", totalBalance);
+      expect(typeof totalBalance).toBe("number");
+      expect(totalBalance).toBeGreaterThan(0);
+    }, 60000); // 60초 타임아웃
+  });
 });

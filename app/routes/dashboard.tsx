@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import type { Route } from "./+types/dashboard";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData } from "react-router";
 import { useUser, useIsLoading } from "~/stores";
+import { validateSession } from "~/database/session";
+import { getUserActivePositions } from "~/database/position";
+import { getAuthTokenFromRequest } from "~/utils/cookies";
 import {
   Card,
   CardContent,
@@ -41,18 +44,79 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ context }: Route.LoaderArgs) {
-  return {
-    message: "Dashboard data loaded successfully",
-  };
+export async function loader({ request }: Route.LoaderArgs) {
+  const token = getAuthTokenFromRequest(request);
+
+  if (!token) {
+    return {
+      activePositions: [],
+      activePositionCount: 0,
+      message: "Authentication required",
+    };
+  }
+
+  const user = await validateSession(token);
+
+  if (!user) {
+    return {
+      activePositions: [],
+      activePositionCount: 0,
+      message: "Authentication required",
+    };
+  }
+
+  try {
+    // 사용자의 활성 포지션 조회
+    const activePositions = await getUserActivePositions(user.id);
+    const activePositionCount = activePositions.length;
+
+    return {
+      activePositions,
+      activePositionCount,
+      message: "Dashboard data loaded successfully",
+    };
+  } catch (error) {
+    console.error("Dashboard loader error:", error);
+    return {
+      activePositions: [],
+      activePositionCount: 0,
+      message: "Error loading dashboard data",
+    };
+  }
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = useUser();
   const isLoading = useIsLoading();
+  const {
+    activePositions: rawActivePositions,
+    activePositionCount: initialActivePositionCount,
+  } = useLoaderData<typeof loader>();
+
   const [selectedCoin, setSelectedCoin] = useState("XRP");
   const [seedAmount, setSeedAmount] = useState([10000000]); // 1천만원 기본값
+
+  // rawActivePositions를 올바른 형태로 변환
+  const activePositions = useMemo(() => {
+    if (!rawActivePositions || !Array.isArray(rawActivePositions)) {
+      return [];
+    }
+    return rawActivePositions.map((position: any) => ({
+      coinSymbol: position.coin_symbol,
+      krExchange: position.kr_exchange,
+      frExchange: position.fr_exchange,
+      leverage: position.leverage,
+      entryRate: position.avg_entry_rate,
+      amount: position.total_amount,
+      currentProfit: position.current_profit || 0,
+      profitRate: position.profit_rate || 0,
+    }));
+  }, [rawActivePositions]);
+
+  const [activePositionCount, setActivePositionCount] = useState(
+    initialActivePositionCount
+  );
 
   // 인증 체크 및 리다이렉트
   useEffect(() => {
@@ -264,11 +328,13 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">활성 거래</CardTitle>
+            <CardTitle className="text-sm">활성 포지션</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl lg:text-2xl">0</div>
-            <div className="text-xs text-muted-foreground">비활성화</div>
+            <div className="text-xl lg:text-2xl">{activePositionCount}</div>
+            <div className="text-xs text-muted-foreground">
+              {activePositionCount > 0 ? "진행중" : "비활성화"}
+            </div>
           </CardContent>
         </Card>
 
@@ -322,6 +388,87 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Active Positions */}
+      {activePositions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>활성 포지션</CardTitle>
+            <CardDescription>현재 진행 중인 차익거래 포지션</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="w-full overflow-x-auto">
+              <Table className="min-w-[600px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>코인</TableHead>
+                    <TableHead>한국 거래소</TableHead>
+                    <TableHead>해외 거래소</TableHead>
+                    <TableHead>레버리지</TableHead>
+                    <TableHead>진입가격</TableHead>
+                    <TableHead>수량</TableHead>
+                    <TableHead>현재손익</TableHead>
+                    <TableHead>수익률</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activePositions.map((position, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">
+                        {position.coinSymbol}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{position.krExchange}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{position.frExchange}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{position.leverage}x</Badge>
+                      </TableCell>
+                      <TableCell>
+                        ₩{Number(position.entryRate).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        {Number(position.amount).toLocaleString()}{" "}
+                        {position.coinSymbol}
+                      </TableCell>
+                      <TableCell>
+                        <div
+                          className={`flex items-center gap-1 ${
+                            position.currentProfit >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {position.currentProfit >= 0 ? (
+                            <TrendingUp className="h-3 w-3" />
+                          ) : (
+                            <TrendingDown className="h-3 w-3" />
+                          )}
+                          ₩{Math.abs(position.currentProfit).toLocaleString()}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div
+                          className={`font-medium ${
+                            position.profitRate >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {position.profitRate > 0 ? "+" : ""}
+                          {position.profitRate.toFixed(2)}%
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Exchange Rate Table */}
       <Card>
