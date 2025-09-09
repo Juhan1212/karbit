@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import type { LoaderFunctionArgs } from "react-router";
 import {
@@ -313,6 +313,39 @@ export default function AutoTrading() {
   const [currentRestrictedCoins, setCurrentRestrictedCoins] =
     useState(restrictedCoins);
 
+  // 폴링 함수에서 최신 상태를 참조하기 위한 ref
+  const polledActivePositionsRef = useRef(polledActivePositions);
+  const activePositionCountRef = useRef(activePositionCount);
+  const tradingHistoryRef = useRef(tradingHistory);
+  const tradingStatsRef = useRef(tradingStats);
+  const paginationRef = useRef(pagination);
+  const currentPageRef = useRef(currentPage);
+
+  // ref를 최신 상태로 업데이트
+  useEffect(() => {
+    polledActivePositionsRef.current = polledActivePositions;
+  }, [polledActivePositions]);
+
+  useEffect(() => {
+    activePositionCountRef.current = activePositionCount;
+  }, [activePositionCount]);
+
+  useEffect(() => {
+    tradingHistoryRef.current = tradingHistory;
+  }, [tradingHistory]);
+
+  useEffect(() => {
+    tradingStatsRef.current = tradingStats;
+  }, [tradingStats]);
+
+  useEffect(() => {
+    paginationRef.current = pagination;
+  }, [pagination]);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
   // 선택된 티커에 해당하는 포지션 찾기
   const selectedPosition = useMemo(() => {
     return (
@@ -551,9 +584,9 @@ export default function AutoTrading() {
 
           // 데이터가 실제로 변경되었는지 확인
           const hasChanged =
-            JSON.stringify(polledActivePositions) !==
+            JSON.stringify(polledActivePositionsRef.current) !==
               JSON.stringify(transformedPositions) ||
-            activePositionCount !== data.activePositionCount;
+            activePositionCountRef.current !== data.activePositionCount;
 
           // 변경된 경우에만 상태 업데이트
           if (hasChanged) {
@@ -569,7 +602,7 @@ export default function AutoTrading() {
         }
       }
     },
-    [polledActivePositions, activePositionCount]
+    [] // dependency array에서 상태값들 제거
   );
 
   // 거래 데이터 폴링 (30초 간격)
@@ -579,18 +612,19 @@ export default function AutoTrading() {
         setIsLoadingTradingData(true);
       }
       try {
-        const targetPage = page || currentPage;
+        const targetPage = page || currentPageRef.current;
         const response = await fetch(`/api/trading-data?page=${targetPage}`);
         if (response.ok) {
           const data = await response.json();
 
           // 데이터가 실제로 변경되었는지 확인
           const hasChanged =
-            JSON.stringify(tradingHistory) !==
+            JSON.stringify(tradingHistoryRef.current) !==
               JSON.stringify(data.tradingHistory) ||
-            JSON.stringify(tradingStats) !==
+            JSON.stringify(tradingStatsRef.current) !==
               JSON.stringify(data.tradingStats) ||
-            JSON.stringify(pagination) !== JSON.stringify(data.pagination);
+            JSON.stringify(paginationRef.current) !==
+              JSON.stringify(data.pagination);
 
           // 변경된 경우에만 상태 업데이트
           if (hasChanged) {
@@ -607,7 +641,7 @@ export default function AutoTrading() {
         }
       }
     },
-    [currentPage, tradingHistory, tradingStats, pagination]
+    [] // dependency array에서 상태값들 제거
   );
 
   // 폴링 설정
@@ -656,12 +690,12 @@ export default function AutoTrading() {
       clearInterval(tradingDataInterval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [pollActivePositions, pollTradingData]);
+  }, []); // dependency array를 빈 배열로 변경
 
   // 페이지 변경 시 거래 데이터 즉시 업데이트 (로딩 표시)
   useEffect(() => {
     pollTradingData(currentPage, true);
-  }, [currentPage, pollTradingData]);
+  }, [currentPage]); // pollTradingData 제거
 
   const adjustRate = (
     type: "entry" | "exit",
