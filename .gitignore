@@ -100,3 +100,5 @@ postgres-data
 drizzle/meta
 *.db
 *.sqlite
+
+.pytest_cache/
