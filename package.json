@@ -8,7 +8,7 @@
     "db:migrate": "dotenv -- drizzle-kit migrate",
     "db:push": "dotenv -- drizzle-kit push",
     "db:studio": "dotenv -- drizzle-kit studio",
-    "db:seed": "dotenv -- sh -c 'psql \"$DATABASE_URL\" -f drizzle/seed-exchanges.sql'",
+    "db:seed": "dotenv -- sh -c 'psql \"$DATABASE_URL\" -f \"$1\"' --",
     "dev": "dotenv -- node server.js --trace-deprecation",
     "start": "node server.js",
     "typecheck": "react-router typegen && tsc -b"
