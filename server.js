@@ -1,9 +1,11 @@
-import "dotenv/config";
 import compression from "compression";
 import express from "express";
 import morgan from "morgan";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 // Short-circuit the type-checking of the built output.
 const __filename = fileURLToPath(import.meta.url);
