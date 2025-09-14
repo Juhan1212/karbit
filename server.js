@@ -43,5 +43,6 @@ if (DEVELOPMENT) {
 }
 
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
+  console.log(`Server is running on ${baseUrl}`);
 });
