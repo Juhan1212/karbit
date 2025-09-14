@@ -1,9 +1,14 @@
+import "dotenv/config";
 import compression from "compression";
 import express from "express";
 import morgan from "morgan";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 // Short-circuit the type-checking of the built output.
-const BUILD_PATH = "./build/server/index.js";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const BUILD_PATH = join(__dirname, "build/server/index.js");
 const DEVELOPMENT = process.env.NODE_ENV === "development";
 const PORT = Number.parseInt(process.env.PORT || "3000");
 
