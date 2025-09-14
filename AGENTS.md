@@ -1,8 +1,15 @@
+# Agent 지침
+
+- 질문은 반드시 한글로 대답할 것.
+- 특정 라이브러리에 대해서는 반드시 context7 mcp를 이용해서 최신화된 라이브러리를 확인하여 대답할 것.
+- 아키텍쳐 설계에 대한 답을 해줄 때에는 mermaid chart도 제공해줄 것.
+- db에 관한 질문을 할 때에는 dbcode를 통해 로컬db와 커넥션을 하고, 실제 데이터베이스, 테이블, 데이터를 확인하여 최적의 답을 낼 것.
+
 # Karbit - 암호화폐 자동 트레이딩 플랫폼
 
 ## 프로젝트 개요
 
-Karbit은 React Router v7 기반으로 개발된 현대적인 암호화폐 자동 트레이딩 플랫폼입니다. 다중 거래소를 지원하며, 사용자들이 다양한 트레이딩 전략을 설정하고 자동으로 실행할 수 있는 서비스를 제공합니다.
+Karbit은 React Router v7 기반으로 개발된 현대적인 암호화폐 자동 트레이딩 플랫폼입니다. 다중 거래소를 지원하며, 한국 거래소와 해외 거래소 간의 프리미엄, 즉 김치 프리미엄을 이용한 자동매매 전략을 구사할 수 있도록 합니다.
 
 ## 🚀 주요 기능
 
@@ -24,6 +31,7 @@ Karbit은 React Router v7 기반으로 개발된 현대적인 암호화폐 자�
 - **Zustand**: 경량 상태 관리
 - **Recharts**: 데이터 시각화
 - **Lucide React**: 아이콘 라이브러리
+- **LightWeight Chart**: 차트 라이브러리
 
 ### Backend
 
@@ -80,7 +88,8 @@ karbit/
 │   └── upbit.ts                # 업비트 API
 ├── drizzle/                    # 데이터베이스 마이그레이션
 ├── server/                     # 서버 설정
-└── utils/                      # 유틸리티 함수
+├── utils/                      # 유틸리티 함수
+└── test/                       # 테스트
 ```
 
 ## 🗄️ 데이터베이스 스키마
@@ -124,13 +133,6 @@ karbit/
 - **해외**: Binance, Bybit, OKX
 - **국내**: Bithumb, Upbit
 
-### 트레이딩 전략
-
-- DCA (Dollar Cost Averaging)
-- 기술적 분석 기반 자동매매
-- 리스크 관리 기능
-- 포트폴리오 분산 투자
-
 ### 모니터링
 
 - 실시간 포지션 현황
@@ -155,13 +157,19 @@ cp .env.example .env
 # DATABASE_URL, JWT_SECRET 등 필요한 환경 변수 설정
 ```
 
-3. **데이터베이스 마이그레이션**
+3. **데이터베이스 실행**
+
+```bash
+npm run db:start
+```
+
+4. **데이터베이스 마이그레이션**
 
 ```bash
 npm run db:migrate
 ```
 
-4. **개발 서버 실행**
+5. **개발 서버 실행**
 
 ```bash
 npm run dev
@@ -225,15 +233,6 @@ docker run -p 3000:3000 karbit
 - 캐싱 전략
 
 ## 🌐 배포
-
-### 지원 플랫폼
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
 
 ### 프로덕션 체크리스트
 

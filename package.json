@@ -4,6 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
+    "db:start": "docker-compose up -d",
+    "db:stop": "docker-compose down",
+    "db:stop:hard": "docker-compose down && rm -r postgres-data",
     "db:generate": "dotenv -- drizzle-kit generate",
     "db:migrate": "dotenv -- drizzle-kit migrate",
     "db:push": "dotenv -- drizzle-kit push",
