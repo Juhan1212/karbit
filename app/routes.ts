@@ -22,6 +22,7 @@ export default [
     "routes/api.inquiry-restricted-coin.tsx"
   ),
   route("/api/close-position", "routes/api.close-position.tsx"),
+  route("/api/premium/stream", "routes/api.premium.stream.ts"),
   route("/terms-service", "routes/terms-service.tsx"),
   route("/privacy-policy", "routes/privacy-policy.tsx"),
   layout("routes/_layout.tsx", [

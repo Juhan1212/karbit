@@ -60,7 +60,7 @@ export function AppSidebar({
   const menuItems = [
     { id: "dashboard", label: "대시보드", icon: Home },
     { id: "exchanges", label: "거래소 연동", icon: Link2 },
-    { id: "autotrading", label: "자동매매", icon: TrendingUp },
+    { id: "autotrading", label: "자동매매 설정", icon: TrendingUp },
     { id: "plans", label: "플랜 관리", icon: Crown },
   ];
 

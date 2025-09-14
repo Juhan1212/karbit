@@ -157,3 +157,7 @@ export const CRYPTO_DECIMALS = {
   PROFIT: 2, // 수익 (precision: 18, scale: 2)
   USDT_PRICE: 2, // USDT 가격 (precision: 10, scale: 2)
 } as const;
+
+export const formatKRW = (amount: number) => {
+  return (amount / 10000).toFixed(0) + "만원";
+};

@@ -93,6 +93,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../components/tooltip";
+import { formatKRW } from "~/utils/decimal";
 
 export function meta() {
   return [
@@ -814,10 +815,6 @@ export default function AutoTrading() {
   const allConditionsSatisfied = useMemo(() => {
     return conditions.every((condition) => condition.satisfied);
   }, [conditions]);
-
-  const formatKRW = (amount: number) => {
-    return (amount / 10000).toFixed(0) + "만원";
-  };
 
   // 자동매매 관련 액션 핸들러 (시작, 중지, 설정변경 통합)
   const handleAutoTradingAction = (actionType: "start" | "stop" | "update") => {
