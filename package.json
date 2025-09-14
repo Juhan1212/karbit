@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "react-router build",
+    "build": "dotenv -- react-router build",
     "db:start": "docker-compose up -d",
     "db:stop": "docker-compose down",
     "db:stop:hard": "docker-compose down && rm -r postgres-data",
