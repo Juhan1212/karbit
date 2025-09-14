@@ -1,6 +1,11 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { validateSession } from "~/database/session";
-import { getUserActivePositions } from "~/database/position";
+import {
+  getUserActivePositions,
+  getUserTradingStats,
+  getUserTradingHistoryPaginated,
+  getUserDailyProfit,
+} from "~/database/position";
 import { getAuthTokenFromRequest } from "~/utils/cookies";
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -15,12 +20,26 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get("page") || "1", 10);
+    const limit = parseInt(url.searchParams.get("limit") || "20", 10);
+
     const activePositions = await getUserActivePositions(user.id);
     const activePositionCount = activePositions.length;
+    const tradingStats = await getUserTradingStats(user.id);
+    const tradingHistory = await getUserTradingHistoryPaginated(
+      user.id,
+      page,
+      limit
+    );
+    const dailyProfit = await getUserDailyProfit(user.id);
 
     return Response.json({
       activePositions,
       activePositionCount,
+      tradingStats,
+      tradingHistory,
+      dailyProfit,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

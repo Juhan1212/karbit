@@ -1,9 +1,22 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import type { Route } from "./+types/dashboard";
 import { useNavigate, useLoaderData } from "react-router";
 import { useUser, useIsLoading } from "~/stores";
 import { validateSession } from "~/database/session";
-import { getUserActivePositions } from "~/database/position";
+import {
+  getUserActivePositions,
+  getUserTradingStats,
+  getUserTradingHistoryPaginated,
+  getUserTradingHistoryCount,
+  getUserDailyProfit,
+} from "~/database/position";
+import { getUserExchangeBalances } from "~/database/exchange";
 import { getAuthTokenFromRequest } from "~/utils/cookies";
 import {
   Card,
@@ -12,32 +25,15 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/card";
-import { Badge } from "../components/badge";
 import { Button } from "../components/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../components/table";
-import { Slider } from "../components/slider";
-import { ScrollArea } from "../components/scroll-area";
-// import { LightweightChart } from "./LightweightChart";
-import { RefreshCw, TrendingUp, TrendingDown, Lock, Crown } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
 import { PremiumTicker } from "../components/premium-ticker";
-import { getUserActiveStrategy } from "~/database/strategy";
 import { getUserCurrentPlan } from "~/database/plan";
 import { ActivePositionManagement } from "~/components/active-position-management";
+import { TradingStats } from "~/components/trading-stats";
+import { TradingHistoryTable } from "~/components/trading-history-table";
 import CompChart from "~/components/chart/CompChart";
+import "~/assets/styles/chart/index.scss";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -71,17 +67,52 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   try {
+    // URL에서 페이지네이션 파라미터 추출
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get("page") || "1", 10);
+    const limit = parseInt(url.searchParams.get("limit") || "20", 10);
+
     // 사용자의 활성 포지션 조회
     const activePositions = await getUserActivePositions(user.id);
     const activePositionCount = activePositions.length;
 
     // 사용자의 플랜 조회
     const activePlan = await getUserCurrentPlan(user.id);
-    console.log("Active Plan:", activePlan);
+
+    // 사용자의 트레이딩 통계 조회
+    const tradingStats = await getUserTradingStats(user.id);
+
+    // 사용자의 거래 내역 조회 (페이지네이션)
+    const tradingHistory = await getUserTradingHistoryPaginated(
+      user.id,
+      page,
+      limit
+    );
+
+    // 총 거래 내역 수 조회
+    const totalCount = await getUserTradingHistoryCount(user.id);
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // 일일 수익 조회
+    const dailyProfit = await getUserDailyProfit(user.id);
+
+    // 사용자의 거래소별 잔액 조회
+    const exchangeBalances = await getUserExchangeBalances(user.id);
+
     return {
       activePositions,
       activePositionCount,
       activePlan,
+      tradingStats,
+      tradingHistory,
+      dailyProfit,
+      exchangeBalances,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalCount,
+        limit,
+      },
       message: "Dashboard data loaded successfully",
     };
   } catch (error) {
@@ -89,6 +120,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       activePositions: [],
       activePositionCount: 0,
+      tradingStats: {
+        totalTrades: 0,
+        openTrades: 0,
+        closedTrades: 0,
+        totalProfit: 0,
+      },
+      tradingHistory: [],
+      dailyProfit: 0,
+      pagination: {
+        currentPage: 1,
+        totalPages: 1,
+        totalCount: 0,
+        limit: 20,
+      },
       message: "Error loading dashboard data",
     };
   }
@@ -102,10 +147,78 @@ export default function Dashboard() {
     activePositions: rawActivePositions,
     activePositionCount: initialActivePositionCount,
     activePlan,
+    tradingStats: initialTradingStats,
+    tradingHistory: initialTradingHistory,
+    pagination: initialPagination,
+    dailyProfit: initialDailyProfit,
+    exchangeBalances,
   } = useLoaderData<typeof loader>();
 
-  const [selectedCoin, setSelectedCoin] = useState("XRP");
-  const [seedAmount, setSeedAmount] = useState([10000000]); // 1천만원 기본값
+  // ActivePositionManagement를 위한 상태 변수들
+  const [polledActivePositions, setPolledActivePositions] = useState<any[]>([]);
+  const [isLoadingPositions, setIsLoadingPositions] = useState(false);
+  const [currentExchangeRate, setCurrentExchangeRate] = useState<number | null>(
+    null
+  );
+
+  // TradingStats를 위한 상태 변수들
+  const [tradingStats, setTradingStats] = useState(initialTradingStats);
+  const [isLoadingTradingData, setIsLoadingTradingData] = useState(false);
+
+  // TradingHistory를 위한 상태 변수들
+  const [tradingHistory, setTradingHistory] = useState(initialTradingHistory);
+  const [pagination, setPagination] = useState(initialPagination);
+
+  // 일일 수익 상태
+  const [dailyProfit, setDailyProfit] = useState(initialDailyProfit || 0);
+
+  // 평균 환율 상태 (PremiumTicker에서 받아온 값)
+  const [averageRate, setAverageRate] = useState<number | null>(null);
+
+  // 선택된 티커 아이템 상태 (PremiumTicker에서 받아온 값)
+  const [selectedTickerItem, setSelectedTickerItem] = useState<any>(null);
+
+  // 평균 환율과 테더 가격 비교 계산
+  const tetherComparisonData = useMemo(() => {
+    if (!currentExchangeRate || !averageRate) {
+      return {
+        percentage: 0,
+        isHigher: true,
+        description: "실시간 전체 티커 평균환율보다",
+      };
+    }
+
+    const diff = currentExchangeRate - averageRate;
+    const percentage = (diff / averageRate) * 100;
+
+    return {
+      percentage: Math.abs(percentage),
+      isHigher: diff > 0,
+      description: "실시간 전체 티커 평균환율보다",
+    };
+  }, [currentExchangeRate, averageRate]);
+
+  // 금액 포맷팅 함수 (간단한 버전)
+  const formatCurrency = (amount: number, currency: string) => {
+    if (currency === "KRW") {
+      if (amount >= 100000000) {
+        return `₩${(amount / 100000000).toFixed(1)}억`;
+      } else if (amount >= 10000) {
+        return `₩${(amount / 10000).toFixed(0)}만`;
+      } else {
+        return `₩${Math.round(amount).toLocaleString()}`;
+      }
+    } else {
+      return `$${Math.round(amount).toLocaleString()}`;
+    }
+  };
+
+  // 폴링 함수에서 최신 상태를 참조하기 위한 ref
+  const polledActivePositionsRef = useRef(polledActivePositions);
+  const activePositionCountRef = useRef(initialActivePositionCount);
+  const tradingStatsRef = useRef(tradingStats);
+  const tradingHistoryRef = useRef(tradingHistory);
+  const paginationRef = useRef(pagination);
 
   // rawActivePositions를 올바른 형태로 변환
   const activePositions = useMemo(() => {
@@ -127,6 +240,194 @@ export default function Dashboard() {
   const [activePositionCount, setActivePositionCount] = useState(
     initialActivePositionCount
   );
+
+  // Exchange Rate Chart를 위한 상태 변수들
+  const [selectedTicker, setSelectedTicker] = useState(
+    activePositions[0]?.coinSymbol || "BTC"
+  );
+
+  // 선택된 티커에 해당하는 포지션 찾기
+  const selectedPosition = useMemo(() => {
+    return (
+      polledActivePositions.find((p) => p.coinSymbol === selectedTicker) ||
+      polledActivePositions[0]
+    );
+  }, [polledActivePositions, selectedTicker]);
+
+  // polledActivePositions 변경시 selectedTicker 유효성 검사
+  useEffect(() => {
+    if (polledActivePositions.length > 0) {
+      const isValidTicker = polledActivePositions.some(
+        (p) => p.coinSymbol === selectedTicker
+      );
+      if (!isValidTicker) {
+        setSelectedTicker(polledActivePositions[0].coinSymbol);
+      }
+    }
+  }, [polledActivePositions, selectedTicker]);
+
+  // 활성 포지션 및 트레이딩 통계 폴링 함수
+  const pollActivePositions = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      setIsLoadingPositions(true);
+      setIsLoadingTradingData(true);
+    }
+    try {
+      const response = await fetch("/api/active-positions");
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // 활성 포지션 데이터 처리
+        const transformedPositions = data.activePositions.map(
+          (position: any) => ({
+            coinSymbol: position.coin_symbol,
+            krExchange: position.kr_exchange,
+            frExchange: position.fr_exchange,
+            totalKrVolume: position.total_kr_volume,
+            totalFrVolume: position.total_fr_volume,
+            totalKrFunds: position.total_kr_funds,
+            totalFrFunds: position.total_fr_funds,
+            positionCount: position.position_count,
+            latestEntryTime: position.latest_entry_time,
+          })
+        );
+
+        // 데이터가 실제로 변경되었는지 확인
+        const positionsChanged =
+          JSON.stringify(polledActivePositionsRef.current) !==
+            JSON.stringify(transformedPositions) ||
+          activePositionCountRef.current !== data.activePositionCount;
+
+        const statsChanged =
+          JSON.stringify(tradingStatsRef.current) !==
+          JSON.stringify(data.tradingStats);
+
+        const historyChanged =
+          JSON.stringify(tradingHistoryRef.current) !==
+          JSON.stringify(data.tradingHistory);
+
+        const dailyProfitChanged = data.dailyProfit !== dailyProfit;
+
+        // 변경된 경우에만 상태 업데이트
+        if (positionsChanged) {
+          setPolledActivePositions(transformedPositions);
+          setActivePositionCount(data.activePositionCount);
+          polledActivePositionsRef.current = transformedPositions;
+          activePositionCountRef.current = data.activePositionCount;
+        }
+
+        if (statsChanged) {
+          setTradingStats(data.tradingStats);
+          tradingStatsRef.current = data.tradingStats;
+        }
+
+        if (historyChanged) {
+          setTradingHistory(data.tradingHistory);
+          tradingHistoryRef.current = data.tradingHistory;
+        }
+
+        if (dailyProfitChanged) {
+          setDailyProfit(data.dailyProfit);
+        }
+      }
+    } catch (error) {
+      console.error("Polling error:", error);
+    } finally {
+      if (showLoading) {
+        setIsLoadingPositions(false);
+        setIsLoadingTradingData(false);
+      }
+    }
+  }, []);
+
+  // 환율 가져오기 로직
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+    let retryCount = 0;
+    const maxRetries = 5;
+
+    const fetchUpbitRate = async () => {
+      const response = await fetch(
+        "https://api.upbit.com/v1/ticker?markets=KRW-USDT"
+      );
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      return data[0]?.trade_price || 1355.5;
+    };
+
+    // 1. 먼저 초기 환율을 REST API로 조회
+    const initializeExchangeRate = async () => {
+      try {
+        const initialRate = await fetchUpbitRate();
+        setCurrentExchangeRate(initialRate);
+      } catch (error) {
+        console.error("초기 환율 조회 오류:", error);
+      }
+
+      // 2. REST API 폴링으로 실시간 업데이트
+      const updateExchangeRate = async () => {
+        try {
+          const rate = await fetchUpbitRate();
+          setCurrentExchangeRate(rate);
+
+          // 성공 시 재시도 카운터 초기화
+          retryCount = 0;
+        } catch (error) {
+          console.error("환율 업데이트 오류:", error);
+          retryCount++;
+
+          if (retryCount >= maxRetries) {
+            // 최대 재시도 횟수 초과 시 폴링 중단
+            if (intervalId) {
+              clearInterval(intervalId);
+              intervalId = null;
+            }
+            console.error("업비트 api 서버와 연결이 원활하지 않습니다");
+          }
+        }
+      };
+
+      // 폴링 시작 (1초 간격)
+      intervalId = setInterval(updateExchangeRate, 1000);
+    };
+
+    initializeExchangeRate();
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, []);
+
+  // 활성 포지션 폴링 시작 (5초 간격)
+  useEffect(() => {
+    // 초기 데이터 로드
+    pollActivePositions(true);
+
+    // 5초마다 폴링
+    const interval = setInterval(() => pollActivePositions(false), 5000);
+
+    return () => clearInterval(interval);
+  }, [pollActivePositions]);
+
+  // tradingStats ref를 최신 상태로 유지
+  useEffect(() => {
+    tradingStatsRef.current = tradingStats;
+  }, [tradingStats]);
+
+  // tradingHistory ref를 최신 상태로 유지
+  useEffect(() => {
+    tradingHistoryRef.current = tradingHistory;
+  }, [tradingHistory]);
+
+  // pagination ref를 최신 상태로 유지
+  useEffect(() => {
+    paginationRef.current = pagination;
+  }, [pagination]);
 
   // 인증 체크 및 리다이렉트
   useEffect(() => {
@@ -151,158 +452,10 @@ export default function Dashboard() {
   if (!user) {
     return null; // useEffect에서 리다이렉트 처리
   }
+
   const currentPlan = activePlan; // 현재 플랜 상태
 
-  const formatKRW = (amount: number) => {
-    return (amount / 10000).toFixed(0) + "만원";
-  };
-
-  // Mock data for chart - 더 많은 데이터 포인트와 실시간 느낌
-  const getChartData = (coin: string) => {
-    const baseData: { [key: string]: { time: string; value: number }[] } = {
-      XRP: [
-        { time: "2024-01-08 00:00", value: 1.02 },
-        { time: "2024-01-08 04:00", value: 1.018 },
-        { time: "2024-01-08 08:00", value: 1.025 },
-        { time: "2024-01-08 12:00", value: 1.022 },
-        { time: "2024-01-08 16:00", value: 1.028 },
-        { time: "2024-01-08 20:00", value: 1.024 },
-        { time: "2024-01-09 00:00", value: 1.031 },
-        { time: "2024-01-09 04:00", value: 1.029 },
-        { time: "2024-01-09 08:00", value: 1.035 },
-        { time: "2024-01-09 12:00", value: 1.032 },
-        { time: "2024-01-09 16:00", value: 1.038 },
-        { time: "2024-01-09 20:00", value: 1.036 },
-      ],
-      BTC: [
-        { time: "2024-01-08 00:00", value: 1.015 },
-        { time: "2024-01-08 04:00", value: 1.012 },
-        { time: "2024-01-08 08:00", value: 1.018 },
-        { time: "2024-01-08 12:00", value: 1.021 },
-        { time: "2024-01-08 16:00", value: 1.019 },
-        { time: "2024-01-08 20:00", value: 1.022 },
-        { time: "2024-01-09 00:00", value: 1.025 },
-        { time: "2024-01-09 04:00", value: 1.023 },
-        { time: "2024-01-09 08:00", value: 1.027 },
-        { time: "2024-01-09 12:00", value: 1.029 },
-        { time: "2024-01-09 16:00", value: 1.031 },
-        { time: "2024-01-09 20:00", value: 1.033 },
-      ],
-      ETH: [
-        { time: "2024-01-08 00:00", value: 1.021 },
-        { time: "2024-01-08 04:00", value: 1.019 },
-        { time: "2024-01-08 08:00", value: 1.024 },
-        { time: "2024-01-08 12:00", value: 1.022 },
-        { time: "2024-01-08 16:00", value: 1.026 },
-        { time: "2024-01-08 20:00", value: 1.023 },
-        { time: "2024-01-09 00:00", value: 1.028 },
-        { time: "2024-01-09 04:00", value: 1.025 },
-        { time: "2024-01-09 08:00", value: 1.03 },
-        { time: "2024-01-09 12:00", value: 1.027 },
-        { time: "2024-01-09 16:00", value: 1.032 },
-        { time: "2024-01-09 20:00", value: 1.029 },
-      ],
-      ADA: [
-        { time: "2024-01-08 00:00", value: 1.008 },
-        { time: "2024-01-08 04:00", value: 1.011 },
-        { time: "2024-01-08 08:00", value: 1.009 },
-        { time: "2024-01-08 12:00", value: 1.013 },
-        { time: "2024-01-08 16:00", value: 1.015 },
-        { time: "2024-01-08 20:00", value: 1.012 },
-        { time: "2024-01-09 00:00", value: 1.016 },
-        { time: "2024-01-09 04:00", value: 1.014 },
-        { time: "2024-01-09 08:00", value: 1.018 },
-        { time: "2024-01-09 12:00", value: 1.02 },
-        { time: "2024-01-09 16:00", value: 1.017 },
-        { time: "2024-01-09 20:00", value: 1.021 },
-      ],
-    };
-    return baseData[coin] || baseData["XRP"];
-  };
-
-  const chartData = getChartData(selectedCoin);
-
-  // Mock data for exchange rates
-  const exchangeData = [
-    {
-      coin: "XRP",
-      krPrice: "₩1,380",
-      globalPrice: "$0.98",
-      premium: "+2.4%",
-      volume: "₩24.5억",
-      trend: "up",
-    },
-    {
-      coin: "BTC",
-      krPrice: "₩134,500,000",
-      globalPrice: "$95,200",
-      premium: "+1.8%",
-      volume: "₩891억",
-      trend: "up",
-    },
-    {
-      coin: "ETH",
-      krPrice: "₩4,520,000",
-      globalPrice: "$3,180",
-      premium: "+2.1%",
-      volume: "₩245억",
-      trend: "down",
-    },
-    {
-      coin: "ADA",
-      krPrice: "₩1,250",
-      globalPrice: "$0.89",
-      premium: "+1.5%",
-      volume: "₩12.3억",
-      trend: "up",
-    },
-  ];
-
-  // Mock data for orderbook-based rates (시드금액에 따라 변경)
-  const getOrderbookData = (seedAmount: number) => {
-    const seedMultiplier = seedAmount / 10000000; // 1천만원 기준
-    return [
-      {
-        coin: "XRP",
-        krPrice: "₩1,380",
-        globalPrice: "$0.98",
-        premium: `+${(2.4 + seedMultiplier * 0.1).toFixed(1)}%`,
-        estimatedProfit: `₩${Math.round(seedAmount * 0.024 * (1 + seedMultiplier * 0.1)).toLocaleString()}`,
-        maxTradeSize: `₩${Math.round(seedAmount * 0.3).toLocaleString()}`,
-        trend: "up",
-      },
-      {
-        coin: "BTC",
-        krPrice: "₩134,500,000",
-        globalPrice: "$95,200",
-        premium: `+${(1.8 + seedMultiplier * 0.08).toFixed(1)}%`,
-        estimatedProfit: `₩${Math.round(seedAmount * 0.018 * (1 + seedMultiplier * 0.08)).toLocaleString()}`,
-        maxTradeSize: `₩${Math.round(seedAmount * 0.4).toLocaleString()}`,
-        trend: "up",
-      },
-      {
-        coin: "ETH",
-        krPrice: "₩4,520,000",
-        globalPrice: "$3,180",
-        premium: `+${(2.1 + seedMultiplier * 0.09).toFixed(1)}%`,
-        estimatedProfit: `₩${Math.round(seedAmount * 0.021 * (1 + seedMultiplier * 0.09)).toLocaleString()}`,
-        maxTradeSize: `₩${Math.round(seedAmount * 0.35).toLocaleString()}`,
-        trend: "down",
-      },
-      {
-        coin: "ADA",
-        krPrice: "₩1,250",
-        globalPrice: "$0.89",
-        premium: `+${(1.5 + seedMultiplier * 0.07).toFixed(1)}%`,
-        estimatedProfit: `₩${Math.round(seedAmount * 0.015 * (1 + seedMultiplier * 0.07)).toLocaleString()}`,
-        maxTradeSize: `₩${Math.round(seedAmount * 0.25).toLocaleString()}`,
-        trend: "up",
-      },
-    ];
-  };
-
-  const orderbookData = getOrderbookData(seedAmount[0]);
-  const isLocked = currentPlan?.plan.name === "Free";
+  const isLocked = currentPlan?.plan.name === "Free"; // Free 플랜이면 잠금표시
 
   return (
     <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
@@ -325,13 +478,23 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">평균 프리미엄</CardTitle>
+            <CardTitle className="text-sm">테더 가격</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl lg:text-2xl">+2.1%</div>
-            <div className="flex items-center gap-1 text-xs text-green-600">
-              <TrendingUp className="w-3 h-3" />
-              +0.3%
+            <div className="text-xl lg:text-2xl">₩{currentExchangeRate}</div>
+            <div
+              className={`flex items-center gap-1 text-xs ${tetherComparisonData.isHigher ? "text-green-600" : "text-red-600"}`}
+            >
+              {tetherComparisonData.isHigher ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : (
+                <TrendingDown className="w-3 h-3" />
+              )}
+              {tetherComparisonData.isHigher ? "+" : "-"}
+              {tetherComparisonData.percentage.toFixed(1)}%
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {tetherComparisonData.description}
             </div>
           </CardContent>
         </Card>
@@ -353,105 +516,193 @@ export default function Dashboard() {
             <CardTitle className="text-sm">일일 수익</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl lg:text-2xl">₩0</div>
-            <div className="text-xs text-muted-foreground">연동 필요</div>
+            <div className="text-xl lg:text-2xl">
+              {dailyProfit >= 0 ? "+" : ""}₩{dailyProfit.toLocaleString()}
+            </div>
+            <div
+              className={`text-xs ${dailyProfit >= 0 ? "text-green-600" : "text-red-600"}`}
+            >
+              오늘 종료된 거래
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">총 자산</CardTitle>
+            <CardTitle className="text-sm">현재 원화&USDT 자산</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-xl lg:text-2xl">-</div>
-            <div className="text-xs text-muted-foreground">연동 후 확인</div>
+            {exchangeBalances && exchangeBalances.length > 0 ? (
+              <div className="space-y-2">
+                {exchangeBalances.map((exchange: any) => (
+                  <div
+                    key={exchange.exchangeName}
+                    className="flex items-center justify-between text-xs"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>{exchange.icon}</span>
+                      <span className="font-medium">
+                        {exchange.exchangeName}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium">
+                        {formatCurrency(
+                          exchange.availableBalance,
+                          exchange.currency
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div>
+                <div className="text-xl lg:text-2xl">-</div>
+                <div className="text-xs text-muted-foreground">
+                  연동 후 확인
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
       {/* Live Kimchi Premium Ticker */}
-      <PremiumTicker isLocked={isLocked} />
+      <PremiumTicker
+        isLocked={isLocked}
+        onAverageRateChange={(avgRate, seed) => {
+          setAverageRate(avgRate);
+        }}
+        onItemSelected={(item) => {
+          setSelectedTickerItem(item);
+        }}
+      />
 
-      {/* Active Positions */}
-      {activePositions.length > 0 && (
-        <Card>
+      {/* Selected Ticker Chart - Only show when a ticker is selected */}
+      {selectedTickerItem && (
+        <Card className="chart-card-container">
           <CardHeader>
-            <CardTitle>활성 포지션</CardTitle>
-            <CardDescription>현재 진행 중인 차익거래 포지션</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              실시간 {selectedTickerItem.symbol} 환율 차트
+            </CardTitle>
+            <CardDescription>
+              선택한 티커의 실시간 환율을 확인하세요
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ScrollArea className="w-full overflow-x-auto">
-              <Table className="min-w-[600px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>코인</TableHead>
-                    <TableHead>한국 거래소</TableHead>
-                    <TableHead>해외 거래소</TableHead>
-                    <TableHead>레버리지</TableHead>
-                    <TableHead>진입가격</TableHead>
-                    <TableHead>수량</TableHead>
-                    <TableHead>현재손익</TableHead>
-                    <TableHead>수익률</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {activePositions.map((position, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">
-                        {position.coinSymbol}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{position.krExchange}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{position.frExchange}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{position.leverage}x</Badge>
-                      </TableCell>
-                      <TableCell>
-                        ₩{Number(position.entryRate).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        {Number(position.amount).toLocaleString()}{" "}
-                        {position.coinSymbol}
-                      </TableCell>
-                      <TableCell>
-                        <div
-                          className={`flex items-center gap-1 ${
-                            position.currentProfit >= 0
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          {position.currentProfit >= 0 ? (
-                            <TrendingUp className="h-3 w-3" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3" />
-                          )}
-                          ₩{Math.abs(position.currentProfit).toLocaleString()}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div
-                          className={`font-medium ${
-                            position.profitRate >= 0
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          {position.profitRate > 0 ? "+" : ""}
-                          {position.profitRate.toFixed(2)}%
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+          <CardContent className="chart-card-content">
+            <CompChart
+              koreanEx={selectedTickerItem?.korean_ex || "UPBIT"}
+              foreignEx={selectedTickerItem?.foreign_ex || "BYBIT"}
+              symbol={selectedTickerItem.symbol}
+              interval="1m"
+              activePositions={[
+                {
+                  coinSymbol: selectedTickerItem.symbol,
+                  krExchange: selectedTickerItem.korean_ex,
+                  frExchange: selectedTickerItem.foreign_ex,
+                },
+              ]}
+            />
           </CardContent>
         </Card>
       )}
+
+      {/* Active Position Management - Full width section */}
+      <ActivePositionManagement
+        positions={polledActivePositions}
+        isLoading={isLoadingPositions}
+        currentExchangeRate={currentExchangeRate || 1300}
+        onPositionClose={(coinSymbol) => {
+          // 포지션 종료 후 새로고침 (로딩 표시)
+          pollActivePositions(true);
+        }}
+      />
+
+      {/* Exchange Rate Chart - Only show when there are active positions */}
+      {activePositionCount > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              실시간 활성 포지션 환율 차트
+            </CardTitle>
+            <CardDescription>
+              현재 포지션 추이를 실시간으로 확인하세요
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CompChart
+              koreanEx={selectedPosition?.krExchange || "UPBIT"}
+              foreignEx={selectedPosition?.frExchange || "BYBIT"}
+              symbol={selectedTicker}
+              interval="1m"
+              activePositions={polledActivePositions}
+              onSymbolChange={setSelectedTicker}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No Active Positions Message */}
+      {activePositionCount === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              실시간 활성 포지션 환율 차트
+            </CardTitle>
+            <CardDescription>
+              현재 포지션 추이를 실시간으로 확인하세요
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-16 h-16 mb-4 rounded-full bg-muted flex items-center justify-center">
+                <TrendingUp className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">
+                현재 활성화된 포지션이 없습니다
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                자동매매를 시작하면 활성 포지션의 차트를 실시간으로 확인할 수
+                있습니다.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                자동매매 페이지에서 설정을 완료한 후 자동매매를 활성화해보세요.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Trading Statistics */}
+      <TradingStats
+        stats={
+          tradingStats || {
+            totalTrades: 0,
+            openTrades: 0,
+            closedTrades: 0,
+            totalProfit: 0,
+          }
+        }
+        isLoading={isLoadingTradingData}
+      />
+
+      {/* Trading History */}
+      <TradingHistoryTable
+        tradingHistory={tradingHistory || []}
+        pagination={
+          pagination || {
+            currentPage: 1,
+            totalPages: 1,
+            totalCount: 0,
+            limit: 20,
+          }
+        }
+        isLoading={isLoadingTradingData}
+      />
     </div>
   );
 }

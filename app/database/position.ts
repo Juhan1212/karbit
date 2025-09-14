@@ -1,4 +1,4 @@
-import { eq, and, desc, count, sql } from "drizzle-orm";
+import { eq, and, desc, count, sql, gte, lt } from "drizzle-orm";
 import { database } from "./context";
 import { positions } from "./schema";
 import {
@@ -420,6 +420,36 @@ export async function getUserTradingStats(userId: number) {
     closedTrades,
     totalProfit,
   };
+}
+
+/**
+ * 사용자의 일일 수익을 계산합니다 (오늘 종료된 거래의 수익 합계)
+ */
+export async function getUserDailyProfit(userId: number): Promise<number> {
+  const db = database();
+
+  // 오늘 날짜 구하기 (한국 시간 기준)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // 오늘 00:00:00
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1); // 내일 00:00:00
+
+  const result = await db
+    .select({
+      dailyProfit: sql<string>`COALESCE(SUM(${positions.profit}), 0)`,
+    })
+    .from(positions)
+    .where(
+      and(
+        eq(positions.userId, userId),
+        eq(positions.status, "CLOSED"),
+        gte(positions.exitTime, today),
+        lt(positions.exitTime, tomorrow)
+      )
+    );
+
+  const dailyProfit = parseFloat(result[0]?.dailyProfit || "0");
+  return dailyProfit;
 }
 
 /**

@@ -9,6 +9,7 @@ import type {
   PositionData,
   TickerData,
 } from "../types/marketInfo";
+import { UppercaseExchangeType, ExchangeInfoMap } from "../types/exchange";
 
 interface WebSocketState {
   exchange: string;
@@ -47,6 +48,7 @@ const socketMap: Record<string, string> = {
   BYBIT: "wss://stream.bybit.com/v5/public/linear",
   OKX: "wss://ws.okx.com:8443/ws/v5/public",
   UPBIT: "wss://api.upbit.com/websocket/v1",
+  BITHUMB: "wss://ws-api.bithumb.com/websocket/v1",
 };
 
 // 스토어 생성 함수
@@ -95,10 +97,12 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
       const { exchange, socket, pendingOperations } = get();
       if (!exchange) return;
 
+      // 소문자 exchange를 대문자로 변환
+      const uppercaseExchange = exchange.toUpperCase() as UppercaseExchangeType;
+
       if (socket && socket.readyState === WebSocket.OPEN) {
-        const exchangeAdapter = WebSocketAdapterFactory.getAdapter(
-          exchange as ExchangeType
-        );
+        const exchangeAdapter =
+          WebSocketAdapterFactory.getAdapter(uppercaseExchange);
         const transformedMessage = exchangeAdapter.getRequestMessage(
           type,
           params
@@ -120,10 +124,12 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
       } = get();
       if (!exchange || socket) return;
 
-      const ws = new WebSocket(socketMap[exchange]);
-      const exchangeAdapter = WebSocketAdapterFactory.getAdapter(
-        exchange as ExchangeType
-      );
+      // 소문자 exchange를 대문자로 변환
+      const uppercaseExchange = exchange.toUpperCase() as UppercaseExchangeType;
+
+      const ws = new WebSocket(socketMap[uppercaseExchange]);
+      const exchangeAdapter =
+        WebSocketAdapterFactory.getAdapter(uppercaseExchange);
 
       ws.onopen = () => {
         set({ isConnected: true });
@@ -143,8 +149,10 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
 
         // 연결되면 kline 구독
         get().subscribeToCandleBars();
-        // 연결되면 ticker 구독
-        if (exchange !== "UPBIT") {
+        // 연결되면 ticker 구독 (해외 거래소만)
+        const uppercaseExchange =
+          exchange.toUpperCase() as UppercaseExchangeType;
+        if (ExchangeInfoMap[uppercaseExchange]?.isForeign) {
           get().subscribeToTicker(get().symbol);
         }
       };
@@ -195,7 +203,11 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
 
     subscribeToTicker: (symbol) => {
       if (!symbol) return;
-      const { sendMessage } = get();
+      const { exchange, sendMessage } = get();
+
+      // 해외 거래소인지 확인
+      const uppercaseExchange = exchange.toUpperCase() as UppercaseExchangeType;
+      if (!ExchangeInfoMap[uppercaseExchange]?.isForeign) return;
 
       sendMessage("ticker", {
         symbol,
@@ -205,6 +217,12 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
     // 구독 해제 지원하는 거래소만 가능
     unsubscribeFromTicker: (symbol) => {
       if (!symbol) return;
+      const { exchange } = get();
+
+      // 해외 거래소인지 확인
+      const uppercaseExchange = exchange.toUpperCase() as UppercaseExchangeType;
+      if (!ExchangeInfoMap[uppercaseExchange]?.isForeign) return;
+
       return;
       // const { sendMessage } = get();
 

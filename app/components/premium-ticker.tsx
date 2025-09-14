@@ -41,14 +41,22 @@ export function PremiumTicker({
   endpoint = "/api/premium/stream",
   title = "호가창 반영 실시간 환율",
   isLocked = true,
+  onAverageRateChange,
+  onItemSelected,
 }: {
   endpoint?: string;
   title?: string;
   isLocked?: boolean;
+  onAverageRateChange?: (
+    averageRate: number | null,
+    selectedSeed: number | null
+  ) => void;
+  onItemSelected?: (item: TickPayload | null) => void;
 }) {
   const [items, setItems] = useState<TickPayload[]>([]);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [selectedSeed, setSelectedSeed] = useState<number>(1000000);
+  const [selectedItem, setSelectedItem] = useState<TickPayload | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -129,7 +137,11 @@ export function PremiumTicker({
   const tableRows = useMemo(() => {
     if (!selectedSeed) return null;
     return sortedItems.map((it) => (
-      <TableRow key={it.symbol + "|" + it.korean_ex + "|" + it.foreign_ex}>
+      <TableRow
+        key={it.symbol + "|" + it.korean_ex + "|" + it.foreign_ex}
+        className="cursor-pointer hover:bg-muted/50 transition-colors"
+        onClick={() => setSelectedItem(it)}
+      >
         <TableCell className="px-2 font-medium min-w-[60px] max-w-[80px] w-[70px]">
           {it.symbol}
         </TableCell>
@@ -145,6 +157,34 @@ export function PremiumTicker({
       </TableRow>
     ));
   }, [sortedItems]);
+
+  // 평균 환율 계산
+  const averageRate = useMemo(() => {
+    if (!sortedItems.length || !selectedSeed) return null;
+
+    const validRates = sortedItems
+      .filter((item) => item._rate !== null && item._rate !== undefined)
+      .map((item) => item._rate as number);
+
+    if (validRates.length === 0) return null;
+
+    const sum = validRates.reduce((acc, rate) => acc + rate, 0);
+    return sum / validRates.length;
+  }, [sortedItems, selectedSeed]);
+
+  // 평균 환율 변경 시 콜백 호출
+  useEffect(() => {
+    if (onAverageRateChange) {
+      onAverageRateChange(averageRate, selectedSeed);
+    }
+  }, [averageRate, selectedSeed, onAverageRateChange]);
+
+  // 선택된 아이템 변경 시 콜백 호출
+  useEffect(() => {
+    if (onItemSelected && selectedItem) {
+      onItemSelected(selectedItem);
+    }
+  }, [selectedItem, onItemSelected]);
 
   return (
     <Card>
@@ -341,6 +381,8 @@ export function PremiumTicker({
                   {sortedItems.map((it) => (
                     <TableRow
                       key={it.symbol + "|" + it.korean_ex + "|" + it.foreign_ex}
+                      className="cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => setSelectedItem(it)}
                     >
                       <TableCell className="px-2 font-medium min-w-[40px] max-w-[80px] w-[48px] text-xs sm:min-w-[60px] sm:w-[70px]">
                         {it.symbol}

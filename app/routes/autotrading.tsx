@@ -1090,74 +1090,6 @@ export default function AutoTrading() {
         />
       </div>
 
-      {/* Active Position Management - Full width section */}
-      <ActivePositionManagement
-        positions={polledActivePositions}
-        isLoading={isLoadingPositions}
-        currentExchangeRate={currentExchangeRate || 1300}
-        onPositionClose={(coinSymbol) => {
-          // 포지션 종료 후 새로고침 (로딩 표시)
-          pollActivePositions(true);
-        }}
-      />
-
-      {/* Exchange Rate Chart - Only show when there are active positions */}
-      {activePositionCount > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              실시간 활성 포지션 환율 차트
-            </CardTitle>
-            <CardDescription>
-              현재 포지션 추이를 실시간으로 확인하세요
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CompChart
-              koreanEx={selectedPosition?.krExchange || "UPBIT"}
-              foreignEx={selectedPosition?.frExchange || "BYBIT"}
-              symbol={selectedTicker}
-              interval="1m"
-              activePositions={polledActivePositions}
-              onSymbolChange={setSelectedTicker}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* No Active Positions Message */}
-      {activePositionCount === 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              실시간 활성 포지션 환율 차트
-            </CardTitle>
-            <CardDescription>
-              현재 포지션 추이를 실시간으로 확인하세요
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-16 h-16 mb-4 rounded-full bg-muted flex items-center justify-center">
-                <TrendingUp className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-medium mb-2">
-                현재 활성화된 포지션이 없습니다
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                자동매매를 시작하면 활성 포지션의 차트를 실시간으로 확인할 수
-                있습니다.
-              </p>
-              <p className="text-sm text-muted-foreground">
-                아래 설정을 완료한 후 자동매매를 활성화해보세요.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Strategy Configuration */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Basic Settings */}
@@ -2120,50 +2052,6 @@ export default function AutoTrading() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Trading Statistics */}
-      <TradingStats stats={tradingStats} isLoading={isLoadingTradingData} />
-
-      {/* Trading History */}
-      <TradingHistoryTable
-        tradingHistory={tradingHistory}
-        pagination={pagination}
-        isLoading={isLoadingTradingData}
-      />
-
-      {/* Control Panel */}
-      <Card>
-        <CardHeader>
-          <CardTitle>제어판</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Button
-              disabled={!isEnabled || activePositionCount === 0}
-              variant="destructive"
-              className="flex-1 gap-2"
-              title={
-                activePositionCount === 0
-                  ? "종료할 포지션이 없습니다"
-                  : `모든 활성 포지션 ${activePositionCount}개 강제 종료`
-              }
-            >
-              <StopCircle className="w-4 h-4" />
-              전체 포지션 강제 종료 ({activePositionCount})
-            </Button>
-            <Button
-              disabled={userPlan?.name !== "Premium"}
-              variant="outline"
-              className="flex-1 gap-2"
-            >
-              <BarChart3 className="w-4 h-4" />
-              {userPlan?.name === "Premium"
-                ? "백테스트 실행"
-                : "백테스트 (Premium)"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

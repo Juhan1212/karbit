@@ -8,9 +8,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
+      let isClosed = false; // Stream 상태 추적
+
       const send = (data: any) => {
-        const payload = typeof data === "string" ? data : JSON.stringify(data);
-        controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+        if (isClosed) return; // 이미 닫혔으면 무시
+        try {
+          const payload =
+            typeof data === "string" ? data : JSON.stringify(data);
+          controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+        } catch (error) {
+          // Controller가 닫힌 상태에서 enqueue 시도 시 오류 무시
+          if (
+            error instanceof TypeError &&
+            error.message.includes("Controller is already closed")
+          ) {
+            isClosed = true;
+            return;
+          }
+          console.error("Stream send error:", error);
+        }
       };
 
       // Initial ping to open stream
@@ -28,6 +44,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         });
 
       sub.on("message", (_ch: string, message: string) => {
+        if (isClosed) return; // Stream이 닫혔으면 처리하지 않음
+
         // 메시지 구조 변환: results 배열 → PremiumTicker가 기대하는 배열로 변환
         const parsed = safeParse(message);
         let payload: any = parsed;
@@ -57,8 +75,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
       });
 
       const close = () => {
-        sub.disconnect();
-        controller.close();
+        if (isClosed) return; // 이미 닫혔으면 중복 실행 방지
+        isClosed = true;
+
+        try {
+          sub.disconnect();
+          controller.close();
+        } catch (error) {
+          console.error("Stream close error:", error);
+        }
       };
 
       // Close on client abort
@@ -66,7 +91,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
       // Heartbeat every 20s
       const interval = setInterval(() => {
-        controller.enqueue(encoder.encode(`:hb ${Date.now()}\n\n`));
+        if (isClosed) {
+          clearInterval(interval);
+          return;
+        }
+        try {
+          controller.enqueue(encoder.encode(`:hb ${Date.now()}\n\n`));
+        } catch (error) {
+          if (
+            error instanceof TypeError &&
+            error.message.includes("Controller is already closed")
+          ) {
+            isClosed = true;
+            clearInterval(interval);
+            return;
+          }
+          console.error("Heartbeat error:", error);
+        }
       }, 20000);
 
       // Cleanup

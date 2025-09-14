@@ -30,15 +30,14 @@ export class BithumbWebSocketAdapter implements WebSocketAdapter {
     }
   }
 
-  getResponseMessage(
-    message: {
-      type: string;
-      code: string;
-      [key: string]: string;
-    }[]
-  ) {
+  getResponseMessage(message: any) {
     try {
-      if (message[0].type.startsWith("candle")) {
+      // 배열인지 확인하고, 첫 번째 요소가 존재하는지 확인
+      if (
+        Array.isArray(message) &&
+        message[0] &&
+        message[0].type?.startsWith("candle")
+      ) {
         return {
           channel: "kline",
           symbol: message[0].code.replace("KRW-", ""),
@@ -51,7 +50,7 @@ export class BithumbWebSocketAdapter implements WebSocketAdapter {
         } as CandleBarData;
       }
     } catch (error) {
-      console.log(message);
+      console.log("Bithumb adapter error - received message:", message);
       console.error("WebSocket message parsing error:", error);
     }
     return null;

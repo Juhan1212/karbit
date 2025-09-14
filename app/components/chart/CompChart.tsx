@@ -68,6 +68,8 @@ export const CompChart = ({
         position: "relative",
         backgroundColor: "rgb(19, 18, 21)",
         minHeight: "500px",
+        width: "100%",
+        height: "auto",
       }}
     >
       {isReconnecting && (
