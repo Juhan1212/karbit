@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 # Karbit 배포 및 데몬 등록 스크립트
 # pm2가 없으면 설치
 if ! command -v pm2 &> /dev/null; then
