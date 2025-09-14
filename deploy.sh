@@ -17,14 +17,14 @@ npm run build
 
 # pm2에 데몬 등록 및 시작
 echo "pm2로 서버 데몬 등록 및 시작"
-sudo pm2 delete karbit-server 2>/dev/null
-sudo pm2 start server.js --name karbit-server
+pm2 delete karbit-server 2>/dev/null
+pm2 start server.js --name karbit-server
 
 # pm2를 systemd 서비스로 등록
 echo "pm2를 systemd 서비스로 등록합니다."
-sudo pm2 startup systemd -u $(whoami) --hp $HOME
-sudo pm2 save
+pm2 startup systemd -u $(whoami) --hp $HOME
+pm2 save
 
 # pm2 상태 확인
 echo "pm2 프로세스 상태:"
-sudo pm2 status
+pm2 status
