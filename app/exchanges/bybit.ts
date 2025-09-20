@@ -1,12 +1,14 @@
 // Bybit balance fetcher using Bybit Node.js SDK
 import { RestClientV5 } from "bybit-api";
 import axios from "axios";
-import { UpbitAdapter, type CandleData } from "./upbit";
+import { createExchangeAdapter } from "./index";
+import type { CandleData } from "./upbit";
 import {
   ExchangeAdapter,
   OrderRequest,
   OrderResult,
   TickerResult,
+  BalanceResult,
 } from "./base";
 import { preciseMultiply } from "../utils/decimal";
 
@@ -25,13 +27,33 @@ export class BybitAdapter extends ExchangeAdapter {
     }
   }
 
-  async getBalance(): Promise<number> {
-    const res = await this.client.getWalletBalance({
-      accountType: "UNIFIED",
-      coin: "USDT",
-    });
-    const usdt = res.result.list?.[0]?.totalAvailableBalance;
-    return usdt ? parseFloat(usdt) : 0;
+  async getBalance(): Promise<BalanceResult> {
+    try {
+      const res = await this.client.getWalletBalance({
+        accountType: "UNIFIED",
+        coin: "USDT",
+      });
+      const usdt = res.result.list?.[0]?.totalAvailableBalance;
+      return {
+        balance: usdt ? parseFloat(usdt) : 0,
+      };
+    } catch (err: any) {
+      console.error("[BybitAdapter] getBalance error:", err);
+
+      // 401 에러 처리
+      if (err.response?.status === 401) {
+        return {
+          balance: 0,
+          error:
+            "거래소 API Key 등록 페이지에서 IP 등록이 정상적으로 되었는지 확인해주세요",
+        };
+      }
+
+      return {
+        balance: 0,
+        error: "잔액 조회 중 오류가 발생했습니다",
+      };
+    }
   }
 
   async getTotalBalance(): Promise<number> {
@@ -50,7 +72,8 @@ export class BybitAdapter extends ExchangeAdapter {
 
       // USDT를 원화로 변환 (업비트 USDT-KRW 시세 사용)
       try {
-        const usdtKrwRes = await UpbitAdapter.getTicker("USDT");
+        const upbitAdapter = createExchangeAdapter("업비트");
+        const usdtKrwRes = await upbitAdapter.getTicker("USDT");
         if (usdtKrwRes.price) {
           return preciseMultiply(totalUsdtValue, usdtKrwRes.price, 2);
         }
@@ -153,6 +176,32 @@ export class BybitAdapter extends ExchangeAdapter {
       return candles.reverse();
     } catch (error) {
       console.error("Error fetching Bybit candle data:", error);
+      throw error;
+    }
+  }
+
+  async getTicker(symbol: string): Promise<TickerResult> {
+    try {
+      // Bybit 공개 REST API 사용 (선물)
+      const res = await fetch(
+        `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol.toUpperCase()}USDT`
+      );
+      const data = await res.json();
+      if (
+        data &&
+        data.result &&
+        data.result.list &&
+        data.result.list.length > 0
+      ) {
+        return {
+          symbol: symbol.toUpperCase(),
+          price: parseFloat(data.result.list[0].lastPrice),
+          timestamp: Date.now(),
+        };
+      }
+      throw new Error(`No ticker data found for ${symbol}`);
+    } catch (error) {
+      console.error(`Error fetching ${symbol} ticker from Bybit:`, error);
       throw error;
     }
   }

@@ -4,6 +4,7 @@ import morgan from "morgan";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import dotenv from "dotenv";
+import cors from "cors";
 
 dotenv.config();
 
@@ -19,25 +20,51 @@ const app = express();
 app.use(compression());
 app.disable("x-powered-by");
 
+// CORS 미들웨어
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // origin이 없으면(서버-서버, Postman 등) 허용
+      if (!origin) return callback(null, true);
+      const allowed = [
+        "http://3.39.252.79",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+      ];
+      if (allowed.includes(origin)) {
+        return callback(null, true);
+      }
+      callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
+
 if (DEVELOPMENT) {
   console.log("Starting development server");
-  const viteDevServer = await import("vite").then((vite) =>
-    vite.createServer({
-      server: { middlewareMode: true },
-    })
-  );
-  app.use(viteDevServer.middlewares);
-  app.use(async (req, res, next) => {
-    try {
-      const source = await viteDevServer.ssrLoadModule("./server/app.ts");
-      return await source.app(req, res, next);
-    } catch (error) {
-      if (typeof error === "object" && error instanceof Error) {
-        viteDevServer.ssrFixStacktrace(error);
+  try {
+    const viteDevServer = await import("vite").then((vite) =>
+      vite.createServer({
+        server: { middlewareMode: true },
+      })
+    );
+    app.use(viteDevServer.middlewares);
+    app.use(async (req, res, next) => {
+      try {
+        const source = await viteDevServer.ssrLoadModule("./server/app.ts");
+        return await source.app(req, res, next);
+      } catch (error) {
+        console.error("SSR Load Error:", error);
+        if (typeof error === "object" && error instanceof Error) {
+          viteDevServer.ssrFixStacktrace(error);
+        }
+        next(error);
       }
-      next(error);
-    }
-  });
+    });
+  } catch (error) {
+    console.error("Failed to create Vite dev server:", error);
+    process.exit(1);
+  }
 } else {
   console.log("Starting production server");
   app.use(
@@ -46,10 +73,30 @@ if (DEVELOPMENT) {
   );
   app.use(morgan("tiny"));
   app.use(express.static("build/client", { maxAge: "1h" }));
-  app.use(await import(BUILD_PATH).then((mod) => mod.app));
+
+  try {
+    const mod = await import(`file://${BUILD_PATH}`);
+    app.use(mod.app);
+    console.log("React Router app loaded successfully");
+  } catch (error) {
+    console.error("Import failed:", error);
+    process.exit(1);
+  }
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
   console.log(`Server is running on ${baseUrl}`);
+});
+
+server.on("error", (error) => {
+  console.error("Server error:", error);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
 });

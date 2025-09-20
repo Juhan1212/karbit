@@ -1,11 +1,5 @@
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-  useRef,
-} from "react";
-import type { Route } from "./+types/dashboard";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import type { LoaderFunctionArgs } from "react-router";
 import { useNavigate, useLoaderData } from "react-router";
 import { useUser, useIsLoading } from "~/stores";
 import { validateSession } from "~/database/session";
@@ -17,6 +11,7 @@ import {
   getUserDailyProfit,
 } from "~/database/position";
 import { getUserExchangeBalances } from "~/database/exchange";
+import { toast } from "sonner";
 import { getAuthTokenFromRequest } from "~/utils/cookies";
 import {
   Card,
@@ -35,7 +30,7 @@ import { TradingHistoryTable } from "~/components/trading-history-table";
 import CompChart from "~/components/chart/CompChart";
 import "~/assets/styles/chart/index.scss";
 
-export function meta({}: Route.MetaArgs) {
+export function meta() {
   return [
     { title: "Dashboard - Karbit" },
     {
@@ -45,7 +40,7 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const token = getAuthTokenFromRequest(request);
 
   if (!token) {
@@ -96,8 +91,35 @@ export async function loader({ request }: Route.LoaderArgs) {
     // 일일 수익 조회
     const dailyProfit = await getUserDailyProfit(user.id);
 
-    // 사용자의 거래소별 잔액 조회
-    const exchangeBalances = await getUserExchangeBalances(user.id);
+    // 사용자의 거래소별 잔액 조회 (에러 발생 시에도 navigation은 되도록)
+    let exchangeBalances: Awaited<ReturnType<typeof getUserExchangeBalances>> =
+      [];
+    try {
+      exchangeBalances = await getUserExchangeBalances(user.id);
+    } catch (err: any) {
+      console.error(err);
+      if (err?.status === 401) {
+        // toast는 클라이언트에서만 동작하므로, 아래에서 클라이언트에서 처리하도록 안내 메시지 전달
+        return {
+          activePositions,
+          activePositionCount,
+          activePlan,
+          tradingStats,
+          tradingHistory,
+          dailyProfit,
+          exchangeBalances,
+          pagination: {
+            currentPage: page,
+            totalPages,
+            totalCount,
+            limit,
+          },
+          message: "EXCHANGE_BALANCE_401",
+        };
+      }
+      // 기타 에러는 무시하고 빈 배열 반환
+      exchangeBalances = [];
+    }
 
     return {
       activePositions,
@@ -143,6 +165,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const user = useUser();
   const isLoading = useIsLoading();
+  const loaderData = useLoaderData<typeof loader>();
+
   const {
     activePositions: rawActivePositions,
     activePositionCount: initialActivePositionCount,
@@ -152,7 +176,16 @@ export default function Dashboard() {
     pagination: initialPagination,
     dailyProfit: initialDailyProfit,
     exchangeBalances,
-  } = useLoaderData<typeof loader>();
+    message,
+  } = loaderData;
+  // 거래소 잔액 401 에러 안내 (클라이언트에서 toast)
+  useEffect(() => {
+    if (message === "EXCHANGE_BALANCE_401") {
+      toast.error(
+        "연결된 거래소 웹사이트에 접속하여 api 관리페이지에서 허용 ip주소를 확인해주세요"
+      );
+    }
+  }, [message]);
 
   // ActivePositionManagement를 위한 상태 변수들
   const [polledActivePositions, setPolledActivePositions] = useState<any[]>([]);
@@ -348,18 +381,19 @@ export default function Dashboard() {
     const maxRetries = 5;
 
     const fetchUpbitRate = async () => {
+      const upbitUrl = "https://api.upbit.com/v1/ticker?markets=KRW-USDT";
       const response = await fetch(
-        "https://api.upbit.com/v1/ticker?markets=KRW-USDT"
+        `/api/proxy?url=${encodeURIComponent(upbitUrl)}`
       );
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       const data = await response.json();
-      return data[0]?.trade_price || 1355.5;
+      return data[0]?.trade_price || "-";
     };
 
-    // 1. 먼저 초기 환율을 REST API로 조회
     const initializeExchangeRate = async () => {
+      // 1. 먼저 초기 환율을 REST API로 조회
       try {
         const initialRate = await fetchUpbitRate();
         setCurrentExchangeRate(initialRate);
@@ -537,19 +571,25 @@ export default function Dashboard() {
                 {exchangeBalances.map((exchange: any) => (
                   <div
                     key={exchange.exchangeName}
-                    className="flex items-center justify-between text-xs"
+                    className="flex items-start justify-between text-xs gap-2"
                   >
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <span>{exchange.icon}</span>
                       <span className="font-medium">
                         {exchange.exchangeName}
                       </span>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-1 min-w-0">
                       <div className="font-medium">
-                        {formatCurrency(
-                          exchange.availableBalance,
-                          exchange.currency
+                        {exchange.error ? (
+                          <span className="text-red-500 text-xs leading-tight break-words">
+                            {exchange.error}
+                          </span>
+                        ) : (
+                          formatCurrency(
+                            exchange.availableBalance,
+                            exchange.currency
+                          )
                         )}
                       </div>
                     </div>

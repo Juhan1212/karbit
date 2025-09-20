@@ -442,8 +442,12 @@ export default function AutoTrading() {
   // 잔액 상태 확인 함수
   const getBalanceStatus = (
     availableBalance: number,
-    requiredAmount: number | null
+    requiredAmount: number | null,
+    hasError?: boolean
   ) => {
+    if (hasError) {
+      return "error"; // 에러 상태
+    }
     if (requiredAmount === null) {
       return "loading"; // 환율 정보 로딩 중
     }
@@ -466,7 +470,7 @@ export default function AutoTrading() {
       // 업비트 REST API로 환율 조회 함수
       const fetchUpbitRate = async () => {
         const response = await fetch(
-          "https://api.upbit.com/v1/ticker?markets=KRW-USDT"
+          "/api/proxy?url=https://api.upbit.com/v1/ticker?markets=KRW-USDT"
         );
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -847,6 +851,12 @@ export default function AutoTrading() {
 
       // 모든 연결된 거래소의 잔액 체크
       for (const exchange of exchangeBalances) {
+        // 잔액 조회 에러가 있는 경우 먼저 체크
+        if (exchange.error) {
+          toast.error(`${exchange.exchangeName}: ${exchange.error}`);
+          return;
+        }
+
         let requiredAmount = seedAmount[0];
         // 해외 거래소는 환율 적용
         if (exchange.currency === "USDT" && currentExchangeRate) {
@@ -1171,7 +1181,8 @@ export default function AutoTrading() {
                   );
                   const balanceStatus = getBalanceStatus(
                     exchange.availableBalance,
-                    requiredAmount
+                    requiredAmount,
+                    !!exchange.error
                   );
 
                   return (
@@ -1197,7 +1208,9 @@ export default function AutoTrading() {
                                 ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300"
                                 : balanceStatus === "warning"
                                   ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300"
-                                  : "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                                  : balanceStatus === "error"
+                                    ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+                                    : "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
                           }`}
                         >
                           {balanceStatus === "loading"
@@ -1206,23 +1219,31 @@ export default function AutoTrading() {
                               ? "충분"
                               : balanceStatus === "warning"
                                 ? "부족"
-                                : "매우부족"}
+                                : balanceStatus === "error"
+                                  ? "오류"
+                                  : "매우부족"}
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4 text-xs">
-                        <div>
+                      <div className="flex flex-col sm:flex-row sm:justify-between gap-3 sm:gap-4 text-xs">
+                        <div className="flex-1 min-w-0">
                           <div className="text-muted-foreground mb-1">
                             보유 잔액
                           </div>
-                          <div className="font-medium">
-                            {formatCurrency(
-                              exchange.availableBalance,
-                              exchange.currency
+                          <div className="font-medium break-words">
+                            {exchange.error ? (
+                              <span className="text-red-500 text-xs leading-tight">
+                                {exchange.error}
+                              </span>
+                            ) : (
+                              formatCurrency(
+                                exchange.availableBalance,
+                                exchange.currency
+                              )
                             )}
                           </div>
                         </div>
-                        <div>
+                        <div className="flex-1 min-w-0 sm:text-right">
                           <div className="text-muted-foreground mb-1">
                             필요 금액
                           </div>
@@ -1239,6 +1260,7 @@ export default function AutoTrading() {
 
                       {balanceStatus !== "sufficient" &&
                         balanceStatus !== "loading" &&
+                        balanceStatus !== "error" &&
                         requiredAmount !== null && (
                           <div className="mt-2 text-xs text-muted-foreground">
                             {exchange.type === "domestic"

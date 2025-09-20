@@ -5,8 +5,10 @@ import {
   OrderRequest,
   OrderResult,
   TickerResult,
+  BalanceResult,
 } from "./base";
-import { UpbitAdapter, type CandleData } from "./upbit";
+import { createExchangeAdapter } from "./index";
+import type { CandleData } from "./upbit";
 
 export class OkxAdapter extends ExchangeAdapter {
   private client: RestClient;
@@ -19,11 +21,31 @@ export class OkxAdapter extends ExchangeAdapter {
     });
   }
 
-  async getBalance(): Promise<number> {
-    // USDT balance fetch
-    const res = await this.client.getBalance();
-    const usdt = res.find((a: any) => a.ccy === "USDT");
-    return usdt ? parseFloat(usdt.notionalUsdForFutures) : 0;
+  async getBalance(): Promise<BalanceResult> {
+    try {
+      // USDT balance fetch
+      const res = await this.client.getBalance();
+      const usdt = res.find((a: any) => a.ccy === "USDT");
+      return {
+        balance: usdt ? parseFloat(usdt.notionalUsdForFutures) : 0,
+      };
+    } catch (err: any) {
+      console.error("[OkxAdapter] getBalance error:", err);
+
+      // 401 에러 처리
+      if (err.response?.status === 401) {
+        return {
+          balance: 0,
+          error:
+            "거래소 API Key 등록 페이지에서 IP 등록이 정상적으로 되었는지 확인해주세요",
+        };
+      }
+
+      return {
+        balance: 0,
+        error: "잔액 조회 중 오류가 발생했습니다",
+      };
+    }
   }
 
   async getTotalBalance(): Promise<number> {
@@ -69,7 +91,8 @@ export class OkxAdapter extends ExchangeAdapter {
 
       // USDT를 원화로 변환 (업비트 USDT-KRW 시세 사용)
       try {
-        const usdtKrwRes = await UpbitAdapter.getTicker("USDT");
+        const upbitAdapter = createExchangeAdapter("업비트");
+        const usdtKrwRes = await upbitAdapter.getTicker("USDT");
         if (usdtKrwRes.price) {
           return totalUsdtValue * usdtKrwRes.price;
         }
@@ -170,12 +193,19 @@ export class OkxAdapter extends ExchangeAdapter {
 
   async getTicker(symbol: string): Promise<TickerResult> {
     try {
-      // 모의 데이터 반환 (실제로는 OKX API 호출)
-      return {
-        symbol: symbol,
-        price: 1.0, // 모의 USDT 가격
-        timestamp: Date.now(),
-      };
+      // OKX 공개 REST API 사용 (선물)
+      const res = await fetch(
+        `https://www.okx.com/api/v5/market/ticker?instId=${symbol.toUpperCase()}-USDT`
+      );
+      const data = await res.json();
+      if (data && data.data && data.data.length > 0) {
+        return {
+          symbol: symbol.toUpperCase(),
+          price: parseFloat(data.data[0].last),
+          timestamp: Date.now(),
+        };
+      }
+      throw new Error(`No ticker data found for ${symbol}`);
     } catch (error) {
       console.error(`Error fetching ${symbol} ticker from OKX:`, error);
       throw error;

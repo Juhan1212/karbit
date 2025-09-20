@@ -18,6 +18,7 @@ export interface ExchangeBalance {
   currency: "KRW" | "USDT";
   availableBalance: number;
   icon: string;
+  error?: string; // 에러 메시지 (선택적)
 }
 
 // 사용자의 거래소 연결 상태 조회
@@ -234,7 +235,7 @@ export async function getUserExchangeBalances(
         connection.exchange.name as any,
         credentials
       );
-      const balance = await adapter.getBalance();
+      const balanceResult = await adapter.getBalance();
       const isDomestic =
         connection.exchange.name === KoreanExchangeType.업비트 ||
         connection.exchange.name === KoreanExchangeType.빗썸;
@@ -265,8 +266,9 @@ export async function getUserExchangeBalances(
         exchangeName: connection.exchange.name,
         type: isDomestic ? "domestic" : "overseas",
         currency: isDomestic ? "KRW" : "USDT",
-        availableBalance: balance,
+        availableBalance: balanceResult.balance,
         icon: isDomestic ? "🇰🇷" : "🌏",
+        error: balanceResult.error, // 에러 메시지 포함
       };
     } catch (error) {
       console.error(`${connection.exchange.name} 잔액 조회 오류:`, error);
@@ -279,6 +281,7 @@ export async function getUserExchangeBalances(
         currency: isDomestic ? "KRW" : "USDT",
         availableBalance: 0,
         icon: isDomestic ? "🇰🇷" : "🌏",
+        error: "잔액 조회 중 오류가 발생했습니다", // catch 블록 에러 메시지
       };
     }
   });

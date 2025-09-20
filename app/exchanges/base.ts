@@ -31,6 +31,11 @@ export interface TickerResult {
   timestamp: number;
 }
 
+export interface BalanceResult {
+  balance: number;
+  error?: string; // 에러 메시지 (선택적)
+}
+
 export abstract class ExchangeAdapter {
   protected apiKey: string;
   protected apiSecret: string;
@@ -45,7 +50,7 @@ export abstract class ExchangeAdapter {
   /**
    * 거래소의 잔액을 조회합니다
    */
-  abstract getBalance(): Promise<number>;
+  abstract getBalance(): Promise<BalanceResult>;
 
   /**
    * 거래소의 모든 자산을 원화 기준으로 조회합니다
@@ -92,4 +97,11 @@ export abstract class ExchangeAdapter {
   ): Promise<CandleData[]> {
     throw new Error("getTickerCandles static method must be implemented");
   }
+
+  /**
+   * 심볼(코인 페어)에 대한 현재가를 반환하는 인스턴스 메소드 (각 Adapter에서 구현 필요)
+   * @param symbol 거래쌍(예: BTC/USDT)
+   * @returns TickerResult (symbol, price, timestamp)
+   */
+  abstract getTicker(symbol: string): Promise<TickerResult>;
 }

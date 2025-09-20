@@ -9,7 +9,10 @@ import {
   OrderRequest,
   OrderResult,
   TickerResult,
+  BalanceResult,
 } from "./base";
+// @ts-ignore
+import { getCache, setCache } from "../core/redisCache";
 
 export interface CandleData {
   timestamp: number;
@@ -63,7 +66,7 @@ export class UpbitAdapter extends ExchangeAdapter {
     return { encoded, raw };
   }
 
-  async getBalance(): Promise<number> {
+  async getBalance(): Promise<BalanceResult> {
     const BASE_URL = "https://api.upbit.com";
 
     // 계좌 조회는 쿼리 파라미터 없음
@@ -77,13 +80,28 @@ export class UpbitAdapter extends ExchangeAdapter {
       const res = await axios.get(`${BASE_URL}/v1/accounts`, { headers });
       // KRW 잔액 반환 (없으면 0)
       const krwAccount = res.data.find((acc: any) => acc.currency === "KRW");
-      return krwAccount ? parseFloat(krwAccount.balance) : 0;
+      return {
+        balance: krwAccount ? parseFloat(krwAccount.balance) : 0,
+      };
     } catch (err: any) {
       console.error(
         "[UpbitAdapter] getBalance error:",
         err.response?.data || err.message
       );
-      return 0;
+
+      // 401 에러 처리
+      if (err.response?.status === 401) {
+        return {
+          balance: 0,
+          error:
+            "거래소 API Key 등록 페이지에서 IP 등록이 정상적으로 되었는지 확인해주세요",
+        };
+      }
+
+      return {
+        balance: 0,
+        error: "잔액 조회 중 오류가 발생했습니다",
+      };
     }
   }
 
@@ -393,20 +411,26 @@ export class UpbitAdapter extends ExchangeAdapter {
     }
   }
 
-  static async getTicker(symbol: string): Promise<TickerResult> {
+  async getTicker(symbol: string): Promise<TickerResult> {
+    const cacheKey = `upbit:KRW-${symbol}`;
+    const now = Date.now();
+    const cached = await getCache(cacheKey);
+    if (cached && now - cached.timestamp < 1000) {
+      return cached.data;
+    }
     try {
       const response = await axios.get(
         `https://api.upbit.com/v1/ticker?markets=KRW-${symbol}`
       );
-
       if (response.data && response.data.length > 0) {
-        return {
+        const ticker: TickerResult = {
           symbol: symbol,
           price: response.data[0].trade_price,
-          timestamp: Date.now(),
+          timestamp: now,
         };
+        await setCache(cacheKey, { data: ticker, timestamp: now });
+        return ticker;
       }
-
       throw new Error(`No ticker data found for ${symbol}`);
     } catch (error) {
       console.error(`Error fetching ${symbol} ticker from Upbit:`, error);

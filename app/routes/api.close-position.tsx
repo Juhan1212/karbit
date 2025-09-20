@@ -10,7 +10,6 @@ import { getUserExchangeCredentials } from "~/database/exchange";
 import { updateUserStatsAfterPositionClose } from "~/database/user";
 import { updateStrategyStatsAfterPositionClose } from "~/database/strategy";
 import { createExchangeAdapter } from "~/exchanges";
-import { UpbitAdapter } from "~/exchanges/upbit";
 import { ExchangeTypeConverter, UppercaseExchangeType } from "~/types/exchange";
 import {
   preciseAdd,
@@ -203,7 +202,9 @@ export async function action({ request }: ActionFunctionArgs) {
         throw new Error("해외 거래소 주문 정보를 조회할 수 없습니다.");
       }
 
-      const res = await UpbitAdapter.getTicker("USDT");
+      // USDT 가격 조회 (업비트 인스턴스 사용)
+      const upbitAdapter = createExchangeAdapter("업비트");
+      const res = await upbitAdapter.getTicker("USDT");
       const currentUsdtPrice = safeNumeric(res.price, 0);
 
       // 5. 현재 환율 조회 (실제 수익률 계산용) - 정밀한 나눗셈 사용

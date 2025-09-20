@@ -1,6 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { UpbitAdapter } from "~/exchanges/upbit";
-import { BybitAdapter } from "~/exchanges/bybit";
 import type { CandleData } from "~/exchanges/upbit";
 import {
   createExchangeAdapter,

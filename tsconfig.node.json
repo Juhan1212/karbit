@@ -1,6 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["server.js", "vite.config.ts"],
+  "include": [
+    "server.js",
+    "vite.config.ts",
+    "app/core/redisCache.ts",
+    "app/utils/redis.server.ts"
+  ],
   "compilerOptions": {
     "composite": true,
     "strict": true,

@@ -23,6 +23,8 @@ export default [
   ),
   route("/api/close-position", "routes/api.close-position.tsx"),
   route("/api/premium/stream", "routes/api.premium.stream.ts"),
+  route("/api/proxy", "routes/api.proxy.ts"),
+  route("/api/proxy/position/price", "routes/api.proxy.position.price.ts"),
   route("/terms-service", "routes/terms-service.tsx"),
   route("/privacy-policy", "routes/privacy-policy.tsx"),
   layout("routes/_layout.tsx", [

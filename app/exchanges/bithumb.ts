@@ -9,6 +9,7 @@ import {
   OrderRequest,
   OrderResult,
   TickerResult,
+  BalanceResult,
 } from "./base";
 
 export class BithumbAdapter extends ExchangeAdapter {
@@ -55,7 +56,7 @@ export class BithumbAdapter extends ExchangeAdapter {
     return { encoded, raw };
   }
 
-  async getBalance(): Promise<number> {
+  async getBalance(): Promise<BalanceResult> {
     // JWT 생성
     const payload = {
       access_key: this.apiKey,
@@ -75,13 +76,28 @@ export class BithumbAdapter extends ExchangeAdapter {
       const krwAccount = res.data?.data?.find(
         (acc: any) => acc.currency === "KRW"
       );
-      return krwAccount ? parseFloat(krwAccount.balance) : 0;
+      return {
+        balance: krwAccount ? parseFloat(krwAccount.balance) : 0,
+      };
     } catch (err: any) {
       console.error(
         "[BithumbAdapter] getBalance error:",
         err.response?.data || err.message
       );
-      return 0;
+
+      // 401 에러 처리
+      if (err.response?.status === 401) {
+        return {
+          balance: 0,
+          error:
+            "거래소 API Key 등록 페이지에서 IP 등록이 정상적으로 되었는지 확인해주세요",
+        };
+      }
+
+      return {
+        balance: 0,
+        error: "잔액 조회 중 오류가 발생했습니다",
+      };
     }
   }
 
