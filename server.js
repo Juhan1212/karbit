@@ -27,7 +27,7 @@ app.use(
       // origin이 없으면(서버-서버, Postman 등) 허용
       if (!origin) return callback(null, true);
       const allowed = [
-        "http://3.39.252.79",
+        process.env.BASE_URL,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
       ];
@@ -85,7 +85,9 @@ if (DEVELOPMENT) {
 }
 
 const server = app.listen(PORT, () => {
-  const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
+  const baseUrl = DEVELOPMENT
+    ? `http://localhost:${PORT}`
+    : process.env.BASE_URL;
   console.log(`Server is running on ${baseUrl}`);
 });
 
