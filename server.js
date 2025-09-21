@@ -12,8 +12,20 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const BUILD_PATH = join(__dirname, "build/server/index.js");
+if (!process.env.NODE_ENV) {
+  console.error(
+    "NODE_ENV 환경 변수가 설정되어 있지 않습니다. .env 파일을 확인하세요."
+  );
+  process.exit(1);
+}
 const DEVELOPMENT = process.env.NODE_ENV === "development";
-const PORT = Number.parseInt(process.env.PORT || "3000");
+if (!process.env.PORT) {
+  console.error(
+    "PORT 환경 변수가 설정되어 있지 않습니다. .env 파일을 확인하세요."
+  );
+  process.exit(1);
+}
+const PORT = DEVELOPMENT ? 3000 : Number.parseInt(process.env.PORT);
 
 const app = express();
 
