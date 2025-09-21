@@ -36,6 +36,7 @@ export async function createStrategy(userId: number, data: CreateStrategyData) {
     const [strategy] = await tx
       .insert(strategies)
       .values({
+        userId: userId, // 빠진 userId 추가
         name: data.name,
         seedAmount: data.seedAmount.toString(),
         coinMode: data.coinMode,
