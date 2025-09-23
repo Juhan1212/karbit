@@ -502,7 +502,13 @@ export default function Dashboard() {
             자동매매 현황
           </p>
         </div>
-        <Button variant="outline" size="sm">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            window.location.reload();
+          }}
+        >
           <RefreshCw className="w-4 h-4 mr-2" />
           새로고침
         </Button>
