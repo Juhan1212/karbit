@@ -3,6 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Button } from "./button";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./table";
 
 // 유틸리티 함수들
 const formatKRW = (amount: number) => {
@@ -230,11 +238,33 @@ export const ActivePositionManagement = React.memo(
     };
 
     // 포지션 강제 종료
-    const handleForceClose = async (coinSymbol: string) => {
+    const handleForceClose = async (
+      coinSymbol: string,
+      krExchange?: string,
+      frExchange?: string
+    ) => {
       try {
-        // 여기에 포지션 강제 종료 로직 추가
-        console.log(`${coinSymbol} 포지션이 강제 종료되었습니다.`);
-        toast.success(`${coinSymbol} 포지션이 강제 종료되었습니다.`);
+        if (!krExchange || !frExchange) {
+          toast.error("거래소 정보가 누락되었습니다.");
+          return;
+        }
+        const res = await fetch("/api/close-position", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            coinSymbol,
+            krExchange: krExchange.toUpperCase(),
+            frExchange: frExchange.toUpperCase(),
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          toast.success(`${coinSymbol} 포지션이 성공적으로 종료되었습니다.`);
+        } else {
+          toast.error(data.message || `${coinSymbol} 포지션 종료 실패`);
+        }
       } catch (error: any) {
         console.error(`포지션 강제 종료 실패 (${coinSymbol}):`, error);
         toast.error(`포지션 강제 종료 실패 (${coinSymbol}): ${error.message}`);
@@ -253,57 +283,169 @@ export const ActivePositionManagement = React.memo(
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-4 text-center font-semibold text-muted">
-                <div>자산</div>
-                <div>총 투자금액</div>
-                <div>현재 수익</div>
-              </div>
-              <div className="grid grid-cols-3 gap-4 py-2">
-                <div className="font-medium">
-                  {formatKRW(
-                    Array.from(positionBalances.values()).reduce(
-                      (sum, balance) =>
-                        sum + balance.krBalanceKrw + balance.frBalanceKrw,
-                      0
-                    )
-                  )}
-                </div>
-                <div className="font-medium">
-                  {formatKRW(
-                    Array.from(positionBalances.values()).reduce(
-                      (sum, balance) => sum + balance.totalInvestment,
-                      0
-                    )
-                  )}
-                </div>
-                <div className="font-medium">
-                  {formatKRW(
-                    Array.from(positionBalances.values()).reduce(
-                      (sum, balance) => sum + balance.currentProfit,
-                      0
-                    )
-                  )}
-                </div>
-              </div>
-
-              <div className="my-4 border-t border-b py-2">
-                {Array.from(positionBalances.values()).map((balance) => (
-                  <div
-                    key={balance.coinSymbol}
-                    className="grid grid-cols-3 gap-4 py-2 text-center"
-                  >
-                    <div className="font-medium">{balance.coinSymbol}</div>
-                    <div className="font-medium">
-                      {formatKRW(balance.totalInvestment)}
-                    </div>
-                    <div className="font-medium">
-                      {formatKRW(balance.currentProfit)}
-                    </div>
-                  </div>
-                ))}
+              {/* 전체 요약 테이블 */}
+              <div className="mb-6 border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-center font-semibold">
+                        총 자산
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        총 투자금액
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        현재 수익
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell className="text-center font-medium">
+                        {formatKRW(
+                          Array.from(positionBalances.values()).reduce(
+                            (sum, balance) =>
+                              sum + balance.krBalanceKrw + balance.frBalanceKrw,
+                            0
+                          )
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center font-medium">
+                        {formatKRW(
+                          Array.from(positionBalances.values()).reduce(
+                            (sum, balance) => sum + balance.totalInvestment,
+                            0
+                          )
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center font-medium">
+                        {formatKRW(
+                          Array.from(positionBalances.values()).reduce(
+                            (sum, balance) => sum + balance.currentProfit,
+                            0
+                          )
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
               </div>
 
-              <div className="flex justify-end gap-2">
+              {/* 개별 포지션 테이블 */}
+              <div className="overflow-x-auto border rounded-lg">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-center font-semibold">
+                        코인
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        KR 가격
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        FR 가격
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        KR 자산
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        FR 자산
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        총 투자금액
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        현재 수익
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        수익률
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        마지막 업데이트
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        강제 종료
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {positions.map((position) => {
+                      const balance = positionBalances.get(position.coinSymbol);
+                      return (
+                        <TableRow key={position.coinSymbol}>
+                          <TableCell className="text-center font-medium">
+                            {position.coinSymbol}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {balance
+                              ? balance.krPrice.toLocaleString() + "원"
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {balance
+                              ? balance.frPrice.toLocaleString() + "원"
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {balance ? formatKRW(balance.krBalanceKrw) : "-"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {balance ? formatKRW(balance.frBalanceKrw) : "-"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {balance ? formatKRW(balance.totalInvestment) : "-"}
+                          </TableCell>
+                          <TableCell
+                            className={`text-center font-medium ${balance && balance.currentProfit >= 0 ? "text-green-600" : "text-red-600"}`}
+                          >
+                            {balance ? formatKRW(balance.currentProfit) : "-"}
+                          </TableCell>
+                          <TableCell
+                            className={`text-center font-medium ${balance && balance.profitRate >= 0 ? "text-green-600" : "text-red-600"}`}
+                          >
+                            {balance
+                              ? balance.profitRate.toFixed(2) + "%"
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-center text-xs text-muted-foreground">
+                            {balance && balance.lastUpdated
+                              ? formatDateForDisplay(
+                                  new Date(balance.lastUpdated).toISOString()
+                                )
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={closingPositions.has(
+                                position.coinSymbol
+                              )}
+                              onClick={async () => {
+                                setClosingPositions((prev) =>
+                                  new Set(prev).add(position.coinSymbol)
+                                );
+                                await handleForceClose(
+                                  position.coinSymbol,
+                                  position.krExchange,
+                                  position.frExchange
+                                );
+                                handlePositionClose(position.coinSymbol);
+                              }}
+                            >
+                              {closingPositions.has(position.coinSymbol)
+                                ? "종료 중..."
+                                : "강제 종료"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-4">
                 <Button
                   onClick={() => {
                     // 모든 포지션 새로 고침

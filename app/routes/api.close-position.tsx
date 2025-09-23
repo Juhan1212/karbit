@@ -98,7 +98,7 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // 첫 번째 포지션의 strategyId와 leverage를 사용 (모든 포지션이 같은 전략이라고 가정)
+    // 첫 번째 포지션의 strategyId와 leverage를 사용 (어차피 같은 심볼이기 때문에 동일할 것)
     const firstPosition = activePositions[0];
     const strategyId = firstPosition.strategyId;
     const leverage = firstPosition.leverage;
