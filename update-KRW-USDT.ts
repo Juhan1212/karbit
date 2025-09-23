@@ -1,15 +1,16 @@
-// update-KRW-USDT.js
+// update-KRW-USDT.ts
 import fetch from "node-fetch";
-import { setCache } from "./app/core/redisCache.js";
+import { setCache } from "./app/core/redisCache";
 
-async function updateLoop() {
+async function updateLoop(): Promise<void> {
   while (true) {
     try {
       const response = await fetch(
-        "https://api.upbit.com/v1/ticker?markets=KRW-USDT"
+        "https://api.upbit.com/v1/ticker?markets=KRW-USDT",
+        {}
       );
       if (response.ok) {
-        const data = await response.json();
+        const data = (await response.json()) as any;
         console.log("[update-KRW-USDT] Upbit API cache updated:", data);
         await setCache(
           "upbit:KRW-USDT",

@@ -32,6 +32,7 @@ export class BithumbAdapter extends ExchangeAdapter {
     const payload: any = {
       access_key: this.apiKey,
       nonce: uuidv4(),
+      timestamp: Date.now(), // timestamp 추가
     };
     if (queryString) {
       payload.query_hash = this.sha512(queryString);
@@ -57,7 +58,7 @@ export class BithumbAdapter extends ExchangeAdapter {
   }
 
   async getBalance(): Promise<BalanceResult> {
-    // JWT 생성
+    // JWT 생성 - timestamp 포함
     const payload = {
       access_key: this.apiKey,
       nonce: uuidv4(),
@@ -354,7 +355,7 @@ export class BithumbAdapter extends ExchangeAdapter {
       return orderResult.uuid;
     } catch (error: any) {
       console.error(
-        "Upbit placeOrder error:",
+        "Bithumb placeOrder error:",
         error.response?.data || error.message
       );
       throw error;

@@ -8,10 +8,11 @@ export default {
     "^gate-api$": "<rootDir>/node_modules/gate-api",
   },
   transform: {
-    "^.+\\.tsx?$": [
+    "^.+\\.(ts|tsx|js)$": [
       "ts-jest",
       {
         useESM: true,
+        tsconfig: "tsconfig.test.json",
       },
     ],
   },

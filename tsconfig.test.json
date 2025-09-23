@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["jest", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "~/*": ["./app/*"],
+      "@icons/*": ["./app/assets/icons/*"]
+    }
+  },
+  "include": ["test/**/*.ts", "test/**/*.tsx", "app/**/*.ts", "app/**/*.tsx"]
+}
