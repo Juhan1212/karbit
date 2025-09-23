@@ -383,7 +383,7 @@ export const ActivePositionManagement = React.memo(
                           </TableCell>
                           <TableCell className="text-center">
                             {balance
-                              ? balance.frPrice.toLocaleString() + "원"
+                              ? balance.frPrice.toLocaleString() + "$"
                               : "-"}
                           </TableCell>
                           <TableCell className="text-center">
