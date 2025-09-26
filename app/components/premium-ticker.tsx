@@ -108,11 +108,6 @@ export function PremiumTicker({
     };
   }, [endpoint, isLocked]);
 
-  // seed 범위: 1000000 ~ 100000000, 1000000 단위 고정
-  const seedMin = 1000000;
-  const seedMax = 100000000;
-  const seedStep = 1000000;
-
   // 표 렌더링 - 항상 환율 기준으로 정렬된 모든 데이터 표시
   const sortedItems = useMemo(() => {
     if (!selectedSeed) return [];
@@ -131,32 +126,9 @@ export function PremiumTicker({
       if (b._rate == null) return -1;
       return sortOrder === "asc" ? a._rate - b._rate : b._rate - a._rate;
     });
+    console.log(withRate);
     return withRate;
   }, [items, selectedSeed, sortOrder]);
-
-  const tableRows = useMemo(() => {
-    if (!selectedSeed) return null;
-    return sortedItems.map((it) => (
-      <TableRow
-        key={it.symbol + "|" + it.korean_ex + "|" + it.foreign_ex}
-        className="cursor-pointer hover:bg-muted/50 transition-colors"
-        onClick={() => setSelectedItem(it)}
-      >
-        <TableCell className="px-2 font-medium min-w-[60px] max-w-[80px] w-[70px]">
-          {it.symbol}
-        </TableCell>
-        <TableCell className="px-2 min-w-[80px] max-w-[100px] w-[90px] text-right">
-          {it._rate !== null && it._rate !== undefined ? it._rate : "-"}
-        </TableCell>
-        <TableCell className="px-2 text-xs text-muted-foreground min-w-[100px] max-w-[120px] w-[110px]">
-          {it.korean_ex || "-"}
-        </TableCell>
-        <TableCell className="px-2 text-xs text-muted-foreground min-w-[100px] max-w-[120px] w-[110px]">
-          {it.foreign_ex || "-"}
-        </TableCell>
-      </TableRow>
-    ));
-  }, [sortedItems]);
 
   // 평균 환율 계산
   const averageRate = useMemo(() => {

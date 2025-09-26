@@ -205,37 +205,56 @@ export async function getUserCurrentPlan(userId: number) {
     return null;
   }
 
-  // Free 플랜 자동 할당
-  const assignResult = await assignUserPlan(
-    userId,
-    freePlan.id,
-    "auto_assign_expired"
-  );
+  // Free 플랜 자동 할당 (트랜잭션 내에서 기존 만료 플랜 비활성화)
+  let newResult = null;
+  await db.transaction(async (tx) => {
+    // 1. 기존 활성 플랜 모두 비활성화
+    await tx
+      .update(userPlanHistory)
+      .set({ isActive: false, endDate: new Date() })
+      .where(
+        and(
+          eq(userPlanHistory.userId, userId),
+          eq(userPlanHistory.isActive, true)
+        )
+      );
 
-  if (!assignResult.success) {
-    console.error("Failed to auto-assign Free plan:", assignResult.message);
-    return null;
-  }
+    // 2. Free 플랜 이력 추가
+    await tx.insert(userPlanHistory).values({
+      userId,
+      planId: freePlan.id,
+      reason: "auto_assign_expired",
+      isActive: true,
+      startDate: new Date(),
+      endDate: null,
+    });
 
-  // 새로 할당된 플랜 정보 반환
-  const newResult = await db
-    .select({
-      planHistory: userPlanHistory,
-      plan: plans,
-    })
-    .from(userPlanHistory)
-    .innerJoin(plans, eq(userPlanHistory.planId, plans.id))
-    .where(
-      and(
-        eq(userPlanHistory.userId, userId),
-        eq(userPlanHistory.planId, freePlan.id),
-        eq(userPlanHistory.isActive, true)
+    // 3. users 테이블의 planId도 업데이트
+    await tx
+      .update(users)
+      .set({ planId: freePlan.id, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+
+    // 4. 새로 할당된 플랜 정보 반환
+    const resultArr = await tx
+      .select({
+        planHistory: userPlanHistory,
+        plan: plans,
+      })
+      .from(userPlanHistory)
+      .innerJoin(plans, eq(userPlanHistory.planId, plans.id))
+      .where(
+        and(
+          eq(userPlanHistory.userId, userId),
+          eq(userPlanHistory.planId, freePlan.id),
+          eq(userPlanHistory.isActive, true)
+        )
       )
-    )
-    .orderBy(desc(userPlanHistory.startDate))
-    .limit(1);
-
-  return newResult[0] || null;
+      .orderBy(desc(userPlanHistory.startDate))
+      .limit(1);
+    newResult = resultArr[0] || null;
+  });
+  return newResult;
 }
 
 /**
