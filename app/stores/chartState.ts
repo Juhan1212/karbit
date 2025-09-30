@@ -158,6 +158,7 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
       };
 
       ws.onclose = () => {
+        console.log("웹소켓 연결 종료");
         // 재연결 타이머 설정
         // if (!get().reconnectTimeout) {
         //   const timeout = setTimeout(() => {
@@ -196,6 +197,7 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
     disconnectWebSocket: () => {
       const { socket } = get();
       if (socket && socket.readyState === WebSocket.OPEN) {
+        console.log("disconnectWebSocket called, closing socket");
         socket.close();
         set({ socket: null });
       }

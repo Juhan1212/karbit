@@ -1,6 +1,8 @@
 import type { ActionFunctionArgs } from "react-router";
 import { validateSession } from "~/database/session";
 import { getAuthTokenFromRequest } from "~/utils/cookies";
+import { getCache } from "../core/redisCache";
+import axios from "axios";
 import {
   getUserPositionsForSettlement,
   insertClosedPosition,
@@ -166,7 +168,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       // 4. 주문 완료 후 상세 정보 조회 (체결 정보 포함)
       // 시장가 주문의 경우 즉시 체결되지만, 안전을 위해 짧은 대기 후 조회
-      await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms 대기
+      await new Promise((resolve) => setTimeout(resolve, 200)); // 200ms 대기
 
       // for mock test
       // const krSellOrderId = "1fc437c5-4fb6-42f6-843e-b1d3a23eaa19";
@@ -190,6 +192,8 @@ export async function action({ request }: ActionFunctionArgs) {
         throw new Error("한국 거래소 주문 정보를 조회할 수 없습니다.");
       }
 
+      console.log("한국 거래소 매도 주문 결과:", krSellOrder);
+
       // 해외 거래소 매수 주문 결과 처리
       let frBuyOrder;
       if (frBuyOrderResult.status === "fulfilled") {
@@ -202,10 +206,26 @@ export async function action({ request }: ActionFunctionArgs) {
         throw new Error("해외 거래소 주문 정보를 조회할 수 없습니다.");
       }
 
+      console.log("해외 거래소 매수 주문 결과:", frBuyOrder);
+
       // USDT 가격 조회 (업비트 인스턴스 사용)
-      const upbitAdapter = createExchangeAdapter("업비트");
-      const res = await upbitAdapter.getTicker("USDT");
-      const currentUsdtPrice = safeNumeric(res.price, 0);
+      // Upbit USDT-KRW 시세 조회 (캐시 우선)
+      let currentUsdtPrice: number = 0;
+      try {
+        const cached = await getCache<{ data: any; timestamp: number }>(
+          "upbit:KRW-USDT"
+        );
+        if (cached && Date.now() - cached.timestamp < 10000) {
+          currentUsdtPrice = Number(cached.data[0]?.trade_price) || 0;
+        } else {
+          const upbitUrl = "https://api.upbit.com/v1/ticker?markets=KRW-USDT";
+          const response = await axios.get(upbitUrl);
+          currentUsdtPrice = Number(response.data[0]?.trade_price) || 0;
+        }
+      } catch (err) {
+        console.error("Upbit USDT-KRW 시세 조회 실패:", err);
+        currentUsdtPrice = 0;
+      }
 
       // 5. 현재 환율 조회 (실제 수익률 계산용) - 정밀한 나눗셈 사용
       const exitRate = preciseDivide(

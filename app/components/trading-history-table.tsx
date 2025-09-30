@@ -64,11 +64,11 @@ const getStatusBadge = (status: string | null) => {
     case "OPEN":
       return (
         <Badge variant="default" className="text-white">
-          진행중
+          포지션 진입
         </Badge>
       );
     case "CLOSED":
-      return <Badge variant="secondary">완료</Badge>;
+      return <Badge variant="secondary">포지션 종료</Badge>;
     case "CANCELLED":
       return <Badge variant="destructive">취소</Badge>;
     default:

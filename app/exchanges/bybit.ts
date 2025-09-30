@@ -27,6 +27,43 @@ export class BybitAdapter extends ExchangeAdapter {
     }
   }
 
+  /**
+   * 심볼별 주문 최소 단위(lot size) 조회
+   */
+  async getLotSize(symbol: string): Promise<number | null> {
+    try {
+      // Bybit symbol info API
+      const res = await this.client.getInstrumentsInfo({
+        category: "linear",
+        symbol: `${symbol.toUpperCase()}USDT`,
+      });
+      if (res.retCode !== 0) return null;
+      const info = res.result.list?.[0];
+      return info ? parseFloat(info.lotSizeFilter.minOrderQty) : null;
+    } catch (err) {
+      console.error("Bybit getLotSize error:", err);
+      return null;
+    }
+  }
+
+  /**
+   * 레버리지 설정
+   */
+  async setLeverage(symbol: string, leverage: string): Promise<any> {
+    try {
+      const res = await this.client.setLeverage({
+        category: "linear",
+        symbol: `${symbol.toUpperCase()}USDT`,
+        buyLeverage: leverage,
+        sellLeverage: leverage,
+      });
+      return res;
+    } catch (err) {
+      console.error("Bybit setLeverage error:", err);
+      return { retMsg: "ERROR", error: err };
+    }
+  }
+
   async getBalance(): Promise<BalanceResult> {
     try {
       const res = await this.client.getWalletBalance({
@@ -225,6 +262,8 @@ export class BybitAdapter extends ExchangeAdapter {
       if (params.type === "limit" && params.price) {
         orderParams.price = params.price.toString();
       }
+
+      console.log("Bybit placeOrder params:", orderParams);
       const result = await this.client.submitOrder(orderParams);
 
       if (result.retCode !== 0) {

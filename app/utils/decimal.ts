@@ -1,4 +1,14 @@
 /**
+ * 주문수량을 lot size에 맞게 반올림
+ */
+export function roundVolumeToLotSize(volume: number, lotSize: number): number {
+  if (!lotSize || lotSize <= 0) return 0;
+  // 소수점 자릿수 결정 (lotSize가 1 미만이면 자릿수 추출, 아니면 0)
+  const decimalPlaces =
+    lotSize < 1 ? String(lotSize).split(".")[1]?.length || 2 : 0;
+  const raw = Math.floor(volume / lotSize) * lotSize;
+  return toFixed(raw, decimalPlaces);
+} /**
  * JavaScript 부동소수점 연산 문제를 해결하기 위한 정밀한 계산 유틸리티
  * 암호화폐 거래에서 필요한 정확한 수치 계산을 위해 사용
  */

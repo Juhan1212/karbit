@@ -143,7 +143,8 @@ export default function Home() {
           </Badge>
 
           <h1 className="mb-6 text-4xl lg:text-6xl">
-            <span className="text-primary">김치 프리미엄</span>을<br />
+            <span className="rainbow-text">김치</span>{" "}
+            <span className="rainbow-text">프리미엄</span>을<br />
             <span className="bg-gradient-to-r from-primary to-chart-1 bg-clip-text text-transparent">
               자동으로 수익화
             </span>
@@ -155,11 +156,7 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <Button
-              size="lg"
-              onClick={handleGetStarted}
-              className="gap-2 text-white"
-            >
+            <Button size="lg" onClick={handleGetStarted} className="gap-2">
               무료로 시작하기
               <ArrowRight className="w-4 h-4" />
             </Button>
@@ -379,7 +376,7 @@ export default function Home() {
                 className={`relative ${plan.popular ? "border-primary shadow-lg scale-105" : ""}`}
               >
                 {plan.popular && (
-                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gap-1 text-white">
+                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 gap-1">
                     <Star className="w-3 h-3" />
                     인기
                   </Badge>
@@ -407,7 +404,7 @@ export default function Home() {
                     ))}
                   </ul>
                   <Button
-                    className={`w-full ${plan.popular ? "text-white" : ""}`}
+                    className="w-full"
                     variant={plan.popular ? "default" : "outline"}
                     onClick={handleGetStarted}
                   >
@@ -490,11 +487,7 @@ export default function Home() {
             지금 가입하고 7일 무료 체험을 시작하세요.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              onClick={handleGetStarted}
-              className="gap-2 text-white"
-            >
+            <Button size="lg" onClick={handleGetStarted} className="gap-2">
               <DollarSign className="w-5 h-5" />
               무료 체험 시작하기
             </Button>

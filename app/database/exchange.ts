@@ -240,27 +240,27 @@ export async function getUserExchangeBalances(
         connection.exchange.name === KoreanExchangeType.업비트 ||
         connection.exchange.name === KoreanExchangeType.빗썸;
 
-      // for mock test
-      if (connection.exchange.name === KoreanExchangeType.바이빗) {
-        return {
-          exchangeName: connection.exchange.name,
-          type: isDomestic ? "domestic" : "overseas",
-          currency: isDomestic ? "KRW" : "USDT",
-          availableBalance: 1000,
-          icon: isDomestic ? "🇰🇷" : "🌏",
-        };
-      }
+      // // for mock test
+      // if (connection.exchange.name === KoreanExchangeType.바이빗) {
+      //   return {
+      //     exchangeName: connection.exchange.name,
+      //     type: isDomestic ? "domestic" : "overseas",
+      //     currency: isDomestic ? "KRW" : "USDT",
+      //     availableBalance: 1000,
+      //     icon: isDomestic ? "🇰🇷" : "🌏",
+      //   };
+      // }
 
-      // for mock test
-      if (connection.exchange.name === KoreanExchangeType.빗썸) {
-        return {
-          exchangeName: connection.exchange.name,
-          type: isDomestic ? "domestic" : "overseas",
-          currency: isDomestic ? "KRW" : "USDT",
-          availableBalance: 1000000,
-          icon: isDomestic ? "🇰🇷" : "🌏",
-        };
-      }
+      // // for mock test
+      // if (connection.exchange.name === KoreanExchangeType.빗썸) {
+      //   return {
+      //     exchangeName: connection.exchange.name,
+      //     type: isDomestic ? "domestic" : "overseas",
+      //     currency: isDomestic ? "KRW" : "USDT",
+      //     availableBalance: 1000000,
+      //     icon: isDomestic ? "🇰🇷" : "🌏",
+      //   };
+      // }
 
       return {
         exchangeName: connection.exchange.name,

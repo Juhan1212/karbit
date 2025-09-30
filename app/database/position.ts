@@ -549,3 +549,60 @@ export async function insertClosedPosition(positionData: {
     `종료 포지션 레코드 삽입 완료: ${positionData.coinSymbol}, 사용자: ${positionData.userId}`
   );
 }
+/**
+ * 포지션 진입 시 OPEN 포지션을 DB에 기록
+ */
+export async function insertOpenPosition(positionData: {
+  userId: number;
+  strategyId: number;
+  coinSymbol: string;
+  leverage: number;
+  krExchange: string;
+  krOrderId: string;
+  krPrice: number;
+  krVolume: number;
+  krFunds: number;
+  krFee: number;
+  frExchange: string;
+  frOrderId: string;
+  frPrice: number;
+  frVolume: number;
+  frFunds: number;
+  frFee: number;
+  entryRate: number;
+  usdtPrice?: number;
+  entryTime: Date;
+}) {
+  const db = database();
+
+  await db.insert(positions).values({
+    userId: positionData.userId,
+    strategyId: positionData.strategyId,
+    coinSymbol: positionData.coinSymbol,
+    leverage: positionData.leverage,
+    status: "OPEN",
+    krExchange: positionData.krExchange,
+    krOrderId: positionData.krOrderId,
+    krPrice: positionData.krPrice.toString(),
+    krVolume: positionData.krVolume.toString(),
+    krFunds: positionData.krFunds.toString(),
+    krFee: positionData.krFee.toString(),
+    frExchange: positionData.frExchange,
+    frOrderId: positionData.frOrderId,
+    frPrice: positionData.frPrice.toString(),
+    frVolume: positionData.frVolume.toString(),
+    frFunds: positionData.frFunds.toString(),
+    frFee: positionData.frFee.toString(),
+    entryRate: positionData.entryRate.toString(),
+    usdtPrice: positionData.usdtPrice?.toString() || null,
+    entryTime: positionData.entryTime,
+    exitRate: null,
+    profit: null,
+    profitRate: null,
+    exitTime: null,
+  });
+
+  console.log(
+    `OPEN 포지션 레코드 삽입 완료: ${positionData.coinSymbol}, 사용자: ${positionData.userId}`
+  );
+}

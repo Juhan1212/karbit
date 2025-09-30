@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Crown, Lock } from "lucide-react";
+import { Button } from "./button";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -39,7 +41,6 @@ type TickMessage = {
 
 export function PremiumTicker({
   endpoint = "/api/premium/stream",
-  title = "호가창 반영 실시간 환율",
   isLocked = true,
   onAverageRateChange,
   onItemSelected,
@@ -126,7 +127,6 @@ export function PremiumTicker({
       if (b._rate == null) return -1;
       return sortOrder === "asc" ? a._rate - b._rate : b._rate - a._rate;
     });
-    console.log(withRate);
     return withRate;
   }, [items, selectedSeed, sortOrder]);
 
@@ -176,6 +176,10 @@ export function PremiumTicker({
               Starter 이상 필요
             </Badge>
           )}
+          <Badge variant="secondary" className="gap-1">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            실시간
+          </Badge>
         </div>
       </CardHeader>
       <CardContent>
@@ -324,6 +328,9 @@ export function PremiumTicker({
                 <TableHeader>
                   <TableRow>
                     <TableHead className="px-2 min-w-[40px] max-w-[80px] w-[48px] text-xs sm:min-w-[60px] sm:w-[70px]">
+                      {/* 포지션진입 버튼 칸 */}
+                    </TableHead>
+                    <TableHead className="px-2 min-w-[40px] max-w-[80px] w-[48px] text-xs sm:min-w-[60px] sm:w-[70px]">
                       티커
                     </TableHead>
                     <TableHead
@@ -356,6 +363,48 @@ export function PremiumTicker({
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
                       onClick={() => setSelectedItem(it)}
                     >
+                      {!isLocked && (
+                        <TableCell className="px-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300"
+                            onClick={async (e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              try {
+                                const res = await fetch("/api/open-position", {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify({
+                                    coinSymbol: it.symbol,
+                                    krExchange: it.korean_ex?.toUpperCase(),
+                                    frExchange: it.foreign_ex?.toUpperCase(),
+                                    amount: 10000,
+                                    leverage: 2,
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (res.ok && data.success) {
+                                  toast.success(
+                                    `${it.symbol} 포지션진입 성공!`
+                                  );
+                                } else {
+                                  toast.error(
+                                    data.message ||
+                                      `${it.symbol} 포지션진입 실패`
+                                  );
+                                }
+                              } catch (error) {
+                                toast.error(`포지션진입 실패: ${error}`);
+                              }
+                            }}
+                          >
+                            포지션진입
+                          </Button>
+                        </TableCell>
+                      )}
                       <TableCell className="px-2 font-medium min-w-[40px] max-w-[80px] w-[48px] text-xs sm:min-w-[60px] sm:w-[70px]">
                         {it.symbol}
                       </TableCell>

@@ -21,7 +21,7 @@ import {
   CardTitle,
 } from "../components/card";
 import { Button } from "../components/button";
-import { RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, Crown } from "lucide-react";
 import { PremiumTicker } from "../components/premium-ticker";
 import { getUserCurrentPlan } from "~/database/plan";
 import { ActivePositionManagement } from "~/components/active-position-management";
@@ -29,6 +29,7 @@ import { TradingStats } from "~/components/trading-stats";
 import { TradingHistoryTable } from "~/components/trading-history-table";
 import CompChart from "~/components/chart/CompChart";
 import "~/assets/styles/chart/index.scss";
+import { Badge } from "~/components/badge";
 
 export function meta() {
   return [
@@ -514,6 +515,15 @@ export default function Dashboard() {
         </Button>
       </div>
 
+      {/* Live Status Indicator */}
+      <div className="flex items-center gap-2 text-sm">
+        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+        <span className="text-muted-foreground">실시간 데이터 업데이트 중</span>
+        <span className="text-xs text-muted-foreground">
+          • 마지막 업데이트: 방금 전
+        </span>
+      </div>
+
       {/* Key Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <Card>
@@ -521,6 +531,17 @@ export default function Dashboard() {
             <CardTitle className="text-sm">테더 가격</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-green-900 rounded-lg flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-green-300" />
+              </div>
+              <Badge
+                variant="secondary"
+                className="text-xs bg-green-900 text-green-300"
+              >
+                실시간
+              </Badge>
+            </div>
             <div className="text-xl lg:text-2xl">₩{currentExchangeRate}</div>
             <div
               className={`flex items-center gap-1 text-xs ${tetherComparisonData.isHigher ? "text-green-600" : "text-red-600"}`}
@@ -544,6 +565,17 @@ export default function Dashboard() {
             <CardTitle className="text-sm">활성 포지션</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-blue-900 rounded-lg flex items-center justify-center">
+                <RefreshCw className="w-5 h-5 text-blue-300" />
+              </div>
+              <Badge
+                variant="outline"
+                className="text-xs text-blue-300 bg-blue-900"
+              >
+                대기중
+              </Badge>
+            </div>
             <div className="text-xl lg:text-2xl">{activePositionCount}</div>
             <div className="text-xs text-muted-foreground">
               {activePositionCount > 0 ? "진행중" : "비활성화"}
@@ -556,6 +588,21 @@ export default function Dashboard() {
             <CardTitle className="text-sm">일일 수익</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-yellow-900 rounded-lg flex items-center justify-center">
+                {dailyProfit >= 0 ? (
+                  <TrendingUp className="w-5 h-5 text-yellow-300" />
+                ) : (
+                  <TrendingDown className="w-5 h-5 text-yellow-300" />
+                )}
+              </div>
+              <Badge
+                variant="secondary"
+                className="text-xs text-yellow-300 bg-yellow-900"
+              >
+                오늘
+              </Badge>
+            </div>
             <div className="text-xl lg:text-2xl">
               {dailyProfit >= 0 ? "+" : ""}₩{dailyProfit.toLocaleString()}
             </div>
@@ -572,6 +619,17 @@ export default function Dashboard() {
             <CardTitle className="text-sm">현재 원화&USDT 자산</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-10 h-10 bg-purple-900 rounded-lg flex items-center justify-center">
+                <Crown className="w-5 h-5 text-purple-300" />
+              </div>
+              <Badge
+                variant="outline"
+                className="text-xs text-purple-300 bg-purple-900"
+              >
+                전체
+              </Badge>
+            </div>
             {exchangeBalances && exchangeBalances.length > 0 ? (
               <div className="space-y-2">
                 {exchangeBalances.map((exchange: any) => (
@@ -614,6 +672,20 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* TradingView Widget - Upbit USDTKRW 5분봉 */}
+      <div className="my-6">
+        <div className="rounded-xl border-2 border-border bg-card p-0 overflow-hidden">
+          <iframe
+            src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_1&symbol=UPBIT:USDTKRW&interval=5&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=[]&theme=dark&style=1&timezone=Asia/Seoul&withdateranges=1&hidevolume=0&hidelegend=0&showpopupbutton=1&popupwidth=1000&popupheight=650"
+            width="100%"
+            height="400"
+            allowFullScreen
+            title="TradingView USDTKRW Chart"
+            style={{ minWidth: "320px", maxWidth: "100%", display: "block" }}
+          />
+        </div>
+      </div>
+
       {/* Live Kimchi Premium Ticker */}
       <PremiumTicker
         isLocked={isLocked}
@@ -637,7 +709,7 @@ export default function Dashboard() {
               선택한 티커의 실시간 환율을 확인하세요
             </CardDescription>
           </CardHeader>
-          <CardContent className="chart-card-content">
+          <CardContent className="chart-card-content" noPadding={true}>
             <CompChart
               koreanEx={selectedTickerItem?.korean_ex || "UPBIT"}
               foreignEx={selectedTickerItem?.foreign_ex || "BYBIT"}
@@ -678,7 +750,7 @@ export default function Dashboard() {
               현재 포지션 추이를 실시간으로 확인하세요
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="chart-card-content" noPadding={true}>
             <CompChart
               koreanEx={selectedPosition?.krExchange || "UPBIT"}
               foreignEx={selectedPosition?.frExchange || "BYBIT"}

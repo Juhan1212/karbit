@@ -57,6 +57,19 @@ export class BithumbAdapter extends ExchangeAdapter {
     return { encoded, raw };
   }
 
+  async getLotSize(symbol: string): Promise<number | null> {
+    // Bithumb은 고정된 최소 주문 단위가 없으므로 null 반환
+    return null;
+  }
+
+  async setLeverage(symbol: string, leverage: string): Promise<any> {
+    // Bithumb은 레버리지 설정 API를 제공하지 않음
+    return {
+      retMsg: "NOT_IMPLEMENTED",
+      error: "Bithumb does not support leverage setting via API",
+    };
+  }
+
   async getBalance(): Promise<BalanceResult> {
     // JWT 생성 - timestamp 포함
     const payload = {
@@ -74,9 +87,7 @@ export class BithumbAdapter extends ExchangeAdapter {
         headers,
       });
       // KRW 잔액 반환 (없으면 0)
-      const krwAccount = res.data?.data?.find(
-        (acc: any) => acc.currency === "KRW"
-      );
+      const krwAccount = res.data?.find((acc: any) => acc.currency === "KRW");
       return {
         balance: krwAccount ? parseFloat(krwAccount.balance) : 0,
       };
@@ -278,14 +289,18 @@ export class BithumbAdapter extends ExchangeAdapter {
         market,
         count: count.toString(),
       });
-
+      let url = `${BithumbAdapter.BASE_URL}${endpoint}?${params}`;
       if (to > 0) {
-        // Convert timestamp to ISO string for Upbit API
-        const toDate = new Date(to * 1000).toISOString();
-        params.set("to", toDate);
+        const date = new Date(to * 1000);
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, "0");
+        const dd = String(date.getDate()).padStart(2, "0");
+        const HH = String(date.getHours()).padStart(2, "0");
+        const MM = String(date.getMinutes()).padStart(2, "0");
+        const SS = String(date.getSeconds()).padStart(2, "0");
+        const toDate = `${yyyy}-${mm}-${dd} ${HH}:${MM}:${SS}`;
+        url += `&to=${toDate}`; // 직접 추가 (인코딩 없이)
       }
-
-      const url = `${BithumbAdapter.BASE_URL}${endpoint}?${params}`;
 
       const response = await axios.get(url, {
         headers: {
@@ -305,7 +320,7 @@ export class BithumbAdapter extends ExchangeAdapter {
         volume: item.candle_acc_trade_volume,
       }));
     } catch (error) {
-      console.error("Error fetching Upbit candle data:", error);
+      console.error("Error fetching Bithumb candle data:", error);
       throw error;
     }
   }
@@ -317,12 +332,12 @@ export class BithumbAdapter extends ExchangeAdapter {
       const orderData: any = {
         market: market,
         side: upbitSide,
-        ord_type: params.type === "market" ? "market" : "limit",
+        ord_type: params.type,
       };
 
       if (upbitSide === "bid") {
         // 매수
-        if (params.type === "market") {
+        if (params.type === "price") {
           orderData.price = params.amount; // 매수 금액
         } else {
           orderData.volume = params.amount; // 매수 수량
@@ -330,13 +345,16 @@ export class BithumbAdapter extends ExchangeAdapter {
         }
       } else {
         // 매도
-        orderData.volume = params.amount; // 매도 수량
-        if (params.type === "limit") {
+        if (params.type === "market") {
+          orderData.volume = params.amount; // 매도 수량
+        } else {
+          orderData.volume = params.amount; // 매도 수량
           orderData.price = params.price;
         }
       }
 
       const { raw } = this.buildQueryStrings(orderData);
+      console.log("Order raw query string:", raw); // 디버그용 로그
       const token = this.createJwt(raw);
 
       const response = await axios.post(
@@ -381,15 +399,35 @@ export class BithumbAdapter extends ExchangeAdapter {
       const order = response.data;
       const symbolFromMarket = order.market.replace("KRW-", "");
 
+      console.log(order);
+
+      // trades 배열 집계
+      let totalFunds = 0;
+      let totalVolume = 0;
+      if (Array.isArray(order.trades)) {
+        for (const trade of order.trades) {
+          totalFunds += parseFloat(trade.funds);
+          totalVolume += parseFloat(trade.volume);
+        }
+      }
+
+      // 평균 가격 계산 (totalFunds / totalVolume)
+      const avgPrice =
+        totalVolume > 0 ? totalFunds / totalVolume : parseFloat(order?.price);
+
       return {
         id: order.uuid,
         symbol: symbolFromMarket,
-        type: order.ord_type === "market" ? "market" : "limit",
+        type: order.ord_type,
         side: order.side,
-        amount: parseFloat(order.volume),
-        filled: parseFloat(order?.trades[0]?.funds),
-        price: parseFloat(order?.trades[0]?.price),
-        fee: parseFloat(order.paid_fee),
+        amount: parseFloat(order.executed_volume),
+        filled: totalFunds,
+        price: avgPrice,
+        fee: parseFloat(
+          order?.reserved_fee && order.reserved_fee !== "0"
+            ? order.reserved_fee
+            : order.paid_fee
+        ),
         timestamp: new Date(order.created_at).getTime(),
       };
     } catch (error: any) {

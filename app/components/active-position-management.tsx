@@ -65,56 +65,16 @@ interface ActivePositionManagementProps {
 export const ActivePositionManagement = React.memo(
   function ActivePositionManagement({
     positions,
-    isLoading = false,
-    onPositionClose,
     currentExchangeRate = 1300, // 기본값 설정
   }: ActivePositionManagementProps) {
     const [closingPositions, setClosingPositions] = useState<Set<string>>(
       new Set()
     );
-    const [isExpanded, setIsExpanded] = useState(false);
     const [positionBalances, setPositionBalances] = useState<
       Map<string, PositionBalance>
     >(new Map());
     const [isPriceLoading, setIsPriceLoading] = useState(false);
     const [lastPriceUpdate, setLastPriceUpdate] = useState<Date | null>(null);
-
-    // 전체 포트폴리오 수익률 계산
-    const calculateTotalPortfolioStats = useCallback(() => {
-      let totalInvestment = 0;
-      let totalCurrentValue = 0;
-      let totalProfit = 0;
-
-      // positionBalances에서 이미 계산된 값들을 합산
-      positionBalances.forEach((balance) => {
-        if (!isNaN(balance.totalInvestment)) {
-          totalInvestment += balance.totalInvestment;
-        }
-        if (!isNaN(balance.krBalanceKrw) && !isNaN(balance.frBalanceKrw)) {
-          totalCurrentValue += balance.krBalanceKrw + balance.frBalanceKrw;
-        }
-        if (!isNaN(balance.currentProfit)) {
-          totalProfit += balance.currentProfit;
-        }
-      });
-
-      // 1원 단위로 반올림
-      totalInvestment = Math.round(totalInvestment);
-      totalCurrentValue = Math.round(totalCurrentValue);
-      totalProfit = Math.round(totalProfit);
-
-      const profitRate =
-        totalInvestment > 0 && !isNaN(totalInvestment)
-          ? (totalProfit / totalInvestment) * 100
-          : 0;
-
-      return {
-        totalInvestment: isNaN(totalInvestment) ? 0 : totalInvestment,
-        totalCurrentValue: isNaN(totalCurrentValue) ? 0 : totalCurrentValue,
-        totalProfit: isNaN(totalProfit) ? 0 : totalProfit,
-        profitRate: isNaN(profitRate) ? 0 : profitRate,
-      };
-    }, [positions, positionBalances]);
 
     // 개별 포지션의 가격 정보 조회 함수 - 서버 API GET 호출
     const fetchPositionPrice = async (position: ActivePosition) => {
@@ -278,7 +238,7 @@ export const ActivePositionManagement = React.memo(
         </CardHeader>
         <CardContent>
           {positions.length === 0 ? (
-            <div className="text-center py-4 text-black">
+            <div className="text-center py-4">
               현재 활성화된 포지션이 없습니다.
             </div>
           ) : (
@@ -364,7 +324,7 @@ export const ActivePositionManagement = React.memo(
                         마지막 업데이트
                       </TableHead>
                       <TableHead className="text-center font-semibold">
-                        강제 종료
+                        포지션 종료
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -435,7 +395,7 @@ export const ActivePositionManagement = React.memo(
                             >
                               {closingPositions.has(position.coinSymbol)
                                 ? "종료 중..."
-                                : "강제 종료"}
+                                : "포지션 종료"}
                             </Button>
                           </TableCell>
                         </TableRow>

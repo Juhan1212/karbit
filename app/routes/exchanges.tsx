@@ -222,7 +222,7 @@ const ExchangeCard = React.memo(({ exchange }: { exchange: Exchange }) => {
               )}
 
               {exchange.status === "connected" ? (
-                // 연결된 상태 - 연결 해제 옵션
+                // 연결된 상태 - 연결정보 수정 및 해제 옵션
                 <div className="space-y-4">
                   <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                     <div className="flex items-center gap-2">
@@ -236,14 +236,45 @@ const ExchangeCard = React.memo(({ exchange }: { exchange: Exchange }) => {
                     </p>
                   </div>
 
+                  {/* 연결정보 수정 폼 */}
+                  <div className="space-y-2">
+                    <Label htmlFor="api-key">API Key</Label>
+                    <Input
+                      id="api-key"
+                      placeholder="API 키를 입력하세요"
+                      type={
+                        exchange.status === "connected" ? "text" : "password"
+                      }
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="secret-key">Secret Key</Label>
+                    <Input
+                      id="secret-key"
+                      placeholder="시크릿 키를 입력하세요"
+                      type="password"
+                      value={secretKey}
+                      onChange={(e) => setSecretKey(e.target.value)}
+                    />
+                  </div>
                   <div className="flex gap-2">
+                    <Button
+                      variant="default"
+                      className="flex-1 text-white"
+                      onClick={handleConnect}
+                      disabled={isConnecting}
+                    >
+                      {isConnecting ? "수정 중..." : "연결정보 수정"}
+                    </Button>
                     <Button
                       variant="outline"
                       className="flex-1"
                       onClick={handleDisconnect}
                       disabled={isDisconnecting}
                     >
-                      {isDisconnecting ? "해제 중..." : "연결 해제"}
+                      {isDisconnecting ? "해제 중..." : "연결정보 해제"}
                     </Button>
                   </div>
                 </div>

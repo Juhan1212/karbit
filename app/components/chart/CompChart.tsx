@@ -49,6 +49,7 @@ export const CompChart = ({
     store1.getState().connectWebSocket();
     store2.getState().connectWebSocket();
     return () => {
+      console.log("CompChart unmounting, disconnecting websockets");
       store1.getState().disconnectWebSocket();
       store2.getState().disconnectWebSocket();
     };

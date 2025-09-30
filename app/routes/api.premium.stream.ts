@@ -1,5 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { createRedisSubscriber, getKimchiChannel } from "~/utils/redis.server";
+import { Buffer } from "buffer";
+import zlib from "zlib";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -47,7 +49,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         if (isClosed) return; // Stream이 닫혔으면 처리하지 않음
 
         // 메시지 구조 변환: results 배열 → PremiumTicker가 기대하는 배열로 변환
-        const parsed = safeParse(message);
+        const parsed = decodeGzipBase64Message(message);
         let payload: any = parsed;
         if (
           parsed &&
@@ -137,5 +139,20 @@ function safeParse(msg: string) {
     return JSON.parse(msg);
   } catch {
     return msg;
+  }
+}
+
+// 압축된 메시지 복호화 및 파싱 함수
+function decodeGzipBase64Message(msg: string) {
+  try {
+    // 1. base64 decode
+    const binary = Buffer.from(msg, "base64");
+    // 2. gzip decompress (Node.js 환경)
+    const jsonStr = zlib.gunzipSync(binary).toString("utf-8");
+    // 3. JSON parse
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    // fallback: 기존 메시지 처리
+    return safeParse(msg);
   }
 }

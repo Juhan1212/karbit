@@ -2,7 +2,8 @@
 import { UpbitAdapter } from "./upbit";
 import { BithumbAdapter } from "./bithumb";
 import { BinanceAdapter } from "./binance";
-import { BybitAdapter } from "./bybit";
+import { BybitAdapter } from "./bybit"; // BybitAdapter import
+// 다른 Adapter도 동일하게 import 및 타입 보장 필요
 import { OkxAdapter } from "./okx";
 import { ExchangeAdapter } from "./base";
 import {

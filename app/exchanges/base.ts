@@ -7,7 +7,7 @@ import type { CandleData } from "./upbit";
 
 export interface OrderRequest {
   symbol: string;
-  type: "market" | "limit";
+  type: "market" | "limit" | "price";
   side: "buy" | "sell";
   amount: string;
   price?: number;
@@ -37,6 +37,15 @@ export interface BalanceResult {
 }
 
 export abstract class ExchangeAdapter {
+  /**
+   * 심볼별 주문 최소 단위(lot size) 조회
+   */
+  abstract getLotSize(symbol: string): Promise<number | null>;
+
+  /**
+   * 레버리지 설정
+   */
+  abstract setLeverage(symbol: string, leverage: string): Promise<any>;
   protected apiKey: string;
   protected apiSecret: string;
   protected passphrase?: string;

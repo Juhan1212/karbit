@@ -332,12 +332,12 @@ export class UpbitAdapter extends ExchangeAdapter {
       const orderData: any = {
         market: market,
         side: upbitSide,
-        ord_type: params.type === "market" ? "market" : "limit",
+        ord_type: params.type,
       };
 
       if (upbitSide === "bid") {
         // 매수
-        if (params.type === "market") {
+        if (params.type === "price") {
           orderData.price = params.amount; // 매수 금액
         } else {
           orderData.volume = params.amount; // 매수 수량
@@ -345,8 +345,10 @@ export class UpbitAdapter extends ExchangeAdapter {
         }
       } else {
         // 매도
-        orderData.volume = params.amount; // 매도 수량
-        if (params.type === "limit") {
+        if (params.type === "market") {
+          orderData.volume = params.amount; // 매도 수량
+        } else {
+          orderData.volume = params.amount; // 매도 수량
           orderData.price = params.price;
         }
       }
@@ -391,15 +393,33 @@ export class UpbitAdapter extends ExchangeAdapter {
       const order = response.data;
       const symbolFromMarket = order.market.replace("KRW-", "");
 
+      // trades 배열 집계
+      let totalFunds = 0;
+      let totalVolume = 0;
+      if (Array.isArray(order.trades)) {
+        for (const trade of order.trades) {
+          totalFunds += parseFloat(trade.funds);
+          totalVolume += parseFloat(trade.volume);
+        }
+      }
+
+      // 평균 가격 계산 (totalFunds / totalVolume)
+      const avgPrice =
+        totalVolume > 0 ? totalFunds / totalVolume : parseFloat(order?.price);
+
       return {
         id: order.uuid,
         symbol: symbolFromMarket,
-        type: order.ord_type === "market" ? "market" : "limit",
+        type: order.ord_type,
         side: order.side,
-        amount: parseFloat(order.volume),
-        filled: parseFloat(order?.trades[0]?.funds),
-        price: parseFloat(order?.trades[0]?.price),
-        fee: parseFloat(order.paid_fee),
+        amount: parseFloat(order.executed_volume),
+        filled: totalFunds,
+        price: avgPrice,
+        fee: parseFloat(
+          order?.reserved_fee && order.reserved_fee !== "0"
+            ? order.reserved_fee
+            : order.paid_fee
+        ),
         timestamp: new Date(order.created_at).getTime(),
       };
     } catch (error: any) {
@@ -436,5 +456,14 @@ export class UpbitAdapter extends ExchangeAdapter {
       console.error(`Error fetching ${symbol} ticker from Upbit:`, error);
       throw error;
     }
+  }
+
+  async getLotSize(symbol: string): Promise<number | null> {
+    // Upbit는 고정된 최소 주문 단위를 제공하지 않음
+    return null;
+  }
+
+  async setLeverage(symbol: string, leverage: string): Promise<any> {
+    throw new Error("Upbit does not support leverage settings.");
   }
 }
