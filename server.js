@@ -52,6 +52,17 @@ app.use(
   })
 );
 
+// Swagger 설정 (개발 환경에서만)
+if (DEVELOPMENT) {
+  try {
+    const { setupSwagger } = await import("./swagger.setup.js");
+    setupSwagger(app);
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.warn("⚠️ Swagger setup failed:", error.message);
+  }
+}
+
 if (DEVELOPMENT) {
   console.log("Starting development server");
   try {

@@ -4,7 +4,10 @@
     "server.js",
     "vite.config.ts",
     "app/core/redisCache.ts",
-    "app/utils/redis.server.ts"
+    "app/utils/redis.server.ts",
+    "swagger.config.ts",
+    "swagger.setup.ts",
+    "swagger.annotations.ts"
   ],
   "compilerOptions": {
     "composite": true,
