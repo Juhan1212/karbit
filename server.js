@@ -52,17 +52,6 @@ app.use(
   })
 );
 
-// Swagger 설정 (개발 환경에서만)
-if (DEVELOPMENT) {
-  try {
-    const { setupSwagger } = await import("./swagger.setup.js");
-    setupSwagger(app);
-  } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    console.warn("⚠️ Swagger setup failed:", error.message);
-  }
-}
-
 if (DEVELOPMENT) {
   console.log("Starting development server");
   try {
@@ -71,6 +60,17 @@ if (DEVELOPMENT) {
         server: { middlewareMode: true },
       })
     );
+
+    // Swagger 설정 (Vite를 통해 TypeScript 파일 로드) - React Router보다 먼저 등록
+    try {
+      const swaggerModule =
+        await viteDevServer.ssrLoadModule("./swagger.setup.ts");
+      await swaggerModule.setupSwagger(app);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.warn("⚠️ Swagger setup failed:", error.message);
+    }
+
     app.use(viteDevServer.middlewares);
     app.use(async (req, res, next) => {
       try {

@@ -232,6 +232,20 @@
       "when": 1757233583527,
       "tag": "0032_hard_true_believers",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1759942928254,
+      "tag": "0033_grey_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1760014289407,
+      "tag": "0034_thick_slipstream",
+      "breakpoints": true
     }
   ]
 }

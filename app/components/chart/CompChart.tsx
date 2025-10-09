@@ -109,7 +109,7 @@ export const CompChart = ({
             <span
               style={{ color: "#eee", marginTop: "16px", fontSize: "1.2rem" }}
             >
-              재연결 중...
+              `{koreanEx} 정책상 10초의 재연결 딜레이가 발생합니다...`
             </span>
           </div>
           <style>{`

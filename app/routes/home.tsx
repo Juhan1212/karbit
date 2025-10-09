@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import type { Route } from "./+types/home";
 import { useNavigate } from "react-router";
 import { Button } from "../components/button";
@@ -10,16 +10,6 @@ import {
   CardTitle,
 } from "../components/card";
 import { Badge } from "../components/badge";
-// import { LightweightChart } from "../LightweightChart";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../components/table";
-import { ScrollArea } from "../components/scroll-area";
 import {
   TrendingUp,
   Bot,

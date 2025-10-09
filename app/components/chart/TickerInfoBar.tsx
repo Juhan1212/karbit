@@ -9,6 +9,7 @@ import type {
 import type { CryptoOption } from "../../stores/cryptoOptionState";
 import { useCryptoOptionsStore } from "../../stores/cryptoOptionState";
 import { createWebSocketStore } from "../../stores/chartState";
+import { useChartDataStore } from "../../stores/chartDataStore";
 
 const TickerInfoBar = memo(
   ({
@@ -37,7 +38,10 @@ const TickerInfoBar = memo(
     });
     const { cryptoOptions, setCryptoOption } = useCryptoOptionsStore();
 
-    const formatNumber = (num: string | null, decimal: number) =>
+    // ChartDataStore에서 테더 가격과 실시간 환율 가져오기
+    const { tetherPrice, exchangeRate } = useChartDataStore();
+
+    const formatNumber = (num: string | number | null, decimal: number) =>
       num !== null ? Number(num).toFixed(decimal) : "--";
 
     const priceChangeStatus =
@@ -154,16 +158,12 @@ const TickerInfoBar = memo(
         <div className="border-bar" />
         <div className="price-container">
           <div className="price-wrapper">
-            <span className="info-label">Mark</span>
-            <span className="info-value">
-              {formatNumber(tickerData.mark_price, 2)}
-            </span>
+            <span className="info-label">테더가격</span>
+            <span className="info-value">{formatNumber(tetherPrice, 2)}</span>
           </div>
           <div className="price-wrapper">
-            <span className="info-label">Index</span>
-            <span className="info-value">
-              {formatNumber(tickerData.index_price, 2)}
-            </span>
+            <span className="info-label">실시간환율</span>
+            <span className="info-value">{formatNumber(exchangeRate, 2)}</span>
           </div>
           <div className="change-status-display">
             <div className="status-wrapper">

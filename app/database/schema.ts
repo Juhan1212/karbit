@@ -197,6 +197,38 @@ export const coinsExchanges = pgTable(
 );
 
 /* ================================
+   뉴스 시스템
+================================ */
+export const exchangeNews = pgTable(
+  "exchange_news",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    title: text().notNull(),
+    content: text(),
+    exchange: varchar({ length: 50 }).notNull(),
+    type: varchar({ length: 20 }).notNull(), // 'listing', 'delisting', 'announcement'
+    coinSymbol: varchar("coin_symbol", { length: 20 }),
+    originalUrl: text("original_url").notNull(),
+    publishedAt: timestamp("published_at").notNull(),
+    scrapedAt: timestamp("scraped_at").notNull().defaultNow(),
+    contentHash: varchar("content_hash", { length: 64 }).notNull().unique(), // 중복 제거용 해시
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_exchange_news_exchange").on(table.exchange),
+    index("idx_exchange_news_type").on(table.type),
+    index("idx_exchange_news_published").on(table.publishedAt),
+    index("idx_exchange_news_scraped").on(table.scrapedAt),
+    index("idx_exchange_news_coin_symbol").on(table.coinSymbol),
+    check(
+      "type_check",
+      sql`${table.type} IN ('listing', 'delisting', 'announcement')`
+    ),
+  ]
+);
+
+/* ================================
    4. 전략 히스토리
 ================================ */
 export const strategies = pgTable(

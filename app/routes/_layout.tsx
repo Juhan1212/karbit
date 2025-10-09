@@ -56,6 +56,10 @@ export default function AppLayout() {
       exchanges: "/exchanges",
       autotrading: "/autotrading",
       plans: "/plans",
+      news: "/news",
+      leaderboard: "/leaderboard",
+      community: "/community",
+      payback: "/payback",
     };
 
     navigate(routes[tab] || "/dashboard");

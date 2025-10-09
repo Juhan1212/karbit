@@ -13,6 +13,10 @@ import {
   Home,
   LogOut,
   User,
+  Newspaper,
+  Trophy,
+  MessageCircle,
+  Gift,
 } from "lucide-react";
 
 interface AppSidebarProps {
@@ -62,6 +66,10 @@ export function AppSidebar({
     { id: "exchanges", label: "거래소 연동", icon: Link2 },
     { id: "autotrading", label: "자동매매 설정", icon: TrendingUp },
     { id: "plans", label: "플랜 관리", icon: Crown },
+    { id: "news", label: "거래소 뉴스", icon: Newspaper },
+    { id: "leaderboard", label: "실시간 워뇨띠 포지션", icon: Trophy },
+    { id: "community", label: "커뮤니티", icon: MessageCircle },
+    { id: "payback", label: "거래소 페이백", icon: Gift },
   ];
 
   const sidebarClasses = isMobile

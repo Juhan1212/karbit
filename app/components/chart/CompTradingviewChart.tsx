@@ -10,7 +10,6 @@ import {
   type HistogramData,
   LineSeries,
   type LineData,
-  type IPaneApi,
   type MouseEventHandler,
   type MouseEventParams,
   type LogicalRangeChangeEventHandler,
@@ -18,7 +17,6 @@ import {
   createSeriesMarkers,
   createImageWatermark,
 } from "lightweight-charts";
-import { MACD, RSI } from "technicalindicators";
 import { getTimeValue } from "../../helpers/time";
 import type { CandleData } from "../../helpers/candle";
 import { CandleDatafeed } from "../../helpers/chart.datafeed";
@@ -37,6 +35,7 @@ import { isBarData, isCandleBarData } from "../../helpers/guard";
 import { useMarkerStore } from "../../stores/markerState";
 import { usePriceStore } from "../../stores/priceState";
 import { createWebSocketStore } from "../../stores/chartState";
+import { useChartDataStore } from "../../stores/chartDataStore";
 
 const CompTradingviewChart = memo(
   ({
@@ -60,6 +59,9 @@ const CompTradingviewChart = memo(
     // PositionHistory컴포넌트에서 전역 상태로 관리하는 마커를 가져옴
     const { markers } = useMarkerStore();
 
+    // ChartDataStore에서 차트 데이터 업데이트 함수를 가져옴
+    const { updateChartData } = useChartDataStore();
+
     // 각 거래소의 웹소켓 스토어에서 메시지 리스너를 가져옴
     const {
       addMessageListener: addMessageListener1,
@@ -73,6 +75,9 @@ const CompTradingviewChart = memo(
     // 리렌더링되어도 차트가 초기화되지 않도록 ref로 관리
     const chartContainerRef = useRef<HTMLElement | null>(null);
     const legendRef = useRef<HTMLDivElement | null>(null);
+    const volumeLegendRef = useRef<HTMLDivElement | null>(null);
+    const volumeEx1LegendRef = useRef<HTMLDivElement | null>(null);
+    const volumeEx2LegendRef = useRef<HTMLDivElement | null>(null);
     const chartRef = useRef<IChartApi | null>(null);
     const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
     const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
@@ -99,14 +104,6 @@ const CompTradingviewChart = memo(
     const [candleFetcherData, setCandleFetcherData] =
       useState<CandleData | null>(null);
     const [candleFetcherError, setCandleFetcherError] = useState<unknown>(null);
-
-    // MACD, RSI 추가
-    const [showMACD] = useState(false);
-    const [showRSI] = useState(false);
-    const macdSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
-    const macdPaneRef = useRef<IPaneApi<Time> | null>(null);
-    const rsiSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-    const rsiPaneRef = useRef<IPaneApi<Time> | null>(null);
 
     // 웹소켓 useEffect 최적화를 위한 ref 추가
     const crosshairVisibleRef = useRef<boolean>(false);
@@ -484,47 +481,27 @@ const CompTradingviewChart = memo(
             datafeedRef.current.getData()
           );
 
-        if (macdSeriesRef.current) {
-          // 브라우저 타임존 오프셋을 고려해서 시간을 조정
-          const macdInput = {
-            values: adjusted_renewedData.candleData.map(
-              (candle) => candle.close
-            ),
-            fastPeriod: 12,
-            slowPeriod: 26,
-            signalPeriod: 9,
-            SimpleMAOscillator: false,
-            SimpleMASignal: false,
-          };
-          const macdData = MACD.calculate(macdInput);
-          const macdHistogramData: HistogramData[] = macdData.map(
-            (macd, index) => ({
-              time: adjusted_renewedData.candleData[index + 25].time as Time,
-              value: macd.histogram ? macd.histogram : 0,
-            })
-          );
-          macdSeriesRef.current.setData(macdHistogramData);
-        }
-
-        if (rsiSeriesRef.current) {
-          const rsiInput = {
-            values: adjusted_renewedData.candleData.map(
-              (candle) => candle.close
-            ),
-            period: 14,
-          };
-          const rsiData = RSI.calculate(rsiInput);
-          const rsiLineData: LineData[] = rsiData.map((rsi, index) => ({
-            time: adjusted_renewedData.candleData[index + 13].time as Time,
-            value: rsi,
-          }));
-          rsiSeriesRef.current.setData(rsiLineData);
+        // ChartDataStore 업데이트 - 테더 가격과 실시간 환율 전달
+        if (datafeedRef.current) {
+          const currentData = datafeedRef.current.getData();
+          if (
+            currentData.candleData.length > 0 &&
+            currentData.usdtCandleData &&
+            currentData.usdtCandleData.length > 0
+          ) {
+            const exchangeRate =
+              currentData.candleData[currentData.candleData.length - 1].close;
+            const tetherPrice =
+              currentData.usdtCandleData[currentData.usdtCandleData.length - 1]
+                .value;
+            updateChartData({ tetherPrice, exchangeRate });
+          }
         }
 
         // 범례 업데이트 : 차트에 커서가 없을 때만 업데이트
         if (!crosshairVisibleRef.current) updateLegend(undefined);
       },
-      [updateLegend]
+      [updateLegend, updateChartData]
     );
 
     // 거래소1 메시지 핸들러
@@ -804,6 +781,25 @@ const CompTradingviewChart = memo(
       );
       volumeSeriesRef.current.moveToPane(1); // 거래량 시리즈를 별도의 Pane으로 이동
 
+      // Total volume pane에 legend 추가
+      const volumeLegend = document.createElement("div");
+      volumeLegend.style.cssText = `
+        position: absolute;
+        left: 12px;
+        z-index: 10;
+        font-size: 12px;
+        font-family: Pretendard Variable;
+        font-weight: 300;
+        color: #00CE84;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 4px 8px;
+        border-radius: 4px;
+        pointer-events: none;
+      `;
+      volumeLegend.textContent = `Total Volume`;
+      volumeLegendRef.current = volumeLegend;
+      chartContainerRef.current?.appendChild(volumeLegend);
+
       // 거래소1 거래량 시리즈 추가
       volumeSeriesEx1Ref.current = chartRef.current.addSeries(
         HistogramSeries,
@@ -817,6 +813,25 @@ const CompTradingviewChart = memo(
         2
       );
       volumeSeriesEx1Ref.current.moveToPane(2);
+
+      // 거래소1 volume pane에 legend 추가
+      const volumeEx1Legend = document.createElement("div");
+      volumeEx1Legend.style.cssText = `
+        position: absolute;
+        left: 12px;
+        z-index: 10;
+        font-size: 12px;
+        font-family: Pretendard Variable;
+        font-weight: 300;
+        color: #FFB347;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 4px 8px;
+        border-radius: 4px;
+        pointer-events: none;
+      `;
+      volumeEx1Legend.textContent = `${exchange1} Volume`;
+      volumeEx1LegendRef.current = volumeEx1Legend;
+      chartContainerRef.current?.appendChild(volumeEx1Legend);
 
       // 거래소2 거래량 시리즈 추가
       volumeSeriesEx2Ref.current = chartRef.current.addSeries(
@@ -832,6 +847,25 @@ const CompTradingviewChart = memo(
       );
       volumeSeriesEx2Ref.current.moveToPane(3);
 
+      // 거래소2 volume pane에 legend 추가
+      const volumeEx2Legend = document.createElement("div");
+      volumeEx2Legend.style.cssText = `
+        position: absolute;
+        left: 12px;
+        z-index: 10;
+        font-size: 12px;
+        font-family: Pretendard Variable;
+        font-weight: 300;
+        color: #6495ED;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 4px 8px;
+        border-radius: 4px;
+        pointer-events: none;
+      `;
+      volumeEx2Legend.textContent = `${exchange2} Volume`;
+      volumeEx2LegendRef.current = volumeEx2Legend;
+      chartContainerRef.current?.appendChild(volumeEx2Legend);
+
       // USDT 가격을 표시하기 위한 라인 시리즈 추가
       lineSeriesRef.current = chartRef.current.addSeries(LineSeries, {
         color: "#2962FF",
@@ -844,6 +878,41 @@ const CompTradingviewChart = memo(
           bottom: 0,
         },
       });
+
+      // Volume pane legend 위치 업데이트 함수
+      const updateVolumeLegendPosition = () => {
+        if (!chartRef.current) return;
+
+        const panes = chartRef.current.panes();
+        if (panes.length < 4) return;
+
+        // Pane 1 (total volume)의 위치 계산
+        if (volumeLegendRef.current) {
+          let topPositionVolume = 0;
+          for (let i = 0; i < 1; i++) {
+            topPositionVolume += panes[i].getHeight();
+          }
+          volumeLegendRef.current.style.top = `${topPositionVolume + 12}px`;
+        }
+
+        // Pane 2 (volumeEx1)의 위치 계산
+        if (volumeEx1LegendRef.current) {
+          let topPositionEx1 = 0;
+          for (let i = 0; i < 2; i++) {
+            topPositionEx1 += panes[i].getHeight();
+          }
+          volumeEx1LegendRef.current.style.top = `${topPositionEx1 + 12}px`;
+        }
+
+        // Pane 3 (volumeEx2)의 위치 계산
+        if (volumeEx2LegendRef.current) {
+          let topPositionEx2 = 0;
+          for (let i = 0; i < 3; i++) {
+            topPositionEx2 += panes[i].getHeight();
+          }
+          volumeEx2LegendRef.current.style.top = `${topPositionEx2 + 12}px`;
+        }
+      };
 
       // 반응형 차트 크기 조정
       const resizeObserver = new ResizeObserver((entries) => {
@@ -861,15 +930,22 @@ const CompTradingviewChart = memo(
         const { width, height } = entries[0].contentRect;
         try {
           chart.applyOptions({ width, height });
-          volumeSeriesRef.current?.getPane()?.setStretchFactor(1);
-          volumeSeriesEx1Ref.current?.getPane()?.setStretchFactor(1);
-          volumeSeriesEx2Ref.current?.getPane()?.setStretchFactor(1);
+          chartRef.current?.panes().forEach((pane) => {
+            if (pane.paneIndex() === 0) pane.setStretchFactor(5);
+            else pane.setStretchFactor(1);
+          });
+
+          // Volume legend 위치 업데이트
+          updateVolumeLegendPosition();
         } catch {
           resizeObserver.disconnect();
         }
       });
 
       resizeObserver.observe(chartContainerRef.current);
+
+      // 초기 위치 설정
+      setTimeout(updateVolumeLegendPosition, 100);
 
       setInitialFetchCompleted(false);
 
@@ -1041,6 +1117,15 @@ const CompTradingviewChart = memo(
         resizeObserver.disconnect();
         if (legendRef.current && chartContainer) {
           chartContainer.removeChild(legendRef.current);
+        }
+        if (volumeLegendRef.current && chartContainer) {
+          chartContainer.removeChild(volumeLegendRef.current);
+        }
+        if (volumeEx1LegendRef.current && chartContainer) {
+          chartContainer.removeChild(volumeEx1LegendRef.current);
+        }
+        if (volumeEx2LegendRef.current && chartContainer) {
+          chartContainer.removeChild(volumeEx2LegendRef.current);
         }
         chartRef.current?.unsubscribeCrosshairMove(crosshairHandler);
         if (chartRef.current) {
@@ -1243,38 +1328,18 @@ const CompTradingviewChart = memo(
         adjusted_renewedData.usdtCandleData as LineData[]
       );
 
-      if (macdSeriesRef.current) {
-        // 브라우저 타임존 오프셋을 고려해서 시간을 조정
-        const macdInput = {
-          values: adjusted_renewedData.candleData.map((candle) => candle.close),
-          fastPeriod: 12,
-          slowPeriod: 26,
-          signalPeriod: 9,
-          SimpleMAOscillator: false,
-          SimpleMASignal: false,
-        };
-        const macdData = MACD.calculate(macdInput);
-        const macdHistogramData: HistogramData[] = macdData.map(
-          (macd, index) => ({
-            time: adjusted_renewedData.candleData[index + 25].time as Time,
-            value: macd.histogram ? macd.histogram : 0,
-          })
-        );
-        macdSeriesRef.current.setData(macdHistogramData);
-      }
-
-      // RSI 계산 및 업데이트
-      if (rsiSeriesRef.current) {
-        const rsiInput = {
-          values: adjusted_renewedData.candleData.map((candle) => candle.close),
-          period: 14,
-        };
-        const rsiData = RSI.calculate(rsiInput);
-        const rsiLineData: LineData[] = rsiData.map((rsi, index) => ({
-          time: adjusted_renewedData.candleData[index + 13].time as Time,
-          value: rsi,
-        }));
-        rsiSeriesRef.current.setData(rsiLineData);
+      // ChartDataStore 업데이트 - fetcher로 데이터를 가져온 경우에도 테더 가격과 실시간 환율 전달
+      if (
+        renewedData.candleData.length > 0 &&
+        renewedData.usdtCandleData &&
+        renewedData.usdtCandleData.length > 0
+      ) {
+        const exchangeRate =
+          renewedData.candleData[renewedData.candleData.length - 1].close;
+        const tetherPrice =
+          renewedData.usdtCandleData[renewedData.usdtCandleData.length - 1]
+            .value;
+        updateChartData({ tetherPrice, exchangeRate });
       }
 
       // 범례 업데이트
@@ -1377,111 +1442,6 @@ const CompTradingviewChart = memo(
         markersInstance.detach();
       };
     }, [markers]);
-
-    // MACD 시리즈 추가 및 업데이트
-    useEffect(() => {
-      if (
-        !chartContainerRef.current ||
-        !chartRef.current ||
-        !datafeedRef.current
-      )
-        return;
-
-      const macdPaneIdx = chartRef.current.panes().length;
-
-      // MACD 시리즈 추가
-      if (showMACD) {
-        macdSeriesRef.current = chartRef.current.addSeries(HistogramSeries, {
-          color: "#FF6F61",
-          priceFormat: {
-            type: "volume",
-          },
-          priceScaleId: "",
-        });
-        macdSeriesRef.current.moveToPane(macdPaneIdx); // MACD 시리즈를 별도의 Pane으로 이동
-        macdPaneRef.current = chartRef.current.panes()[macdPaneIdx];
-        macdPaneRef.current.setHeight(100);
-
-        // 브라우저 타임존 오프셋을 고려해서 시간을 조정
-        const adjusted_renewedData =
-          datafeedRef.current.adjustDataByBrowserTimezone(
-            datafeedRef.current.getData()
-          );
-
-        const macdInput = {
-          values: adjusted_renewedData.candleData.map((candle) => candle.close),
-          fastPeriod: 12,
-          slowPeriod: 26,
-          signalPeriod: 9,
-          SimpleMAOscillator: false,
-          SimpleMASignal: false,
-        };
-        const macdData = MACD.calculate(macdInput);
-        const macdHistogramData: HistogramData[] = macdData.map(
-          (macd, index) => ({
-            time: adjusted_renewedData.candleData[index + 25].time as Time,
-            value: macd.histogram ? macd.histogram : 0,
-          })
-        );
-        macdSeriesRef.current.setData(macdHistogramData);
-      } else {
-        if (macdSeriesRef.current && macdPaneRef.current) {
-          chartRef.current?.removePane(macdPaneRef.current.paneIndex());
-          macdSeriesRef.current = null;
-          macdPaneRef.current = null;
-        }
-      }
-      chartRef.current.panes().forEach((pane) => {
-        pane.setHeight(100);
-      }); // 거래량 캔들스틱 차트 높이 조정 : 이렇게 안해주면 높이가 달라짐..
-    }, [showMACD]);
-
-    // RSI 시리즈 추가 및 업데이트
-    useEffect(() => {
-      if (
-        !chartContainerRef.current ||
-        !chartRef.current ||
-        !datafeedRef.current
-      )
-        return;
-
-      const rsiPaneIdx = chartRef.current.panes().length;
-
-      // RSI 시리즈 추가
-      if (showRSI) {
-        rsiSeriesRef.current = chartRef.current.addSeries(LineSeries, {
-          color: "#1E90FF",
-          lineWidth: 2,
-        });
-        rsiSeriesRef.current.moveToPane(rsiPaneIdx); // RSI 시리즈를 별도의 Pane으로 이동
-        rsiPaneRef.current = chartRef.current.panes()[rsiPaneIdx];
-        rsiPaneRef.current.setHeight(100); // RSI Pane 높이 조정
-
-        // 브라우저 타임존 오프셋을 고려해서 시간을 조정
-        const adjusted_renewedData =
-          datafeedRef.current!.adjustDataByBrowserTimezone(
-            datafeedRef.current.getData()
-          );
-
-        const rsiInput = {
-          values: adjusted_renewedData.candleData.map((candle) => candle.close),
-          period: 14,
-        };
-        const rsiData = RSI.calculate(rsiInput);
-        const rsiLineData: LineData[] = rsiData.map((rsi, index) => ({
-          time: adjusted_renewedData.candleData[index + 13].time as Time,
-          value: rsi,
-        }));
-        rsiSeriesRef.current.setData(rsiLineData);
-      } else {
-        if (rsiSeriesRef.current && rsiPaneRef.current) {
-          chartRef.current?.removePane(rsiPaneRef.current.paneIndex());
-          rsiSeriesRef.current = null;
-          rsiPaneRef.current = null;
-        }
-      }
-      chartRef.current.panes().forEach((pane) => pane.setHeight(100)); // 거래량 캔들스틱 차트 높이 조정 : 이렇게 안해주면 높이가 달라짐..
-    }, [showRSI]);
 
     return (
       <div className="chart-content">

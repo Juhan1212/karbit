@@ -26,6 +26,7 @@ export default [
   route("/api/premium/stream", "routes/api.premium.stream.ts"),
   route("/api/proxy", "routes/api.proxy.ts"),
   route("/api/proxy/position/price", "routes/api.proxy.position.price.ts"),
+  route("/api/news", "routes/api.news.ts"),
   route("/terms-service", "routes/terms-service.tsx"),
   route("/privacy-policy", "routes/privacy-policy.tsx"),
   layout("routes/_layout.tsx", [
@@ -33,5 +34,6 @@ export default [
     route("/exchanges", "routes/exchanges.tsx"),
     route("/autotrading", "routes/autotrading.tsx"),
     route("/plans", "routes/plans.tsx"),
+    route("/news", "routes/news.tsx"),
   ]),
 ] satisfies RouteConfig;
