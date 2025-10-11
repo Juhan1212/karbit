@@ -35,26 +35,39 @@ export class UpbitCrawler implements CrawlerInterface {
       );
       await page.setExtraHTTPHeaders({
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
       });
 
       // CSR(Client Side Rendering) 대응: JavaScript 실행을 기다림
+      console.log(`[${this.name}] Navigating to ${this.noticeUrl}...`);
       await page.goto(this.noticeUrl, {
         waitUntil: "networkidle0", // 네트워크가 완전히 idle 상태가 될 때까지 대기
         timeout: 60000,
       });
+      console.log(`[${this.name}] Page loaded, waiting for content...`);
 
       // 공지사항 링크가 렌더링될 때까지 명시적으로 대기
       try {
-        await page.waitForSelector("a.css-guxf6x", { timeout: 10000 });
+        await page.waitForSelector("a.css-guxf6x", { timeout: 15000 });
+        console.log(`[${this.name}] Primary selector found successfully`);
       } catch (selectorError) {
         console.warn(
           `[${this.name}] Primary selector not found, trying alternative...`
         );
         // 대체 셀렉터 시도
-        await page.waitForSelector("a[href*='service_center/notice']", {
-          timeout: 10000,
-        });
+        try {
+          await page.waitForSelector("a[href*='service_center/notice']", {
+            timeout: 15000,
+          });
+          console.log(`[${this.name}] Alternative selector found`);
+        } catch (altError) {
+          console.error(`[${this.name}] Both selectors failed!`);
+        }
       }
+
+      // EC2 환경에서 추가 대기 시간 (성능이 낮을 수 있음)
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       const html = await page.content();
       await browser.close();
@@ -70,11 +83,34 @@ export class UpbitCrawler implements CrawlerInterface {
 
       // 셀렉터 찾기
       const linkElements = $("a.css-guxf6x");
+      console.log(
+        `[${this.name}] Found ${linkElements.length} items with primary selector`
+      );
+
       const selector =
         linkElements.length > 0 ? "a.css-guxf6x" : "a[class*='guxf6x']";
 
+      if (linkElements.length === 0) {
+        // 대체 셀렉터로 다시 시도
+        const altElements = $("a[class*='guxf6x']");
+        console.log(
+          `[${this.name}] Found ${altElements.length} items with alternative selector`
+        );
+
+        // HTML 구조 디버깅
+        const allLinks = $("a");
+        console.log(`[${this.name}] Total links in page: ${allLinks.length}`);
+        console.log(
+          `[${this.name}] First 3 link hrefs:`,
+          allLinks
+            .slice(0, 3)
+            .map((i, el) => $(el).attr("href"))
+            .get()
+        );
+      }
+
       // 업비트 공지사항 구조 파싱
-      $(selector).each((_, element) => {
+      $(selector).each((index, element) => {
         try {
           const $item = $(element);
 
@@ -91,10 +127,25 @@ export class UpbitCrawler implements CrawlerInterface {
           const category = $item.find(".css-v2zw8h .css-1s5b0h5").text().trim();
 
           // 제목 추출: span 내부의 전체 텍스트를 가져옴
+          let title = "";
           const titleSpan = $item.find("span.css-qju2q6");
-          const title = titleSpan.text().trim();
 
-          if (!title) return;
+          if (titleSpan.length > 0) {
+            // 일반 공지사항
+            title = titleSpan.text().trim();
+          } else {
+            // 고정 공지사항 - 다른 구조 시도
+            const allText = $item.text().trim();
+            // 카테고리 텍스트 제거
+            title = allText.replace(category, "").trim();
+          }
+
+          if (!title) {
+            console.log(
+              `[${this.name}] Item ${index + 1}: No title found, HTML: ${$item.html()?.substring(0, 200)}`
+            );
+            return;
+          }
 
           // 날짜는 현재 시간 사용
           const publishedAt = new Date();
