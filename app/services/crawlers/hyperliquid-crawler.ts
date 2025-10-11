@@ -20,7 +20,22 @@ export class HyperliquidCrawler implements CrawlerInterface {
       console.log(`[${this.name}] Starting crawl...`);
 
       // puppeteer로 SSR HTML을 받아옴
-      const browser = await puppeteer.launch({ headless: true });
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--no-first-run",
+          "--no-zygote",
+          "--single-process",
+        ],
+        executablePath:
+          process.env.PUPPETEER_EXECUTABLE_PATH ||
+          puppeteer.executablePath() ||
+          "/usr/bin/google-chrome-stable",
+      });
       const page = await browser.newPage();
       await page.setUserAgent(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -30,7 +45,7 @@ export class HyperliquidCrawler implements CrawlerInterface {
       });
       await page.goto(this.noticeUrl, {
         waitUntil: "networkidle2",
-        timeout: 20000,
+        timeout: 30000,
       });
       const html = await page.content();
       await browser.close();
