@@ -17,24 +17,41 @@ export class BithumbCrawler implements CrawlerInterface {
   private noticeUrl = "https://feed.bithumb.com/notice";
 
   async crawl(): Promise<CrawlerResult> {
+    let browser;
     try {
       console.log(`[${this.name}] Starting crawl...`);
 
       // puppeteer로 SSR HTML을 받아옴
-      const browser = await launchBrowser();
+      browser = await launchBrowser();
       const page = await browser.newPage();
+
+      // 페이지 detach 방지 설정
+      page.on("error", (error) => {
+        console.error(`[${this.name}] Page error:`, error);
+      });
+
       await page.setUserAgent(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       );
       await page.setExtraHTTPHeaders({
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
       });
+
+      // 더 안정적인 네비게이션 전략
       await page.goto(this.noticeUrl, {
-        waitUntil: "networkidle2",
-        timeout: 30000,
+        waitUntil: "domcontentloaded", // networkidle2보다 안정적
+        timeout: 40000,
       });
+
+      // 페이지 로드 대기
+      await page.waitForSelector("ul.NoticeContentList_notice-list__i337r", {
+        timeout: 10000,
+      });
+
       const html = await page.content();
       await browser.close();
+      browser = null;
+
       const $ = cheerio.load(html);
       const newsItems: NewsItem[] = [];
 
@@ -100,6 +117,14 @@ export class BithumbCrawler implements CrawlerInterface {
       console.log(`[${this.name}] Crawled ${newsItems.length} items`);
       return createSuccessResult(newsItems);
     } catch (error) {
+      // 브라우저 정리
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeError) {
+          console.error(`[${this.name}] Error closing browser:`, closeError);
+        }
+      }
       return createErrorResult(error, this.name);
     }
   }
