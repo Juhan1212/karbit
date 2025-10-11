@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import * as fs from "fs";
 import { NewsItem } from "../../database/news";
 import {
   CrawlerInterface,
@@ -28,28 +29,6 @@ export class UpbitCrawler implements CrawlerInterface {
       // 페이지 detach 방지 설정
       page.on("error", (error) => {
         console.error(`[${this.name}] Page error:`, error);
-      });
-
-      // 봇 감지 우회를 위한 추가 설정
-      await page.evaluateOnNewDocument(() => {
-        // webdriver 감지 방지
-        Object.defineProperty(navigator, "webdriver", {
-          get: () => false,
-        });
-
-        // Chrome 객체 추가 (일반 브라우저처럼)
-        (window as any).chrome = {
-          runtime: {},
-        };
-
-        // Permissions 쿼리 오버라이드
-        const originalQuery = window.navigator.permissions.query;
-        window.navigator.permissions.query = (parameters: any) =>
-          parameters.name === "notifications"
-            ? Promise.resolve({
-                state: Notification.permission,
-              } as PermissionStatus)
-            : originalQuery(parameters);
       });
 
       await page.setViewport({ width: 1920, height: 1080 });
@@ -99,9 +78,8 @@ export class UpbitCrawler implements CrawlerInterface {
         }
 
         // HTML을 파일로 저장 (디버깅용)
-        const html = await page.content();
-        const fs = require("fs");
-        fs.writeFileSync("upbit-ec2-debug.html", html);
+        const debugHtml = await page.content();
+        fs.writeFileSync("upbit-ec2-debug.html", debugHtml);
         console.log(
           `[${this.name}] Saved HTML to upbit-ec2-debug.html for debugging`
         );
@@ -125,23 +103,42 @@ export class UpbitCrawler implements CrawlerInterface {
         `[${this.name}] Found ${linkElements.length} items with primary selector`
       );
 
-      const selector =
-        linkElements.length > 0 ? "a.css-guxf6x" : "a[class*='guxf6x']";
+      // 셀렉터 우선순위: 1) css-guxf6x, 2) guxf6x 포함, 3) service_center/notice 링크
+      let selector = "";
+      let selectorElements;
 
-      if (linkElements.length === 0) {
-        // 대체 셀렉터로 다시 시도
+      if (linkElements.length > 0) {
+        selector = "a.css-guxf6x";
+        selectorElements = linkElements;
+      } else {
         const altElements = $("a[class*='guxf6x']");
         console.log(
-          `[${this.name}] Found ${altElements.length} items with alternative selector`
+          `[${this.name}] Found ${altElements.length} items with guxf6x pattern`
         );
 
+        if (altElements.length > 0) {
+          selector = "a[class*='guxf6x']";
+          selectorElements = altElements;
+        } else {
+          // 최후의 수단: href로 찾기
+          const hrefElements = $("a[href*='service_center/notice']");
+          console.log(
+            `[${this.name}] Found ${hrefElements.length} items with href pattern`
+          );
+          selector = "a[href*='service_center/notice']";
+          selectorElements = hrefElements;
+        }
+      }
+
+      if (!selector || selectorElements.length === 0) {
+        console.log(`[${this.name}] No items found with any selector`);
         // HTML 구조 디버깅
         const allLinks = $("a");
         console.log(`[${this.name}] Total links in page: ${allLinks.length}`);
         console.log(
-          `[${this.name}] First 3 link hrefs:`,
+          `[${this.name}] First 5 link hrefs:`,
           allLinks
-            .slice(0, 3)
+            .slice(0, 5)
             .map((i, el) => $(el).attr("href"))
             .get()
         );
