@@ -4,7 +4,34 @@
 
 EC2 인스턴스에서 Puppeteer를 실행할 때 Chrome을 찾을 수 없는 문제와 Upbit의 403 에러를 해결하기 위한 가이드입니다.
 
-## 1. Chrome 설치 (Amazon Linux 2 / Ubuntu 기준)
+## ⚡ 빠른 해결 방법
+
+### 옵션 1: 시스템 Chrome 설치 (권장)
+
+```bash
+# Amazon Linux 2
+sudo yum update -y
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+sudo yum install -y ./google-chrome-stable_current_x86_64.rpm
+google-chrome-stable --version
+
+# 코드가 자동으로 /usr/bin/google-chrome-stable을 찾습니다
+```
+
+### 옵션 2: Puppeteer Chrome만 설치
+
+```bash
+cd /path/to/karbit
+npx puppeteer browsers install chrome
+
+# 설치된 경로 확인
+ls -la ~/.cache/puppeteer/chrome/
+
+# 환경변수 설정 (선택)
+export PUPPETEER_EXECUTABLE_PATH=~/.cache/puppeteer/chrome/linux-*/chrome-linux64/chrome
+```
+
+## 1. Chrome 설치 (상세 가이드)
 
 ### Amazon Linux 2 / CentOS
 
@@ -19,6 +46,7 @@ sudo yum install -y ./google-chrome-stable_current_x86_64.rpm
 
 # 확인
 google-chrome-stable --version
+which google-chrome-stable
 ```
 
 ### Ubuntu / Debian
@@ -55,118 +83,88 @@ sudo apt-get install -y \
 google-chrome-stable --version
 ```
 
-## 2. Puppeteer Chrome 설치
+## 2. 프로젝트 재배포
 
 ```bash
-# 프로젝트 디렉토리에서
-npx puppeteer browsers install chrome
+cd /path/to/karbit
 
-# 또는 환경변수 설정 후 설치
-export PUPPETEER_SKIP_DOWNLOAD=false
-npm install puppeteer
-```
+# 최신 코드 가져오기
+git pull
 
-## 3. 환경 변수 설정
+# 의존성 설치 (필요시)
+npm install
 
-`.env` 파일에 추가하거나 PM2 ecosystem 파일에 설정:
-
-```bash
-# Chrome 실행 파일 경로 지정 (선택사항)
-PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
-
-# 또는
-PUPPETEER_EXECUTABLE_PATH=$(which google-chrome-stable)
-```
-
-## 4. PM2 Ecosystem 설정
-
-`ecosystem.config.js` 파일을 만들거나 수정:
-
-```javascript
-module.exports = {
-  apps: [
-    {
-      name: "news-crawler",
-      script: "news-crawler-service.ts",
-      interpreter: "node",
-      interpreter_args: "--loader tsx",
-      instances: 1,
-      autorestart: true,
-      watch: false,
-      max_memory_restart: "1G",
-      env: {
-        NODE_ENV: "production",
-        PUPPETEER_EXECUTABLE_PATH: "/usr/bin/google-chrome-stable",
-        // 또는 시스템에서 찾기
-        // PUPPETEER_EXECUTABLE_PATH: process.env.CHROME_PATH || '/usr/bin/google-chrome-stable'
-      },
-      error_file: "./logs/news-crawler-error.log",
-      out_file: "./logs/news-crawler-out.log",
-      log_date_format: "YYYY-MM-DD HH:mm:ss Z",
-    },
-  ],
-};
-```
-
-## 5. PM2로 실행
-
-```bash
-# ecosystem 파일로 실행
-pm2 start ecosystem.config.js
-
-# 또는 직접 실행
-pm2 start news-crawler-service.ts \
-  --interpreter node \
-  --interpreter-args "--loader tsx" \
-  --name news-crawler \
-  --env production \
-  --max-memory-restart 1G
-
-# 환경변수 설정하고 재시작
-pm2 restart news-crawler --update-env
+# PM2로 재시작
+pm2 restart news-crawler
 
 # 로그 확인
-pm2 logs news-crawler
-
-# 상태 확인
-pm2 status
+pm2 logs news-crawler --lines 50
 ```
 
-## 6. 테스트
+## 3. 환경 변수 설정 (선택사항)
+
+코드가 자동으로 Chrome을 찾지만, 특정 경로를 지정하고 싶다면:
 
 ```bash
-# Chrome 경로 확인
+# .env 파일에 추가
+echo "PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable" >> .env
+
+# PM2 재시작
+pm2 restart news-crawler --update-env
+```
+
+## 4. 테스트
+
+```bash
+# Chrome 설치 확인
 which google-chrome-stable
+google-chrome-stable --version
 
-# Chrome 실행 테스트
-google-chrome-stable --headless --disable-gpu --dump-dom https://www.google.com
+# Chrome 실행 테스트 (헤드리스 모드)
+google-chrome-stable --headless --disable-gpu --no-sandbox --dump-dom https://www.google.com
 
-# Node.js에서 Puppeteer 테스트
-node -e "const puppeteer = require('puppeteer'); (async () => { const browser = await puppeteer.launch({ headless: true, executablePath: '/usr/bin/google-chrome-stable', args: ['--no-sandbox', '--disable-setuid-sandbox'] }); console.log('Success!'); await browser.close(); })()"
+# PM2 로그로 크롤러 동작 확인
+pm2 logs news-crawler --lines 100
+
+# 다음 크롤링 주기까지 기다리거나 수동으로 재시작
+pm2 restart news-crawler
 ```
 
-## 7. 추가 문제 해결
+## 5. 문제 해결
 
-### Chrome이 실행되지 않는 경우
+### 여전히 Chrome을 찾지 못하는 경우
 
 ```bash
-# 권한 확인
+# 1. Chrome이 제대로 설치되었는지 확인
 ls -la /usr/bin/google-chrome-stable
 
-# 실행 권한 추가
+# 2. 실행 권한 확인 및 추가
 sudo chmod +x /usr/bin/google-chrome-stable
 
-# 심볼릭 링크 확인
-ls -la /usr/bin/google-chrome
+# 3. Chrome 경로를 환경변수로 직접 지정
+export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
+# 4. PM2 재시작
+pm2 restart news-crawler --update-env
+
+# 5. 로그에서 "[Puppeteer] Found" 메시지 확인
+pm2 logs news-crawler | grep Puppeteer
 ```
 
-### Upbit 403 에러 대처
+### Upbit 403 에러가 계속되는 경우
 
-Upbit API는 IP 기반 차단이나 Rate Limiting을 할 수 있습니다:
+코드에 재시도 로직이 추가되어 있지만, 계속 문제가 발생한다면:
 
-1. **요청 간격 조정**: 크롤링 주기를 늘림 (현재 10분으로 설정됨)
-2. **헤더 개선**: User-Agent와 Referer 헤더 추가 (이미 적용됨)
-3. **재시도 로직**: 실패 시 지수 백오프로 재시도
+```bash
+# 1. 크롤링 주기 늘리기 (news-crawler-service.ts에서 10분 → 30분)
+# setInterval의 10 * 60 * 1000을 30 * 60 * 1000으로 변경
+
+# 2. EC2 IP가 차단되었을 수 있음 - AWS 지원팀 문의 또는
+#    Upbit 크롤러를 임시로 비활성화
+
+# 3. Upbit 크롤러만 비활성화하려면 news-crawler-service.ts에서:
+# new UpbitCrawler(), 줄을 주석 처리
+```
 
 ### 메모리 부족 에러
 
@@ -181,7 +179,7 @@ sudo swapon /swapfile
 echo '/swapfile swap swap defaults 0 0' | sudo tee -a /etc/fstab
 ```
 
-## 8. 모니터링
+## 6. 모니터링
 
 ```bash
 # PM2 모니터링
@@ -194,32 +192,44 @@ pm2 logs news-crawler --lines 100
 pm2 describe news-crawler
 ```
 
-## 9. 체크리스트
+## 7. 코드 변경 사항 요약
 
-- [ ] Chrome/Chromium 설치 완료
+1. **`app/utils/puppeteer-config.ts` (신규)**
+   - Chrome 경로 자동 탐색 로직
+   - 시스템 Chrome → `which` 명령어 → Puppeteer 번들 순으로 탐색
+   - 공통 Puppeteer 설정
+
+2. **크롤러 수정**
+   - `bithumb-crawler.ts`: `launchBrowser()` 사용
+   - `hyperliquid-crawler.ts`: `launchBrowser()` 사용
+3. **Upbit 재시도 로직**
+   - `upbit-crawler.ts`: 403 에러 발생 시 최대 3회 재시도
+   - 지수 백오프 (2초, 4초, 6초)
+
+## 8. 체크리스트
+
+- [ ] EC2에 Chrome 설치 (`sudo yum install` 또는 `sudo apt-get install`)
 - [ ] `google-chrome-stable --version` 명령어 동작 확인
-- [ ] `npx puppeteer browsers install chrome` 실행
-- [ ] `.env` 파일에 `PUPPETEER_EXECUTABLE_PATH` 설정
-- [ ] PM2 ecosystem 파일 설정
-- [ ] PM2로 서비스 재시작
-- [ ] 로그 확인하여 에러 해결
+- [ ] 프로젝트 최신 코드 가져오기 (`git pull`)
+- [ ] PM2로 서비스 재시작 (`pm2 restart news-crawler`)
+- [ ] 로그에서 "[Puppeteer] Found" 메시지 확인
+- [ ] 크롤링이 정상 작동하는지 로그 모니터링
 
-## 10. 문제가 계속되는 경우
+## 9. 문제가 계속되는 경우
 
 ```bash
-# Puppeteer 캐시 삭제 후 재설치
-rm -rf ~/.cache/puppeteer
-rm -rf node_modules/puppeteer
-npm install puppeteer
+# 1. Chrome 완전히 재설치
+sudo yum remove -y google-chrome-stable
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+sudo yum install -y ./google-chrome-stable_current_x86_64.rpm
 
-# Chrome 재설치
-npx puppeteer browsers install chrome
-
-# 환경변수 확인
-pm2 env 0
-
-# 서비스 재시작
+# 2. Node.js 프로세스 완전 종료 후 재시작
 pm2 delete news-crawler
-pm2 start ecosystem.config.js
+pm2 flush  # 로그 초기화
+pm2 start news-crawler-service.ts --name news-crawler --interpreter node --interpreter-args "--loader tsx"
 pm2 save
+
+# 3. 로그로 Chrome 경로 확인
+pm2 logs news-crawler | grep -i chrome
+pm2 logs news-crawler | grep -i puppeteer
 ```
