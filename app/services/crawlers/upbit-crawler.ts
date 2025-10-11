@@ -30,6 +30,29 @@ export class UpbitCrawler implements CrawlerInterface {
         console.error(`[${this.name}] Page error:`, error);
       });
 
+      // 봇 감지 우회를 위한 추가 설정
+      await page.evaluateOnNewDocument(() => {
+        // webdriver 감지 방지
+        Object.defineProperty(navigator, "webdriver", {
+          get: () => false,
+        });
+
+        // Chrome 객체 추가 (일반 브라우저처럼)
+        (window as any).chrome = {
+          runtime: {},
+        };
+
+        // Permissions 쿼리 오버라이드
+        const originalQuery = window.navigator.permissions.query;
+        window.navigator.permissions.query = (parameters: any) =>
+          parameters.name === "notifications"
+            ? Promise.resolve({
+                state: Notification.permission,
+              } as PermissionStatus)
+            : originalQuery(parameters);
+      });
+
+      await page.setViewport({ width: 1920, height: 1080 });
       await page.setUserAgent(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       );
@@ -47,27 +70,42 @@ export class UpbitCrawler implements CrawlerInterface {
       });
       console.log(`[${this.name}] Page loaded, waiting for content...`);
 
-      // 공지사항 링크가 렌더링될 때까지 명시적으로 대기
-      try {
-        await page.waitForSelector("a.css-guxf6x", { timeout: 15000 });
-        console.log(`[${this.name}] Primary selector found successfully`);
-      } catch (selectorError) {
-        console.warn(
-          `[${this.name}] Primary selector not found, trying alternative...`
-        );
-        // 대체 셀렉터 시도
-        try {
-          await page.waitForSelector("a[href*='service_center/notice']", {
-            timeout: 15000,
-          });
-          console.log(`[${this.name}] Alternative selector found`);
-        } catch (altError) {
-          console.error(`[${this.name}] Both selectors failed!`);
-        }
-      }
+      // EC2 환경에서 추가 대기 시간 (CSR 완전 렌더링 보장)
+      await new Promise((resolve) => setTimeout(resolve, 5000));
 
-      // EC2 환경에서 추가 대기 시간 (성능이 낮을 수 있음)
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Puppeteer로 직접 요소 확인 (Cheerio 전에)
+      const itemsFoundByPuppeteer = await page.evaluate(() => {
+        const items = document.querySelectorAll("a.css-guxf6x");
+        return items.length;
+      });
+      console.log(
+        `[${this.name}] Puppeteer found ${itemsFoundByPuppeteer} items with primary selector`
+      );
+
+      if (itemsFoundByPuppeteer === 0) {
+        // 다른 셀렉터들도 시도
+        const altSelectors = [
+          'a[class*="guxf6x"]',
+          'a[href*="service_center/notice"]',
+          'div[class*="Notice"] a',
+          ".notice-list a",
+        ];
+
+        for (const sel of altSelectors) {
+          const count = await page.evaluate((selector) => {
+            return document.querySelectorAll(selector).length;
+          }, sel);
+          console.log(`[${this.name}] Selector "${sel}" found ${count} items`);
+        }
+
+        // HTML을 파일로 저장 (디버깅용)
+        const html = await page.content();
+        const fs = require("fs");
+        fs.writeFileSync("upbit-ec2-debug.html", html);
+        console.log(
+          `[${this.name}] Saved HTML to upbit-ec2-debug.html for debugging`
+        );
+      }
 
       const html = await page.content();
       await browser.close();

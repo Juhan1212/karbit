@@ -82,6 +82,11 @@ export async function launchBrowser() {
       "--single-process",
       "--disable-accelerated-2d-canvas",
       "--disable-software-rasterizer",
+      // 봇 감지 우회 추가 args
+      "--disable-blink-features=AutomationControlled",
+      "--disable-features=IsolateOrigins,site-per-process",
+      "--disable-web-security",
+      "--window-size=1920,1080",
     ],
   });
 }
