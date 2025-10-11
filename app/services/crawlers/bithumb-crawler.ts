@@ -43,12 +43,13 @@ export class BithumbCrawler implements CrawlerInterface {
         timeout: 40000,
       });
 
-      // 페이지 로드 대기
-      await page.waitForSelector("ul.NoticeContentList_notice-list__i337r", {
-        timeout: 10000,
-      });
+      // // 페이지 로드 대기
+      // await page.waitForSelector("ul.NoticeContentList_notice-list__i337r", {
+      //   timeout: 10000,
+      // });
 
       const html = await page.content();
+      console.log(html);
       await browser.close();
       browser = null;
 
