@@ -20,14 +20,36 @@ import {
 } from "../components/card";
 import { Button } from "../components/button";
 import { Badge } from "../components/badge";
-import { Check, Crown, Zap, X } from "lucide-react";
+import {
+  Check,
+  Crown,
+  Zap,
+  X,
+  AlertCircle,
+  Calendar,
+  CreditCard,
+  RotateCcw,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
+  DialogFooter,
 } from "../components/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/select";
+import { Textarea } from "../components/textarea";
+import { Checkbox } from "../components/checkbox";
+import { Label } from "../components/label";
+import { Separator } from "../components/separator";
 
 // 토스페이먼츠 타입 선언
 declare global {
@@ -71,6 +93,7 @@ interface Plan {
 interface PlanCardProps {
   plan: Plan;
   currentPlanId?: number;
+  currentPlanPrice?: number; // 현재 플랜의 가격 추가
   onUpgrade: (planId: number) => void;
   onCancel: (planId: number) => void;
   isLoading: boolean;
@@ -233,6 +256,7 @@ export async function action({ request }: ActionFunctionArgs) {
 const PlanCard: React.FC<PlanCardProps> = ({
   plan,
   currentPlanId,
+  currentPlanPrice,
   onUpgrade,
   onCancel,
   isLoading,
@@ -241,31 +265,37 @@ const PlanCard: React.FC<PlanCardProps> = ({
   const isPopular = plan.popular || plan.name === "Starter"; // Starter 플랜을 인기 플랜으로 설정
   const isPaidPlan = parseFloat(plan.price || "0") > 0 && plan.name !== "Free";
 
+  // 현재 플랜보다 낮은 등급인지 확인
+  const planPrice = parseFloat(plan.price || "0");
+  const isLowerTier =
+    currentPlanPrice !== undefined && planPrice < currentPlanPrice;
+
   const getButtonText = () => {
     if (isLoading) return "처리 중...";
     if (isCurrent) {
-      return isPaidPlan ? "구독 취소" : "현재 플랜";
+      return "현재 플랜"; // 현재 플랜인 경우 항상 "현재 플랜" 표시
+    }
+    if (isLowerTier) {
+      return "다운그레이드"; // 낮은 등급인 경우
     }
     return `${plan.name}으로 업그레이드`;
   };
 
   const getButtonVariant = () => {
-    if (isCurrent && isPaidPlan) return "destructive";
-    if (isCurrent) return "outline";
+    if (isCurrent) return "outline"; // 현재 플랜은 항상 outline 스타일
     return isPopular ? "default" : "outline";
   };
 
   const handleButtonClick = () => {
-    if (isCurrent && isPaidPlan) {
-      onCancel(plan.id);
-    } else {
-      onUpgrade(plan.id);
+    if (isCurrent) {
+      return; // 현재 플랜인 경우 아무 동작도 하지 않음
     }
+    onUpgrade(plan.id);
   };
 
   return (
     <Card
-      className={`relative ${isPopular ? "border-primary" : ""} h-full transition-all duration-300 ease-in-out hover:shadow-lg hover:-translate-y-1 hover:border-primary/50 cursor-pointer group`}
+      className={`relative ${isPopular ? "border-primary" : ""} h-full flex flex-col transition-all duration-300 ease-in-out hover:shadow-lg hover:-translate-y-1 hover:border-primary/50 cursor-pointer group`}
     >
       {isPopular && (
         <Badge className="absolute -top-2 left-1/2 -translate-x-1/2 text-white group-hover:scale-105 transition-transform duration-200">
@@ -284,11 +314,11 @@ const PlanCard: React.FC<PlanCardProps> = ({
             )}
             {plan.name}
           </CardTitle>
-          {isCurrent && <Badge variant="secondary">현재 플랜</Badge>}
+          {/* {isCurrent && <Badge variant="secondary">현재 플랜</Badge>} */}
         </div>
         <div className="space-y-1">
           <div className="text-2xl lg:text-3xl font-bold group-hover:text-primary transition-colors duration-200">
-            ₩{plan.price}
+            ₩{parseInt(plan.price, 10).toLocaleString()}
           </div>
           <div className="text-sm text-muted-foreground">
             {plan.period || "월"}
@@ -296,48 +326,59 @@ const PlanCard: React.FC<PlanCardProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4 flex-1">
-        {/* Features */}
-        {plan.features && plan.features.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium group-hover:text-primary transition-colors duration-200">
-              포함 기능
-            </h4>
-            <ul className="space-y-1">
-              {plan.features.map((feature: string, index: number) => (
-                <li
-                  key={index}
-                  className="flex items-start gap-2 text-sm group-hover:text-foreground transition-colors duration-200"
-                >
-                  <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5 group-hover:text-green-500 group-hover:scale-110 transition-all duration-200" />
-                  <span>{feature}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+      <CardContent className="flex-1 flex flex-col justify-between space-y-4">
+        {/* Features & Limitations Container */}
+        <div className="space-y-4">
+          {/* Features */}
+          {plan.features && plan.features.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium group-hover:text-primary transition-colors duration-200">
+                포함 기능
+              </h4>
+              <ul className="space-y-1">
+                {plan.features.map((feature: string, index: number) => (
+                  <li
+                    key={index}
+                    className="flex items-start gap-2 text-sm group-hover:text-foreground transition-colors duration-200"
+                  >
+                    <Check className="w-4 h-4 text-green-600 flex-shrink-0 mt-0.5 group-hover:text-green-500 group-hover:scale-110 transition-all duration-200" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-        {/* Limitations */}
-        {plan.limitations && plan.limitations.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-muted-foreground">
-              제한 사항
-            </h4>
-            <ul className="space-y-1">
-              {plan.limitations.map((limitation: string, index: number) => (
-                <li key={index} className="text-sm text-muted-foreground">
-                  • {limitation}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+          {/* Limitations */}
+          {plan.limitations && plan.limitations.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground">
+                제한 사항
+              </h4>
+              <ul className="space-y-1">
+                {plan.limitations.map((limitation: string, index: number) => (
+                  <li key={index} className="text-sm text-muted-foreground">
+                    • {limitation}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
 
-        {/* Action Button */}
-        {(plan.name !== "Free" || isCurrent) && (
+        {/* Action Button - Fixed at bottom */}
+        {(plan.name !== "Free" || isCurrent) && !isLowerTier && (
           <div className="pt-4">
             <Button
-              className={`w-full ${isPopular ? "text-white" : ""} group-hover:shadow-md transition-all duration-200`}
+              className={`w-full ${
+                isCurrent
+                  ? "bg-green-600 text-white border-green-600"
+                  : plan.name === "Premium"
+                    ? "bg-[#F59E0B] text-white border-[#F59E0B]"
+                    : isPopular
+                      ? "text-white"
+                      : ""
+              } transition-all duration-200`}
               variant={getButtonVariant() as any}
               disabled={isLoading || (isCurrent && !isPaidPlan)}
               onClick={handleButtonClick}
@@ -519,24 +560,28 @@ const PaymentWidget: React.FC<PaymentWidgetProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[90vh]">
+      <DialogContent className="max-w-lg max-h-[90vh] bg-gray-900 border-gray-800">
         <DialogHeader>
-          <DialogTitle>결제하기</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-white">결제하기</DialogTitle>
+          <DialogDescription className="text-gray-400">
             {planData.name} 플랜을 구독합니다
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 overflow-y-auto max-h-[calc(90vh-120px)]">
           {/* 주문 정보 */}
-          <div className="bg-gray-50 p-4 rounded-lg">
+          <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium">플랜</span>
-              <span className="text-sm">{planData.name}</span>
+              <span className="text-sm font-medium text-gray-300">플랜</span>
+              <span className="text-sm text-white font-semibold">
+                {planData.name}
+              </span>
             </div>
             <div className="flex justify-between items-center mt-2">
-              <span className="text-sm font-medium">결제 금액</span>
-              <span className="text-lg font-bold">
+              <span className="text-sm font-medium text-gray-300">
+                결제 금액
+              </span>
+              <span className="text-lg font-bold text-primary">
                 ₩{planData.price.toLocaleString()}
               </span>
             </div>
@@ -549,24 +594,27 @@ const PaymentWidget: React.FC<PaymentWidgetProps> = ({
 
           {/* 약관 동의 */}
           <div>
-            <h4 className="text-sm font-medium mb-3">이용약관</h4>
-            <div className="border rounded-md">
-              <div className="max-h-40 overflow-y-auto p-3 text-xs leading-relaxed bg-gray-50 rounded-t-md">
+            <h4 className="text-sm font-medium mb-3 text-white">이용약관</h4>
+            <div className="border border-gray-700 rounded-md bg-gray-800">
+              <div className="max-h-40 overflow-y-auto p-3 text-xs leading-relaxed bg-gray-850 rounded-t-md">
                 {termsText.split("\n").map((line, index) => (
-                  <div key={index} className={line.trim() === "" ? "h-2" : ""}>
+                  <div
+                    key={index}
+                    className={line.trim() === "" ? "h-2" : "text-gray-300"}
+                  >
                     {line}
                   </div>
                 ))}
               </div>
-              <div className="p-3 border-t">
+              <div className="p-3 border-t border-gray-700">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={termsAccepted}
                     onChange={(e) => setTermsAccepted(e.target.checked)}
-                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                    className="w-4 h-4 text-primary border-gray-600 rounded focus:ring-primary bg-gray-700"
                   />
-                  <span className="text-sm">
+                  <span className="text-sm text-gray-300">
                     위 이용약관 및 개인정보 처리방침에 동의합니다
                   </span>
                 </label>
@@ -578,7 +626,7 @@ const PaymentWidget: React.FC<PaymentWidgetProps> = ({
           <Button
             onClick={handlePayment}
             disabled={isLoading || !termsAccepted}
-            className="w-full text-white"
+            className="w-full text-white bg-primary hover:bg-primary/90 disabled:bg-gray-700 disabled:text-gray-500"
             size="lg"
           >
             {isLoading
@@ -597,7 +645,70 @@ export default function PlanManagement() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [selectedPaymentData, setSelectedPaymentData] = useState<any>(null);
 
+  // 환불 다이얼로그 상태
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundComment, setRefundComment] = useState("");
+  const [agreeToPolicy, setAgreeToPolicy] = useState(false);
+  const [isRefundProcessing, setIsRefundProcessing] = useState(false);
+
   const isLoading = fetcher.state === "submitting";
+
+  // 환불 사유 목록
+  const refundReasons = [
+    "서비스가 기대에 미치지 못함",
+    "사용법이 어려움",
+    "다른 서비스로 전환",
+    "예상보다 높은 비용",
+    "기술적 문제",
+    "기타",
+  ];
+
+  // 구독 정보 계산
+  const currentSubscription = React.useMemo(() => {
+    if (!currentPlan) return null;
+
+    const startDate = currentPlan.planHistory.startDate
+      ? new Date(currentPlan.planHistory.startDate)
+      : new Date();
+    const now = new Date();
+    const nextBillingDate = new Date(startDate);
+    nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+
+    const remainingDays = Math.max(
+      0,
+      Math.ceil(
+        (nextBillingDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+      )
+    );
+
+    // 구독 시작일로부터 경과한 일수 계산
+    const daysSinceStart = Math.floor(
+      (now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    const totalDays = 30;
+    const price = parseFloat(currentPlan.plan.price || "0");
+
+    // 7일 이내면 전액 환불, 7일 이후면 일할 계산
+    const refundableAmount =
+      daysSinceStart <= 7
+        ? price
+        : Math.round((price * remainingDays) / totalDays);
+
+    const canRefund = remainingDays > 0; // 환불 가능 여부
+
+    return {
+      plan: currentPlan.plan.name,
+      status: currentPlan.planHistory.isActive ? "active" : "inactive",
+      startDate: startDate.toISOString().split("T")[0],
+      nextBillingDate: nextBillingDate.toISOString().split("T")[0],
+      price,
+      remainingDays,
+      refundableAmount,
+      canRefund,
+    };
+  }, [currentPlan]);
 
   const handleUpgrade = async (planId: number) => {
     // 선택한 플랜 정보 찾기
@@ -673,6 +784,61 @@ export default function PlanManagement() {
     }
   };
 
+  // 환불 요청 핸들러
+  const handleRefundRequest = async () => {
+    if (!refundReason) {
+      toast.error("환불 사유를 선택해주세요");
+      return;
+    }
+
+    if (!agreeToPolicy) {
+      toast.error("환불 정책에 동의해주세요");
+      return;
+    }
+
+    setIsRefundProcessing(true);
+
+    try {
+      const response = await fetch("/api/refund", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          refundReason,
+          refundComment: refundComment || undefined,
+        }),
+      });
+
+      const result = await response.json();
+
+      setIsRefundProcessing(false);
+
+      if (response.ok && result.success) {
+        setRefundDialogOpen(false);
+        toast.success(result.message || "환불 요청이 접수되었습니다", {
+          description: "영업일 기준 3-5일 내에 처리됩니다",
+        });
+
+        // 폼 리셋
+        setRefundReason("");
+        setRefundComment("");
+        setAgreeToPolicy(false);
+
+        // 페이지 새로고침하여 플랜 상태 업데이트
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        toast.error(result.error || "환불 요청에 실패했습니다");
+      }
+    } catch (error) {
+      console.error("Refund request error:", error);
+      setIsRefundProcessing(false);
+      toast.error("환불 요청 중 오류가 발생했습니다");
+    }
+  };
+
   // fetcher 응답 처리
   React.useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
@@ -710,6 +876,246 @@ export default function PlanManagement() {
         </p>
       </div>
 
+      {/* Current Subscription Info */}
+      {currentSubscription && currentSubscription.price > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>구독 정보</CardTitle>
+                <CardDescription>현재 구독 중인 플랜 정보</CardDescription>
+              </div>
+              {currentSubscription.status === "active" &&
+                currentSubscription.canRefund && (
+                  <Dialog
+                    open={refundDialogOpen}
+                    onOpenChange={setRefundDialogOpen}
+                  >
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-2">
+                        <RotateCcw className="w-4 h-4" />
+                        환불하기
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                          <RotateCcw className="w-5 h-5" />
+                          플랜 환불 요청
+                        </DialogTitle>
+                        <DialogDescription>
+                          환불 정책에 따라 처리됩니다
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="space-y-4 py-4">
+                        {/* Refund Amount */}
+                        <div className="p-4 rounded-lg bg-primary/10 border border-primary/20">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm text-muted-foreground">
+                              환불 예상 금액
+                            </span>
+                            <Badge variant="secondary">일할 계산</Badge>
+                          </div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-2xl">
+                              ₩
+                              {currentSubscription.refundableAmount.toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            잔여 기간 {currentSubscription.remainingDays}일 기준
+                          </p>
+                        </div>
+
+                        <Separator />
+
+                        {/* Refund Reason */}
+                        <div className="space-y-2">
+                          <Label htmlFor="refund-reason">환불 사유 *</Label>
+                          <Select
+                            value={refundReason}
+                            onValueChange={setRefundReason}
+                          >
+                            <SelectTrigger id="refund-reason">
+                              <SelectValue placeholder="환불 사유를 선택해주세요" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {refundReasons.map((reason) => (
+                                <SelectItem key={reason} value={reason}>
+                                  {reason}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Additional Comment */}
+                        <div className="space-y-2">
+                          <Label htmlFor="refund-comment">
+                            추가 의견 (선택)
+                          </Label>
+                          <Textarea
+                            id="refund-comment"
+                            placeholder="서비스 개선을 위한 의견을 남겨주세요"
+                            value={refundComment}
+                            onChange={(e) => setRefundComment(e.target.value)}
+                            rows={4}
+                            className="resize-none"
+                          />
+                        </div>
+
+                        <Separator />
+
+                        {/* Refund Policy Notice */}
+                        <div className="space-y-3 p-4 rounded-lg bg-muted/30">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                            <div className="space-y-2 text-sm text-muted-foreground">
+                              <p className="font-medium text-foreground">
+                                환불 정책 안내
+                              </p>
+                              <ul className="space-y-1 list-disc list-inside">
+                                <li>
+                                  환불 처리는 영업일 기준 3-5일 소요됩니다
+                                </li>
+                                <li>
+                                  환불 승인 후 자동매매 기능이 즉시 중지됩니다
+                                </li>
+                                <li>
+                                  진행 중인 거래는 강제 종료될 수 있습니다
+                                </li>
+                                <li>
+                                  환불 후 재구독 시 프로모션이 적용되지 않을 수
+                                  있습니다
+                                </li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Agreement Checkbox */}
+                        <div className="flex items-start gap-2">
+                          <Checkbox
+                            id="agree-policy"
+                            checked={agreeToPolicy}
+                            onCheckedChange={(checked) =>
+                              setAgreeToPolicy(checked as boolean)
+                            }
+                          />
+                          <Label
+                            htmlFor="agree-policy"
+                            className="text-sm cursor-pointer leading-tight"
+                          >
+                            위 환불 정책을 확인했으며, 환불 시 서비스 이용이
+                            중지됨을 이해했습니다
+                          </Label>
+                        </div>
+                      </div>
+
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => setRefundDialogOpen(false)}
+                          disabled={isRefundProcessing}
+                        >
+                          취소
+                        </Button>
+                        <Button
+                          onClick={handleRefundRequest}
+                          disabled={
+                            isRefundProcessing ||
+                            !refundReason ||
+                            !agreeToPolicy
+                          }
+                          className="gap-2"
+                        >
+                          {isRefundProcessing ? (
+                            <>처리 중...</>
+                          ) : (
+                            <>
+                              <RotateCcw className="w-4 h-4" />
+                              환불 요청
+                            </>
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Subscription Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Crown className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground">현재 플랜</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="font-medium">{currentSubscription.plan}</p>
+                      <Badge
+                        variant={
+                          currentSubscription.status === "active"
+                            ? "default"
+                            : "secondary"
+                        }
+                        className="text-xs"
+                      >
+                        {currentSubscription.status === "active"
+                          ? "활성"
+                          : "비활성"}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                  <div className="p-2 rounded-lg bg-accent/10">
+                    <CreditCard className="w-5 h-5 text-accent" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground">
+                      월 결제 금액
+                    </p>
+                    <p className="font-medium mt-1">
+                      ₩{currentSubscription.price.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                  <div className="p-2 rounded-lg bg-green-500/10">
+                    <Calendar className="w-5 h-5 text-green-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground">구독 시작일</p>
+                    <p className="font-medium mt-1">
+                      {currentSubscription.startDate}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <Calendar className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground">다음 결제일</p>
+                    <p className="font-medium mt-1">
+                      {currentSubscription.nextBillingDate}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Current Usage */}
       <Card>
         <CardHeader>
@@ -719,16 +1125,24 @@ export default function PlanManagement() {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="text-center p-4 border rounded-lg">
-              <div className="text-xl lg:text-2xl font-bold">0</div>
+              <div className="text-xl lg:text-2xl font-bold">
+                {user?.totalSelfEntryCount || 0}
+              </div>
+              <div className="text-sm text-muted-foreground">수동매매 거래</div>
+            </div>
+            <div className="text-center p-4 border rounded-lg">
+              <div className="text-xl lg:text-2xl font-bold">
+                {user?.totalAutoEntryCount || 0}
+              </div>
               <div className="text-sm text-muted-foreground">자동매매 거래</div>
             </div>
             <div className="text-center p-4 border rounded-lg">
-              <div className="text-xl lg:text-2xl font-bold">0</div>
-              <div className="text-sm text-muted-foreground">API 호출</div>
-            </div>
-            <div className="text-center p-4 border rounded-lg">
-              <div className="text-xl lg:text-2xl font-bold">∞</div>
-              <div className="text-sm text-muted-foreground">차트 조회</div>
+              <div className="text-xl lg:text-2xl font-bold">
+                {user?.totalAlarmCount || 0}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                텔레그램 알림 횟수
+              </div>
             </div>
           </div>
         </CardContent>
@@ -750,6 +1164,11 @@ export default function PlanManagement() {
               popular: plan.isPopular || false,
             }}
             currentPlanId={currentPlan?.plan.id}
+            currentPlanPrice={
+              currentPlan?.plan.price
+                ? parseFloat(currentPlan.plan.price)
+                : undefined
+            }
             onUpgrade={handleUpgrade}
             onCancel={handleCancel}
             isLoading={isLoading}
@@ -768,8 +1187,7 @@ export default function PlanManagement() {
               플랜은 언제든지 변경할 수 있나요?
             </h4>
             <p className="text-sm text-muted-foreground">
-              네, 언제든지 상위 플랜으로 업그레이드하거나 하위 플랜으로
-              다운그레이드할 수 있습니다.
+              네, 언제든지 상위 플랜으로 업그레이드할 수 있습니다.
             </p>
           </div>
 
@@ -786,7 +1204,8 @@ export default function PlanManagement() {
           <div>
             <h4 className="font-medium mb-1">환불 정책이 어떻게 되나요?</h4>
             <p className="text-sm text-muted-foreground">
-              구독 후 7일 이내에 취소하시면 전액 환불이 가능합니다.
+              구독 후 7일 이내에 취소하시면 전액 환불이 가능합니다. 환불은
+              영업일 기준 3~5일 소요됩니다.
             </p>
           </div>
         </CardContent>

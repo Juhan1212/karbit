@@ -59,6 +59,7 @@ export default function NewsPage() {
     offset: 0,
     hasMore: false,
   });
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchNews = async (
     pageNum = page,
@@ -80,6 +81,7 @@ export default function NewsPage() {
         const data = await response.json();
         setNewsData(data.data);
         setPagination(data.pagination);
+        setTotalCount(data.totalCount || 0);
         // setStats 등 필요시 추가
       }
     } catch (error) {
@@ -356,23 +358,83 @@ export default function NewsPage() {
           ))
         )}
         {/* 페이지네이션 UI */}
-        <div className="flex justify-center gap-2 mt-6">
+        <div className="flex justify-center gap-1 mt-6 flex-wrap">
+          {/* 처음 */}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={page === 1}
+            onClick={() => setPage(1)}
+            className="min-w-[40px]"
+          >
+            ≪
+          </Button>
+          {/* 이전 */}
           <Button
             size="sm"
             variant="outline"
             disabled={page === 1}
             onClick={() => setPage(page - 1)}
+            className="min-w-[40px]"
           >
             이전
           </Button>
-          <span className="px-2 py-1 text-sm">{page} 페이지</span>
+          {/* 페이지 번호 버튼 */}
+          {(() => {
+            const pageCount =
+              totalCount > 0
+                ? Math.ceil(totalCount / limit)
+                : page + (pagination.hasMore ? 1 : 0);
+            const pageButtons = [];
+            const start = Math.max(1, page - 2);
+            const end = Math.min(pageCount, page + 2);
+            for (let i = start; i <= end; i++) {
+              pageButtons.push(
+                <Button
+                  key={i}
+                  size="sm"
+                  variant={i === page ? "default" : "outline"}
+                  onClick={() => setPage(i)}
+                  className="min-w-[40px]"
+                  disabled={i === page}
+                >
+                  {i}
+                </Button>
+              );
+            }
+            return pageButtons;
+          })()}
+          {/* 다음 */}
           <Button
             size="sm"
             variant="outline"
             disabled={!pagination.hasMore}
             onClick={() => setPage(page + 1)}
+            className="min-w-[40px]"
           >
             다음
+          </Button>
+          {/* 마지막 */}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={(() => {
+              const pageCount =
+                totalCount > 0
+                  ? Math.ceil(totalCount / limit)
+                  : page + (pagination.hasMore ? 1 : 0);
+              return page === pageCount;
+            })()}
+            onClick={() => {
+              const pageCount =
+                totalCount > 0
+                  ? Math.ceil(totalCount / limit)
+                  : page + (pagination.hasMore ? 1 : 0);
+              setPage(pageCount);
+            }}
+            className="min-w-[40px]"
+          >
+            ≫
           </Button>
         </div>
       </div>

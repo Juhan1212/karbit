@@ -246,6 +246,62 @@
       "when": 1760014289407,
       "tag": "0034_thick_slipstream",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1760025318646,
+      "tag": "0035_cloudy_randall",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1760102987041,
+      "tag": "0036_lucky_ironclad",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1760106198745,
+      "tag": "0037_chubby_invaders",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1760106663553,
+      "tag": "0038_tense_risque",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1760172537243,
+      "tag": "0039_cute_unus",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1760177985736,
+      "tag": "0040_warm_madripoor",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1760181841154,
+      "tag": "0041_ambitious_northstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1760187464968,
+      "tag": "0042_foamy_wolfpack",
+      "breakpoints": true
     }
   ]
 }

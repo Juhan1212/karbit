@@ -1,9 +1,222 @@
+/* ================================
+   커뮤니티 게시글 (Community)
+================================ */
+export const communityPosts = pgTable(
+  "community_posts",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: varchar({ length: 50 }).notNull(), // 예: "자유", "질문", "정보"
+    title: varchar({ length: 200 }).notNull(),
+    content: text().notNull(),
+    tags: text("tags").array(), // 태그 문자열 배열
+    imageUrl: varchar("image_url", { length: 500 }), // 이미지 파일 경로
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_community_posts_user").on(table.userId),
+    index("idx_community_posts_category").on(table.category),
+    index("idx_community_posts_created").on(table.createdAt),
+  ]
+);
+
+/* 댓글 테이블 (1:N) */
+export const communityComments = pgTable(
+  "community_comments",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    postId: integer("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text().notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_community_comments_post").on(table.postId),
+    index("idx_community_comments_user").on(table.userId),
+  ]
+);
+
+/* 좋아요 테이블 */
+export const communityPostLikes = pgTable(
+  "community_post_likes",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    postId: integer("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    unique().on(table.postId, table.userId), // 한 유저당 한 게시글에 한 번만 좋아요
+    index("idx_community_post_likes_post").on(table.postId),
+    index("idx_community_post_likes_user").on(table.userId),
+  ]
+);
+
+/* 싫어요 테이블 */
+export const communityPostDislikes = pgTable(
+  "community_post_dislikes",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    postId: integer("post_id")
+      .notNull()
+      .references(() => communityPosts.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    unique().on(table.postId, table.userId), // 한 유저당 한 게시글에 한 번만 싫어요
+    index("idx_community_post_dislikes_post").on(table.postId),
+    index("idx_community_post_dislikes_user").on(table.userId),
+  ]
+);
+
+/* 댓글 좋아요 테이블 */
+export const communityCommentLikes = pgTable(
+  "community_comment_likes",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    commentId: integer("comment_id")
+      .notNull()
+      .references(() => communityComments.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    unique().on(table.commentId, table.userId), // 한 유저당 한 댓글에 한 번만 좋아요
+    index("idx_community_comment_likes_comment").on(table.commentId),
+    index("idx_community_comment_likes_user").on(table.userId),
+  ]
+);
+
+/* 댓글 싫어요 테이블 */
+export const communityCommentDislikes = pgTable(
+  "community_comment_dislikes",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    commentId: integer("comment_id")
+      .notNull()
+      .references(() => communityComments.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    unique().on(table.commentId, table.userId), // 한 유저당 한 댓글에 한 번만 싫어요
+    index("idx_community_comment_dislikes_comment").on(table.commentId),
+    index("idx_community_comment_dislikes_user").on(table.userId),
+  ]
+);
+
+/* 커뮤니티 관계 설정 */
+export const communityPostsRelations = relations(
+  communityPosts,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [communityPosts.userId],
+      references: [users.id],
+    }),
+    comments: many(communityComments),
+    likes: many(communityPostLikes),
+    dislikes: many(communityPostDislikes),
+  })
+);
+
+export const communityCommentsRelations = relations(
+  communityComments,
+  ({ one, many }) => ({
+    post: one(communityPosts, {
+      fields: [communityComments.postId],
+      references: [communityPosts.id],
+    }),
+    user: one(users, {
+      fields: [communityComments.userId],
+      references: [users.id],
+    }),
+    likes: many(communityCommentLikes),
+    dislikes: many(communityCommentDislikes),
+  })
+);
+
+export const communityPostLikesRelations = relations(
+  communityPostLikes,
+  ({ one }) => ({
+    post: one(communityPosts, {
+      fields: [communityPostLikes.postId],
+      references: [communityPosts.id],
+    }),
+    user: one(users, {
+      fields: [communityPostLikes.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const communityPostDislikesRelations = relations(
+  communityPostDislikes,
+  ({ one }) => ({
+    post: one(communityPosts, {
+      fields: [communityPostDislikes.postId],
+      references: [communityPosts.id],
+    }),
+    user: one(users, {
+      fields: [communityPostDislikes.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const communityCommentLikesRelations = relations(
+  communityCommentLikes,
+  ({ one }) => ({
+    comment: one(communityComments, {
+      fields: [communityCommentLikes.commentId],
+      references: [communityComments.id],
+    }),
+    user: one(users, {
+      fields: [communityCommentLikes.userId],
+      references: [users.id],
+    }),
+  })
+);
+
+export const communityCommentDislikesRelations = relations(
+  communityCommentDislikes,
+  ({ one }) => ({
+    comment: one(communityComments, {
+      fields: [communityCommentDislikes.commentId],
+      references: [communityComments.id],
+    }),
+    user: one(users, {
+      fields: [communityCommentDislikes.userId],
+      references: [users.id],
+    }),
+  })
+);
+
 import {
   integer,
   pgTable,
   varchar,
   numeric,
   timestamp,
+  date,
   index,
   unique,
   check,
@@ -44,11 +257,22 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 
   // 누적 상태 관리
-  totalEntryCount: integer("total_entry_count").default(0), // 누적 포지션 진입 횟수
+  totalEntryCount: integer("total_entry_count").default(0), // 누적 포지션 진입 횟수 (수동 + 자동)
+  totalSelfEntryCount: integer("total_self_entry_count").default(0), // 누적 수동매매 진입 횟수
+  totalAutoEntryCount: integer("total_auto_entry_count").default(0), // 누적 자동매매 진입 횟수
+  totalAlarmCount: integer("total_alarm_count").default(0), // 누적 텔레그램 알림 횟수
   totalOrderAmount: numeric("total_order_amount", {
     precision: 18,
     scale: 8,
   }).default("0"), // 누적 주문 금액
+  totalProfitRate: numeric("total_profit_rate", {
+    precision: 10,
+    scale: 2,
+  }).default("0"), // 누적 수익률 (%)
+
+  // 일일 진입 제한 추적 (Free 플랜용)
+  lastEntryDate: date("last_entry_date"), // 마지막 포지션 진입 날짜
+  dailyEntryCount: integer("daily_entry_count").default(0), // 당일 포지션 진입 횟수
 });
 
 export const userPlanHistory = pgTable(
@@ -136,6 +360,52 @@ export const payments = pgTable(
     check(
       "status_check",
       sql`${table.status} IN ('pending', 'completed', 'failed', 'cancelled')`
+    ),
+  ]
+);
+
+/* ================================
+   환불 관리
+================================ */
+export const refunds = pgTable(
+  "refunds",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planId: integer("plan_id")
+      .notNull()
+      .references(() => plans.id),
+    paymentId: integer("payment_id").references(() => payments.id), // 원본 결제 정보 (있는 경우)
+    refundAmount: numeric("refund_amount", {
+      precision: 12,
+      scale: 2,
+    }).notNull(), // 환불 금액
+    originalAmount: numeric("original_amount", {
+      precision: 12,
+      scale: 2,
+    }).notNull(), // 원래 결제 금액
+    remainingDays: integer("remaining_days").notNull(), // 환불 시점 남은 일수
+    refundReason: varchar("refund_reason", { length: 100 }).notNull(), // 환불 사유
+    refundComment: text("refund_comment"), // 추가 의견
+    status: varchar({ length: 20 }).default("pending"), // pending, approved, completed, rejected
+    processedBy: integer("processed_by").references(() => users.id), // 처리한 관리자 (있는 경우)
+    processedAt: timestamp("processed_at"), // 처리 완료 시간
+    refundMethod: varchar("refund_method", { length: 50 }), // 환불 수단 (card, bank_transfer 등)
+    refundTransactionId: varchar("refund_transaction_id", { length: 100 }), // 환불 거래 ID
+    rejectionReason: text("rejection_reason"), // 거절 사유 (거절된 경우)
+    metadata: text().default("{}"), // JSON 형태의 추가 정보
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_refunds_user").on(table.userId),
+    index("idx_refunds_status").on(table.status),
+    index("idx_refunds_created").on(table.createdAt),
+    check(
+      "refund_status_check",
+      sql`${table.status} IN ('pending', 'approved', 'completed', 'rejected')`
     ),
   ]
 );

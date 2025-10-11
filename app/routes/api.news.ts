@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { getNewsList, getNewsStats, getRecentNews } from "../database/news";
+import { sql } from "drizzle-orm";
 import { getCache } from "../core/redisCache";
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -21,15 +22,46 @@ export async function loader({ request }: LoaderFunctionArgs) {
         const startDate = startDateStr ? new Date(startDateStr) : undefined;
         const endDate = endDateStr ? new Date(endDateStr) : undefined;
 
-        const newsList = await getNewsList({
-          exchange,
-          type,
-          coinSymbol,
-          startDate,
-          endDate,
-          limit,
-          offset,
-        });
+        // 전체 개수도 함께 반환
+        const [newsList, totalCountArr] = await Promise.all([
+          getNewsList({
+            exchange,
+            type,
+            coinSymbol,
+            startDate,
+            endDate,
+            limit,
+            offset,
+          }),
+          // 전체 개수 쿼리
+          (async () => {
+            const db = (await import("../database/context")).database();
+            const { exchangeNews } = await import("../database/schema");
+            const { and, eq, gte, lte } = await import("drizzle-orm");
+            const conditions = [];
+            if (exchange && exchange !== "all")
+              conditions.push(eq(exchangeNews.exchange, exchange));
+            if (type && type !== "all")
+              conditions.push(eq(exchangeNews.type, type));
+            if (coinSymbol)
+              conditions.push(eq(exchangeNews.coinSymbol, coinSymbol));
+            if (startDate)
+              conditions.push(gte(exchangeNews.publishedAt, startDate));
+            if (endDate)
+              conditions.push(lte(exchangeNews.publishedAt, endDate));
+            const whereClause =
+              conditions.length > 0 ? and(...conditions) : undefined;
+            const result = await db
+              .select({ count: sql`count(*)` })
+              .from(exchangeNews)
+              .where(whereClause);
+            return result;
+          })(),
+        ]);
+
+        const totalCount = totalCountArr?.[0]?.count
+          ? Number(totalCountArr[0].count)
+          : 0;
 
         return new Response(
           JSON.stringify({
@@ -40,6 +72,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
               offset,
               hasMore: newsList.length === limit,
             },
+            totalCount,
           }),
           {
             headers: { "Content-Type": "application/json" },

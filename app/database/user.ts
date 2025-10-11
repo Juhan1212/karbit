@@ -285,16 +285,133 @@ export async function updateUserStatsAfterPositionClose(
       .update(users)
       .set({
         totalEntryCount: sql`${users.totalEntryCount} + 1`,
+        totalSelfEntryCount: sql`${users.totalSelfEntryCount} + 1`, // 수동매매 카운트 증가
         totalOrderAmount: sql`${users.totalOrderAmount} + ${orderAmount}`,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId));
 
     console.log(
-      `사용자 ${userId} 누적 통계 업데이트 완료: 주문금액 ${orderAmount}`
+      `사용자 ${userId} 누적 통계 업데이트 완료: 주문금액 ${orderAmount}, 수동매매 카운트 증가`
     );
   } catch (error) {
     console.error("사용자 누적 통계 업데이트 실패:", error);
+    throw error;
+  }
+}
+
+/**
+ * 사용자의 일일 포지션 진입 가능 여부 확인
+ * Free 플랜: 일일 1회 제한
+ * Starter/Premium 플랜: 제한 없음
+ */
+export async function canUserEnterPosition(
+  userId: number
+): Promise<{ canEnter: boolean; remainingEntries: number; reason?: string }> {
+  const db = database();
+
+  try {
+    // 사용자 및 플랜 정보 조회
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      with: {
+        plan: true,
+      },
+    });
+
+    if (!user) {
+      return {
+        canEnter: false,
+        remainingEntries: 0,
+        reason: "사용자를 찾을 수 없습니다.",
+      };
+    }
+
+    // Free 플랜이 아니면 제한 없음
+    if (user.plan?.name !== "Free") {
+      return {
+        canEnter: true,
+        remainingEntries: -1, // 무제한
+      };
+    }
+
+    // Free 플랜인 경우 일일 제한 확인
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const lastEntryDate = user.lastEntryDate
+      ? new Date(user.lastEntryDate).toISOString().split("T")[0]
+      : null;
+
+    // 오늘이 아니면 카운트 리셋 가능
+    if (lastEntryDate !== today) {
+      return {
+        canEnter: true,
+        remainingEntries: 1,
+      };
+    }
+
+    // 오늘 이미 진입한 경우
+    const dailyLimit = 1;
+    const used = user.dailyEntryCount || 0;
+    const remaining = Math.max(0, dailyLimit - used);
+
+    return {
+      canEnter: remaining > 0,
+      remainingEntries: remaining,
+      reason:
+        remaining === 0
+          ? "Free 플랜은 일일 1회만 포지션 진입이 가능합니다. Starter 플랜으로 업그레이드하시면 무제한으로 이용하실 수 있습니다."
+          : undefined,
+    };
+  } catch (error) {
+    console.error("일일 진입 가능 여부 확인 실패:", error);
+    throw error;
+  }
+}
+
+/**
+ * 포지션 진입 시 일일 카운트 업데이트
+ */
+export async function incrementDailyEntryCount(userId: number): Promise<void> {
+  const db = database();
+
+  try {
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!user) {
+      throw new Error("사용자를 찾을 수 없습니다.");
+    }
+
+    const lastEntryDate = user.lastEntryDate
+      ? new Date(user.lastEntryDate).toISOString().split("T")[0]
+      : null;
+
+    // 날짜가 바뀌었으면 카운트 리셋
+    if (lastEntryDate !== today) {
+      await db
+        .update(users)
+        .set({
+          lastEntryDate: today, // string 형태로 저장
+          dailyEntryCount: 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+    } else {
+      // 같은 날이면 카운트 증가
+      await db
+        .update(users)
+        .set({
+          dailyEntryCount: sql`${users.dailyEntryCount} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+    }
+
+    console.log(`사용자 ${userId} 일일 진입 카운트 업데이트 완료`);
+  } catch (error) {
+    console.error("일일 진입 카운트 업데이트 실패:", error);
     throw error;
   }
 }

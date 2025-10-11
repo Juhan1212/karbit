@@ -25,19 +25,28 @@ export async function loader() {
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const user = useUser();
   const isLoading = useIsLoading();
   const { checkAuth } = useAuthActions();
 
-  // 페이지 로드 시 사용자 인증 상태 확인
+  // 페이지 로드 시 사용자 인증 상태 확인 (한 번만 실행)
   useEffect(() => {
-    // 사용자 정보가 없는 경우에만 인증 체크
-    if (!user && !isLoading) {
-      checkAuth();
+    if (!authChecked && !user && !isLoading) {
+      checkAuth().finally(() => {
+        setAuthChecked(true);
+      });
     }
-  }, [user, isLoading, checkAuth]);
+  }, [authChecked, user, isLoading, checkAuth]);
+
+  // 인증 확인 후 사용자가 없으면 로그인 페이지로 리다이렉트
+  useEffect(() => {
+    if (authChecked && !user && !isLoading) {
+      navigate("/auth", { replace: true });
+    }
+  }, [authChecked, user, isLoading, navigate]);
 
   // 현재 경로에서 활성 탭 결정
   const getActiveTab = () => {

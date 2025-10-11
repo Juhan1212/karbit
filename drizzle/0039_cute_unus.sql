@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "total_profit_rate" numeric(10, 2) DEFAULT '0';

@@ -98,6 +98,9 @@ export async function validateSession(token: string): Promise<AuthUser | null> {
       email: user.email,
       name: user.name,
       planId: user.planId,
+      totalSelfEntryCount: user.totalSelfEntryCount ?? 0,
+      totalAutoEntryCount: user.totalAutoEntryCount ?? 0,
+      totalAlarmCount: user.totalAlarmCount ?? 0,
       plan: user.plan,
     };
   } catch (error) {

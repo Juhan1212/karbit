@@ -490,8 +490,6 @@ export default function Dashboard() {
 
   const currentPlan = activePlan; // 현재 플랜 상태
 
-  const isLocked = currentPlan?.plan.name === "Free"; // Free 플랜이면 잠금표시
-
   return (
     <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
       {/* Header */}
@@ -688,7 +686,6 @@ export default function Dashboard() {
 
       {/* Live Kimchi Premium Ticker */}
       <PremiumTicker
-        isLocked={isLocked}
         onAverageRateChange={(avgRate, seed) => {
           setAverageRate(avgRate);
         }}
@@ -747,7 +744,13 @@ export default function Dashboard() {
               실시간 활성 포지션 환율 차트
             </CardTitle>
             <CardDescription>
-              현재 포지션 추이를 실시간으로 확인하세요
+              현재 포지션 추이를 실시간으로 확인하세요.
+              <br />
+              <span className="text-xs text-muted-foreground/80 mt-1 block">
+                ※ 빗썸 거래소 측에서 현재 캔들 데이터를 제공하지 않고 있으나
+                개발단계에 있습니다. 거래소 업데이트가 되는대로 반영할
+                예정입니다.
+              </span>
             </CardDescription>
           </CardHeader>
           <CardContent className="chart-card-content" noPadding={true}>

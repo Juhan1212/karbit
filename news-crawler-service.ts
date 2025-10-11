@@ -4,7 +4,6 @@ import { BithumbCrawler } from "./app/services/crawlers/bithumb-crawler";
 import { BybitCrawler } from "./app/services/crawlers/bybit-crawler";
 import { OKXCrawler } from "./app/services/crawlers/okx-crawler";
 import { bulkSaveNewsItems } from "./app/database/news";
-import { setCache } from "./app/core/redisCache";
 import { CrawlerInterface } from "./app/utils/news-crawler-utils";
 import { HyperliquidCrawler } from "./app/services/crawlers/hyperliquid-crawler";
 import { drizzle } from "drizzle-orm/postgres-js";

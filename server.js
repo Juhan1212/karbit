@@ -61,6 +61,19 @@ if (DEVELOPMENT) {
       })
     );
 
+    // 정적 파일 서빙 (업로드된 이미지) - Vite 미들웨어보다 먼저
+    app.use(
+      "/uploads",
+      express.static("public/uploads", {
+        maxAge: "1d",
+        setHeaders: (res, path) => {
+          if (path.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+            res.setHeader("Cache-Control", "public, max-age=86400");
+          }
+        },
+      })
+    );
+
     // Swagger 설정 (Vite를 통해 TypeScript 파일 로드) - React Router보다 먼저 등록
     try {
       const swaggerModule =
@@ -90,6 +103,20 @@ if (DEVELOPMENT) {
   }
 } else {
   console.log("Starting production server");
+
+  // 정적 파일 서빙 (업로드된 이미지)
+  app.use(
+    "/uploads",
+    express.static("public/uploads", {
+      maxAge: "1d",
+      setHeaders: (res, path) => {
+        if (path.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+          res.setHeader("Cache-Control", "public, max-age=86400");
+        }
+      },
+    })
+  );
+
   app.use(
     "/assets",
     express.static("build/client/assets", { immutable: true, maxAge: "1y" })

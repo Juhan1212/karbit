@@ -102,3 +102,5 @@ drizzle/meta
 *.sqlite
 
 .pytest_cache/
+# User uploaded files
+public/uploads/

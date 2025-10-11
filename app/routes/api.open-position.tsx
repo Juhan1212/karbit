@@ -4,11 +4,18 @@ import { getUserActiveStrategy } from "~/database/strategy";
 import { validateSession } from "~/database/session";
 import { getAuthTokenFromRequest } from "~/utils/cookies";
 import { getUserExchangeCredentials } from "~/database/exchange";
+import {
+  canUserEnterPosition,
+  incrementDailyEntryCount,
+} from "~/database/user";
 import { createExchangeAdapter } from "~/exchanges";
 import { ExchangeTypeConverter, UppercaseExchangeType } from "~/types/exchange";
 import { roundVolumeToLotSize } from "~/utils/decimal";
 import { getCache } from "../core/redisCache";
 import axios from "axios";
+import { database } from "~/database/context";
+import { users } from "~/database/schema";
+import { eq, sql } from "drizzle-orm";
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
@@ -32,6 +39,19 @@ export async function action({ request }: ActionFunctionArgs) {
       return Response.json(
         { success: false, message: "잘못된 요청 방식입니다." },
         { status: 405 }
+      );
+    }
+
+    // ⭐ 일일 포지션 진입 제한 확인 (Free 플랜)
+    const entryCheck = await canUserEnterPosition(user.id);
+    if (!entryCheck.canEnter) {
+      return Response.json(
+        {
+          success: false,
+          message: entryCheck.reason || "일일 진입 횟수를 초과했습니다.",
+          remainingEntries: entryCheck.remainingEntries,
+        },
+        { status: 403 }
       );
     }
 
@@ -77,7 +97,8 @@ export async function action({ request }: ActionFunctionArgs) {
       return Response.json(
         {
           success: false,
-          message: `한국 거래소(${krExchange}) 인증 정보를 찾을 수 없습니다.`,
+          message: `한국 거래소(${krExchange}) 인증 정보를 찾을 수 없습니다. 거래소 연결 페이지로 이동합니다.`,
+          redirectTo: "/exchanges",
         },
         { status: 400 }
       );
@@ -90,7 +111,8 @@ export async function action({ request }: ActionFunctionArgs) {
       return Response.json(
         {
           success: false,
-          message: `해외 거래소(${frExchange}) 인증 정보를 찾을 수 없습니다.`,
+          message: `해외 거래소(${frExchange}) 인증 정보를 찾을 수 없습니다. 거래소 연결 페이지로 이동합니다.`,
+          redirectTo: "/exchanges",
         },
         { status: 400 }
       );
@@ -230,6 +252,29 @@ export async function action({ request }: ActionFunctionArgs) {
       usdtPrice,
       entryTime: new Date(),
     });
+
+    // 사용자 수동매매 카운트 증가
+    const db = database();
+    try {
+      await db
+        .update(users)
+        .set({
+          totalSelfEntryCount: sql`${users.totalSelfEntryCount} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+      console.log(`사용자 ${user.id} 수동매매 진입 카운트 증가`);
+    } catch (error) {
+      console.error("수동매매 카운트 증가 실패:", error);
+    }
+
+    // ⭐ 일일 진입 카운트 증가 (Free 플랜 제한용)
+    try {
+      await incrementDailyEntryCount(user.id);
+      console.log(`사용자 ${user.id} 일일 진입 카운트 증가`);
+    } catch (error) {
+      console.error("일일 진입 카운트 증가 실패:", error);
+    }
 
     // 6. 결과 반환
     return Response.json({

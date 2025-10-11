@@ -61,11 +61,7 @@ export function PremiumTicker({
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    // isLocked가 true이면 EventSource에 연결하지 않음
-    if (isLocked) {
-      return;
-    }
-
+    // ⭐ 모든 플랜에서 실시간 환율 데이터를 표시 (isLocked 체크 제거)
     const es = new EventSource(endpoint);
     esRef.current = es;
     es.onmessage = (ev) => {
@@ -107,7 +103,7 @@ export function PremiumTicker({
     return () => {
       es.close();
     };
-  }, [endpoint, isLocked]);
+  }, [endpoint]); // ⭐ isLocked 의존성 제거
 
   // 표 렌더링 - 항상 환율 기준으로 정렬된 모든 데이터 표시
   const sortedItems = useMemo(() => {
@@ -165,17 +161,20 @@ export function PremiumTicker({
           <div>
             <CardTitle className="flex items-center gap-2">
               호가창 반영 실시간 환율
-              {isLocked && <Lock className="w-4 h-4 text-muted-foreground" />}
-              {!isLocked && <Crown className="w-4 h-4 text-yellow-500" />}
+              {/* ⭐ Free 플랜도 볼 수 있으므로 Lock 아이콘 제거 */}
             </CardTitle>
-            <CardDescription>시드금액 기반 실제 예상 거래 환율</CardDescription>
+            <CardDescription>
+              시드금액 기반 실제 예상 거래 환율
+              <br />
+              <span className="text-xs text-muted-foreground/80 mt-1 block">
+                ※ 포지션 진입 버튼을 누르면, 선택된 코인의 한국거래소에서는
+                매수를, 반대로 해외거래소에서는 매도(short)를 동시에 합니다.
+              </span>
+              <span className="text-xs text-muted-foreground/80 block">
+                ※ karbit에서 제공하는 실시간 환율과 오차가 있을 수 있습니다.
+              </span>
+            </CardDescription>
           </div>
-          {isLocked && (
-            <Badge variant="outline" className="gap-1">
-              <Crown className="w-3 h-3" />
-              Starter 이상 필요
-            </Badge>
-          )}
           <Badge variant="secondary" className="gap-1">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             실시간
@@ -183,249 +182,136 @@ export function PremiumTicker({
         </div>
       </CardHeader>
       <CardContent>
-        {isLocked ? (
-          <div className="relative">
-            <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-10 flex items-center justify-center">
-              <div className="text-center space-y-2 p-4 lg:p-6 bg-background/80 rounded-lg border mx-4">
-                <Lock className="w-6 h-6 lg:w-8 lg:h-8 mx-auto text-muted-foreground" />
-                <h3 className="font-medium text-sm lg:text-base">
-                  Starter 플랜이 필요합니다
-                </h3>
-                <p className="text-xs lg:text-sm text-muted-foreground">
-                  호가창 기반 실시간 환율을 확인하려면 플랜을 업그레이드하세요
-                </p>
-                <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 text-white">
-                  플랜 업그레이드
-                </button>
-              </div>
-            </div>
-            {/* Blurred content for locked state */}
-            <div className="blur-sm pointer-events-none">
-              {/* Seed Amount Slider */}
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-medium">시드 금액</label>
-                <span className="text-sm text-muted-foreground">1000만원</span>
-              </div>
-              <div className="w-full mb-4">
-                <Slider
-                  value={[10000000]}
-                  max={100000000}
-                  min={1000000}
-                  step={1000000}
-                  className="w-full"
-                  disabled={true}
-                />
-                <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                  <span>100만원</span>
-                  <span>1억원</span>
-                </div>
-              </div>
-              <div className="max-h-[400px] overflow-y-auto overflow-x-auto scrollbar-thin">
-                <Table className="text-xs min-w-[420px] w-full">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="px-2 text-xs">티커</TableHead>
-                      <TableHead className="px-2 text-xs text-right">
-                        환율
-                      </TableHead>
-                      <TableHead className="px-2 text-xs">한국거래소</TableHead>
-                      <TableHead className="px-2 text-xs">해외거래소</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {/* Mock data for locked state */}
-                    <TableRow>
-                      <TableCell className="px-2 font-medium">BTC</TableCell>
-                      <TableCell className="px-2 text-right">1380.42</TableCell>
-                      <TableCell className="px-2 text-muted-foreground">
-                        bithumb
-                      </TableCell>
-                      <TableCell className="px-2 text-muted-foreground">
-                        binance
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="px-2 font-medium">ETH</TableCell>
-                      <TableCell className="px-2 text-right">1381.26</TableCell>
-                      <TableCell className="px-2 text-muted-foreground">
-                        bithumb
-                      </TableCell>
-                      <TableCell className="px-2 text-muted-foreground">
-                        binance
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="px-2 font-medium">XRP</TableCell>
-                      <TableCell className="px-2 text-right">1382.99</TableCell>
-                      <TableCell className="px-2 text-muted-foreground">
-                        bithumb
-                      </TableCell>
-                      <TableCell className="px-2 text-muted-foreground">
-                        binance
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+        {/* ⭐ 모든 플랜에서 실시간 환율 표시 (잠금 UI 제거) */}
+        {/* Seed Amount Slider */}
+        <div className="flex justify-between items-center">
+          <label className="text-sm font-medium">시드 금액</label>
+          <span className="text-sm text-muted-foreground">
+            {formatKRW(selectedSeed)}
+          </span>
+        </div>
+        <div className="w-full">
+          <Slider
+            value={[selectedSeed]}
+            onValueChange={([v]) => setSelectedSeed(v)}
+            max={100000000} // 1억
+            min={1000000} // 100만
+            step={1000000} // 100만 단위
+            className="w-full"
+          />
+          <div className="flex justify-between text-xs text-muted-foreground mt-2">
+            <span>100만원</span>
+            <span>1억원</span>
           </div>
-        ) : (
-          <>
-            {/* Seed Amount Slider */}
-            <div className="flex justify-between items-center">
-              <label className="text-sm font-medium">시드 금액</label>
-              <span className="text-sm text-muted-foreground">
-                {formatKRW(selectedSeed)}
-              </span>
-            </div>
-            <div className="w-full">
-              <Slider
-                value={[selectedSeed]}
-                onValueChange={([v]) => setSelectedSeed(v)}
-                max={100000000} // 1억
-                min={1000000} // 100만
-                step={1000000} // 100만 단위
-                className="w-full"
-                disabled={isLocked}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                <span>100만원</span>
-                <span>1억원</span>
-              </div>
-            </div>
-            <div className="max-h-[400px] overflow-y-auto overflow-x-auto scrollbar-thin">
-              <Table className="text-xs min-w-[420px] w-full">
-                <colgroup>
-                  <col
-                    style={{
-                      width: "48px",
-                      minWidth: "40px",
-                      maxWidth: "80px",
-                    }}
-                  />
-                  <col
-                    style={{
-                      width: "70px",
-                      minWidth: "50px",
-                      maxWidth: "100px",
-                    }}
-                  />
-                  <col
-                    style={{
-                      width: "80px",
-                      minWidth: "60px",
-                      maxWidth: "120px",
-                    }}
-                  />
-                  <col
-                    style={{
-                      width: "80px",
-                      minWidth: "60px",
-                      maxWidth: "120px",
-                    }}
-                  />
-                </colgroup>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="px-2 min-w-[40px] max-w-[80px] w-[48px] text-xs sm:min-w-[60px] sm:w-[70px]">
-                      {/* 포지션진입 버튼 칸 */}
-                    </TableHead>
-                    <TableHead className="px-2 min-w-[40px] max-w-[80px] w-[48px] text-xs sm:min-w-[60px] sm:w-[70px]">
-                      티커
-                    </TableHead>
-                    <TableHead
-                      className="px-2 min-w-[50px] max-w-[100px] w-[70px] text-xs sm:min-w-[80px] sm:w-[90px] cursor-pointer select-none text-right"
-                      onClick={() =>
-                        setSortOrder((o) => (o === "asc" ? "desc" : "asc"))
-                      }
+        </div>
+        <div className="max-h-[400px] overflow-y-auto overflow-x-auto scrollbar-thin">
+          <Table className="text-xs w-full table-fixed">
+            <colgroup>
+              <col style={{ width: "15%" }} />
+              <col style={{ width: "15%" }} />
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "25%" }} />
+              <col style={{ width: "25%" }} />
+            </colgroup>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="px-2 text-xs text-center">
+                  {/* 포지션진입 버튼 칸 */}
+                </TableHead>
+                <TableHead className="px-2 text-xs text-center">티커</TableHead>
+                <TableHead
+                  className="px-2 text-xs cursor-pointer select-none text-center"
+                  onClick={() =>
+                    setSortOrder((o) => (o === "asc" ? "desc" : "asc"))
+                  }
+                >
+                  <span className="inline-flex items-center gap-1 justify-center w-full">
+                    환율
+                    {sortOrder === "asc" ? (
+                      <ChevronUp className="w-3 h-3" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3" />
+                    )}
+                  </span>
+                </TableHead>
+                <TableHead className="px-2 text-xs text-center">
+                  한국거래소
+                </TableHead>
+                <TableHead className="px-2 text-xs text-center">
+                  해외거래소
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedItems.map((it) => (
+                <TableRow
+                  key={it.symbol + "|" + it.korean_ex + "|" + it.foreign_ex}
+                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => setSelectedItem(it)}
+                >
+                  <TableCell className="px-2 text-center">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300 mx-auto"
+                      onClick={async (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        try {
+                          const res = await fetch("/api/open-position", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                              coinSymbol: it.symbol,
+                              krExchange: it.korean_ex?.toUpperCase(),
+                              frExchange: it.foreign_ex?.toUpperCase(),
+                              amount: 10000,
+                              leverage: 2,
+                            }),
+                          });
+                          const data = await res.json();
+                          if (res.ok && data.success) {
+                            toast.success(`${it.symbol} 포지션진입 성공!`);
+                          } else {
+                            toast.error(
+                              data.message || `${it.symbol} 포지션진입 실패`
+                            );
+                            // 거래소 인증 에러인 경우 리다이렉트
+                            if (data.redirectTo) {
+                              setTimeout(() => {
+                                window.location.href = data.redirectTo;
+                              }, 1000);
+                            }
+                          }
+                        } catch (error) {
+                          toast.error(`포지션진입 실패: ${error}`);
+                        }
+                      }}
                     >
-                      <span className="inline-flex items-center gap-1">
-                        환율
-                        {sortOrder === "asc" ? (
-                          <ChevronUp className="w-3 h-3 inline" />
-                        ) : (
-                          <ChevronDown className="w-3 h-3 inline" />
-                        )}
-                      </span>
-                    </TableHead>
-                    <TableHead className="px-2 min-w-[60px] max-w-[120px] w-[80px] text-xs sm:min-w-[100px] sm:w-[110px]">
-                      한국거래소
-                    </TableHead>
-                    <TableHead className="px-2 min-w-[60px] max-w-[120px] w-[80px] text-xs sm:min-w-[100px] sm:w-[110px]">
-                      해외거래소
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedItems.map((it) => (
-                    <TableRow
-                      key={it.symbol + "|" + it.korean_ex + "|" + it.foreign_ex}
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => setSelectedItem(it)}
-                    >
-                      {!isLocked && (
-                        <TableCell className="px-2">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300"
-                            onClick={async (e: React.MouseEvent) => {
-                              e.stopPropagation();
-                              try {
-                                const res = await fetch("/api/open-position", {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    coinSymbol: it.symbol,
-                                    krExchange: it.korean_ex?.toUpperCase(),
-                                    frExchange: it.foreign_ex?.toUpperCase(),
-                                    amount: 10000,
-                                    leverage: 2,
-                                  }),
-                                });
-                                const data = await res.json();
-                                if (res.ok && data.success) {
-                                  toast.success(
-                                    `${it.symbol} 포지션진입 성공!`
-                                  );
-                                } else {
-                                  toast.error(
-                                    data.message ||
-                                      `${it.symbol} 포지션진입 실패`
-                                  );
-                                }
-                              } catch (error) {
-                                toast.error(`포지션진입 실패: ${error}`);
-                              }
-                            }}
-                          >
-                            포지션진입
-                          </Button>
-                        </TableCell>
-                      )}
-                      <TableCell className="px-2 font-medium min-w-[40px] max-w-[80px] w-[48px] text-xs sm:min-w-[60px] sm:w-[70px]">
-                        {it.symbol}
-                      </TableCell>
-                      <TableCell className="px-2 min-w-[50px] max-w-[100px] w-[70px] text-xs sm:min-w-[80px] sm:w-[90px] text-right">
-                        {it._rate !== null && it._rate !== undefined
-                          ? it._rate
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="px-2 text-xs text-muted-foreground min-w-[60px] max-w-[120px] w-[80px] sm:min-w-[100px] sm:w-[110px]">
-                        {it.korean_ex || "-"}
-                      </TableCell>
-                      <TableCell className="px-2 text-xs text-muted-foreground min-w-[60px] max-w-[120px] w-[80px] sm:min-w-[100px] sm:w-[110px]">
-                        {it.foreign_ex || "-"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </>
-        )}
+                      <span className="hidden sm:inline">포지션진입</span>
+                      <span className="sm:hidden">진입</span>
+                    </Button>
+                  </TableCell>
+                  <TableCell className="px-2 font-medium text-xs text-center">
+                    {it.symbol}
+                  </TableCell>
+                  <TableCell className="px-2 text-xs text-center">
+                    {it._rate !== null && it._rate !== undefined
+                      ? it._rate
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="px-2 text-xs text-muted-foreground text-center">
+                    {it.korean_ex || "-"}
+                  </TableCell>
+                  <TableCell className="px-2 text-xs text-muted-foreground text-center">
+                    {it.foreign_ex || "-"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
     </Card>
   );

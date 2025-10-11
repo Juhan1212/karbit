@@ -1,4 +1,3 @@
-import React from "react";
 import { useNavigate } from "react-router";
 import { useUser, useUserPlan, useAuthActions } from "~/stores";
 import { Badge } from "./badge";
@@ -67,7 +66,7 @@ export function AppSidebar({
     { id: "autotrading", label: "자동매매 설정", icon: TrendingUp },
     { id: "plans", label: "플랜 관리", icon: Crown },
     { id: "news", label: "거래소 뉴스", icon: Newspaper },
-    { id: "leaderboard", label: "실시간 워뇨띠 포지션", icon: Trophy },
+    { id: "leaderboard", label: "자동매매 리더보드", icon: Trophy },
     { id: "community", label: "커뮤니티", icon: MessageCircle },
     { id: "payback", label: "거래소 페이백", icon: Gift },
   ];
@@ -106,9 +105,12 @@ export function AppSidebar({
         })}
       </nav>
 
-      {/* User Info & Logout */}
-      <div className="px-4 mt-6">
-        <Card className="p-3 mb-4">
+      {/* User Info, Plan & Logout - Combined */}
+      <div
+        className={`${isMobile ? "mt-8 mx-4" : "absolute bottom-6 left-4 right-4"}`}
+      >
+        <Card className="p-4 gap-3">
+          {/* User Info */}
           <div className="flex items-center gap-2 mb-2">
             <User className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm font-medium">
@@ -116,24 +118,9 @@ export function AppSidebar({
             </span>
           </div>
           <p className="text-xs text-muted-foreground mb-3">{user?.email}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-2"
-            onClick={handleLogout}
-          >
-            <LogOut className="w-3 h-3" />
-            로그아웃
-          </Button>
-        </Card>
-      </div>
 
-      {/* Current Plan */}
-      <div
-        className={`${isMobile ? "mt-8 mx-4" : "absolute bottom-6 left-4 right-4"}`}
-      >
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-2">
+          {/* Current Plan */}
+          <div className="flex items-center justify-between mb-3 pb-3 border-b border-border">
             <span className="text-sm text-muted-foreground">현재 플랜</span>
             <Badge
               variant={
@@ -146,15 +133,25 @@ export function AppSidebar({
               {userPlan?.name || "Free"}
             </Badge>
           </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            {getPlanDescription(userPlan)}
-          </p>
+
+          {/* Upgrade Button */}
           <Button
             size="sm"
-            className="w-full text-white"
+            className="w-full text-white mb-1.5"
             onClick={handleUpgrade}
           >
             업그레이드
+          </Button>
+
+          {/* Logout Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            onClick={handleLogout}
+          >
+            <LogOut className="w-3 h-3" />
+            로그아웃
           </Button>
         </Card>
       </div>

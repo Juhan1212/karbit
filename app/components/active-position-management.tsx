@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Button } from "./button";
+import { Badge } from "./badge";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -234,7 +235,13 @@ export const ActivePositionManagement = React.memo(
     return (
       <Card>
         <CardHeader>
-          <CardTitle>실시간 포지션 관리</CardTitle>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            <CardTitle>실시간 포지션 관리</CardTitle>
+            <Badge variant="secondary" className="gap-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              5초마다 업데이트
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent>
           {positions.length === 0 ? (

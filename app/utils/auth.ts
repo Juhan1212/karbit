@@ -10,6 +10,9 @@ export interface AuthUser {
   email: string;
   name: string | null;
   planId: number | null;
+  totalSelfEntryCount?: number;
+  totalAutoEntryCount?: number;
+  totalAlarmCount?: number;
   plan?: {
     id: number;
     name: string;
