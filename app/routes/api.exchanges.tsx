@@ -27,6 +27,11 @@ async function testExchangeConnection(
     // 잔액 조회로 연결 테스트
     const balance = await adapter.getBalance();
 
+    // balance.error가 있으면 예외 throw
+    if (balance && balance.error) {
+      throw new Error(balance.error);
+    }
+
     return {
       success: true,
       exchangeName,
