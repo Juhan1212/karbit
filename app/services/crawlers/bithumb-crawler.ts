@@ -49,7 +49,6 @@ export class BithumbCrawler implements CrawlerInterface {
       // });
 
       const html = await page.content();
-      console.log(html);
       await browser.close();
       browser = null;
 

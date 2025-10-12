@@ -11,7 +11,6 @@ import {
   createSuccessResult,
 } from "../../utils/news-crawler-utils";
 import { launchBrowser } from "../../utils/puppeteer-config";
-
 export class UpbitCrawler implements CrawlerInterface {
   name = "Upbit";
   private baseUrl = "https://upbit.com";
@@ -62,6 +61,8 @@ export class UpbitCrawler implements CrawlerInterface {
       );
 
       if (itemsFoundByPuppeteer === 0) {
+        throw new Error("No items found with primary selector");
+
         // 다른 셀렉터들도 시도
         const altSelectors = [
           'a[class*="guxf6x"]',

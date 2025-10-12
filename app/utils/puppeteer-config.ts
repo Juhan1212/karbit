@@ -1,6 +1,10 @@
-import * as puppeteer from "puppeteer";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { execSync } from "child_process";
 import { existsSync } from "fs";
+
+// Stealth 플러그인 적용 (Cloudflare 우회 시도)
+puppeteer.use(StealthPlugin());
 
 /**
  * EC2 환경에서 Chrome 실행 파일 경로를 찾는 함수
