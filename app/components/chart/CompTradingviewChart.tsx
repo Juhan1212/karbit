@@ -947,6 +947,22 @@ const CompTradingviewChart = memo(
       // 초기 위치 설정
       setTimeout(updateVolumeLegendPosition, 100);
 
+      // 백그라운드에서 돌아올 때 legend 위치 재계산
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          // 페이지가 다시 보이게 되면 약간의 지연 후 위치 업데이트
+          setTimeout(updateVolumeLegendPosition, 100);
+        }
+      };
+
+      const handleFocus = () => {
+        // 창이 포커스를 다시 받으면 위치 업데이트
+        setTimeout(updateVolumeLegendPosition, 100);
+      };
+
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("focus", handleFocus);
+
       setInitialFetchCompleted(false);
 
       // 캔들 데이터를 가져오기 위한 데이터피드 생성
@@ -1136,6 +1152,14 @@ const CompTradingviewChart = memo(
           .unsubscribeVisibleLogicalRangeChange(
             visibleLogicalRangeChangeHandler
           );
+
+        // 이벤트 리스너 제거
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityChange
+        );
+        window.removeEventListener("focus", handleFocus);
+
         chartRef.current?.remove();
         chartRef.current = null;
         datafeedRef.current = null;

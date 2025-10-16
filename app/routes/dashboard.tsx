@@ -733,6 +733,10 @@ export default function Dashboard() {
           // 포지션 종료 후 새로고침 (로딩 표시)
           pollActivePositions(true);
         }}
+        onTickerSelect={(coinSymbol: string) => {
+          // 티커 선택 시 차트 업데이트
+          setSelectedTicker(coinSymbol);
+        }}
       />
 
       {/* Exchange Rate Chart - Only show when there are active positions */}
@@ -786,12 +790,8 @@ export default function Dashboard() {
               <h3 className="text-lg font-medium mb-2">
                 현재 활성화된 포지션이 없습니다
               </h3>
-              <p className="text-muted-foreground mb-4">
-                자동매매를 시작하면 활성 포지션의 차트를 실시간으로 확인할 수
-                있습니다.
-              </p>
               <p className="text-sm text-muted-foreground">
-                자동매매 페이지에서 설정을 완료한 후 자동매매를 활성화해보세요.
+                *자동매매 페이지에서 설정을 완료한 후 자동매매를 활성화해보세요.
               </p>
             </div>
           </CardContent>

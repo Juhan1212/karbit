@@ -40,6 +40,7 @@ app.use(
       if (!origin) return callback(null, true);
       const allowed = [
         process.env.BASE_URL,
+        process.env.BASE_DNS_URL,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
       ];

@@ -58,7 +58,14 @@ export function PremiumTicker({
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [selectedSeed, setSelectedSeed] = useState<number>(1000000);
   const [selectedItem, setSelectedItem] = useState<TickPayload | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [filteredItems, setFilteredItems] = useState<TickPayload[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
+  const [pinnedItem, setPinnedItem] = useState<
+    (TickPayload & { _rate: number | null }) | null
+  >(null);
   const esRef = useRef<EventSource | null>(null);
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     // ⭐ 모든 플랜에서 실시간 환율 데이터를 표시 (isLocked 체크 제거)
@@ -126,6 +133,23 @@ export function PremiumTicker({
     return withRate;
   }, [items, selectedSeed, sortOrder]);
 
+  // 고정된 아이템의 실시간 데이터 업데이트
+  useEffect(() => {
+    if (!pinnedItem) return;
+
+    // sortedItems에서 동일한 아이템 찾기
+    const updatedItem = sortedItems.find(
+      (it) =>
+        it.symbol === pinnedItem.symbol &&
+        it.korean_ex === pinnedItem.korean_ex &&
+        it.foreign_ex === pinnedItem.foreign_ex
+    );
+
+    if (updatedItem) {
+      setPinnedItem(updatedItem);
+    }
+  }, [sortedItems, pinnedItem]);
+
   // 평균 환율 계산
   const averageRate = useMemo(() => {
     if (!sortedItems.length || !selectedSeed) return null;
@@ -153,6 +177,74 @@ export function PremiumTicker({
       onItemSelected(selectedItem);
     }
   }, [selectedItem, onItemSelected]);
+
+  // 검색 입력 시 자동완성 필터링
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setFilteredItems([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    // 티커 심볼로 필터링 (중복 포함)
+    const filtered = items
+      .filter((item) =>
+        item.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+      .slice(0, 5); // 최대 5개까지만 표시
+
+    setFilteredItems(filtered);
+    setShowSuggestions(filtered.length > 0);
+  }, [searchQuery, items]);
+
+  // 티커 검색 및 고정
+  const handleSearch = (
+    symbol: string,
+    koreanEx?: string,
+    foreignEx?: string
+  ) => {
+    const trimmedSymbol = symbol.trim().toUpperCase();
+    if (!trimmedSymbol) {
+      toast.error("티커 심볼을 입력해주세요");
+      return;
+    }
+
+    // 테이블에서 해당 티커 찾기
+    let targetItem = null;
+
+    if (koreanEx && foreignEx) {
+      // 거래소 정보가 있으면 정확히 일치하는 항목 찾기
+      targetItem = sortedItems.find(
+        (it) =>
+          it.symbol.toUpperCase() === trimmedSymbol &&
+          it.korean_ex?.toUpperCase() === koreanEx.toUpperCase() &&
+          it.foreign_ex?.toUpperCase() === foreignEx.toUpperCase()
+      );
+    } else {
+      // 거래소 정보가 없으면 첫 번째 일치하는 티커 찾기
+      targetItem = sortedItems.find(
+        (it) => it.symbol.toUpperCase() === trimmedSymbol
+      );
+    }
+
+    if (!targetItem) {
+      toast.error(`${trimmedSymbol} 티커를 찾을 수 없습니다`);
+      return;
+    }
+
+    // 검색된 아이템을 고정
+    setPinnedItem(targetItem);
+    setSelectedItem(targetItem);
+
+    // 성공 토스트
+    const exchangeInfo =
+      koreanEx && foreignEx ? ` (${koreanEx} → ${foreignEx})` : "";
+    toast.success(`${trimmedSymbol}${exchangeInfo} 티커를 고정했습니다!`);
+
+    // 검색창 초기화
+    setSearchQuery("");
+    setShowSuggestions(false);
+  };
 
   return (
     <Card>
@@ -204,14 +296,163 @@ export function PremiumTicker({
             <span>1억원</span>
           </div>
         </div>
-        <div className="max-h-[400px] overflow-y-auto overflow-x-auto scrollbar-thin">
+
+        {/* 티커 검색 기능 */}
+        <div className="mt-6 mb-4">
+          <label className="text-sm font-medium mb-2 block">티커 검색</label>
+          <div className="relative">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleSearch(searchQuery);
+                    }
+                  }}
+                  placeholder="티커 심볼 입력 (예: BTC, ETH)"
+                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                {/* 자동완성 드롭다운 */}
+                {showSuggestions && filteredItems.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    {filteredItems.map((item) => (
+                      <div
+                        key={`${item.symbol}|${item.korean_ex}|${item.foreign_ex}`}
+                        className="px-3 py-2 text-sm hover:bg-muted cursor-pointer transition-colors"
+                        onClick={() => {
+                          handleSearch(
+                            item.symbol,
+                            item.korean_ex,
+                            item.foreign_ex
+                          );
+                        }}
+                      >
+                        <div className="font-medium">{item.symbol}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {item.korean_ex} → {item.foreign_ex}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Button
+                size="sm"
+                onClick={() => handleSearch(searchQuery)}
+                className="px-4"
+              >
+                검색
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* 검색된 티커 고정 표시 */}
+        {pinnedItem && (
+          <div className="mb-4 border-2 border-primary rounded-lg p-3 bg-primary/5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-semibold text-primary">
+                검색된 티커
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setPinnedItem(null)}
+                className="h-6 px-2 text-xs"
+              >
+                닫기
+              </Button>
+            </div>
+            <Table className="text-xs w-full table-fixed">
+              <colgroup>
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "18%" }} />
+                <col style={{ width: "25%" }} />
+                <col style={{ width: "25%" }} />
+              </colgroup>
+              <TableBody>
+                <TableRow className="bg-primary/10 border-primary/20">
+                  <TableCell className="px-1 pr-4 text-center">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300 mx-auto"
+                      onClick={async (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        try {
+                          const res = await fetch("/api/open-position", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                              coinSymbol: pinnedItem.symbol,
+                              krExchange: pinnedItem.korean_ex?.toUpperCase(),
+                              frExchange: pinnedItem.foreign_ex?.toUpperCase(),
+                              amount: 10000,
+                              leverage: 2,
+                            }),
+                          });
+                          const data = await res.json();
+                          if (res.ok && data.success) {
+                            toast.success(
+                              `${pinnedItem.symbol} 포지션진입 성공!`
+                            );
+                          } else {
+                            toast.error(
+                              data.message ||
+                                `${pinnedItem.symbol} 포지션진입 실패`
+                            );
+                            if (data.redirectTo) {
+                              setTimeout(() => {
+                                window.location.href = data.redirectTo;
+                              }, 1000);
+                            }
+                          }
+                        } catch (error) {
+                          toast.error(`포지션진입 실패: ${error}`);
+                        }
+                      }}
+                    >
+                      <span className="hidden sm:inline">포지션진입</span>
+                      <span className="sm:hidden">진입</span>
+                    </Button>
+                  </TableCell>
+                  <TableCell className="px-2 pl-4 font-medium text-xs text-center">
+                    {pinnedItem.symbol}
+                  </TableCell>
+                  <TableCell className="px-2 text-xs text-center font-semibold text-primary">
+                    {pinnedItem._rate !== null && pinnedItem._rate !== undefined
+                      ? pinnedItem._rate
+                      : "-"}
+                  </TableCell>
+                  <TableCell className="px-2 text-xs text-muted-foreground text-center">
+                    {pinnedItem.korean_ex || "-"}
+                  </TableCell>
+                  <TableCell className="px-2 text-xs text-muted-foreground text-center">
+                    {pinnedItem.foreign_ex || "-"}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        <div
+          ref={tableContainerRef}
+          className="max-h-[400px] overflow-y-auto overflow-x-auto scrollbar-thin"
+        >
           <Table className="text-xs w-full table-fixed">
             <colgroup>
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "25%" }} />
-              <col style={{ width: "25%" }} />
+              <col style={{ width: "12%" }} /> {/* 진입 버튼 */}
+              <col style={{ width: "20%" }} /> {/* 티커 (넓게) */}
+              <col style={{ width: "18%" }} /> {/* 환율 */}
+              <col style={{ width: "25%" }} /> {/* 한국거래소 */}
+              <col style={{ width: "25%" }} /> {/* 해외거래소 */}
             </colgroup>
             <TableHeader>
               <TableRow>
@@ -249,7 +490,7 @@ export function PremiumTicker({
                   className="cursor-pointer hover:bg-muted/50 transition-colors"
                   onClick={() => setSelectedItem(it)}
                 >
-                  <TableCell className="px-2 text-center">
+                  <TableCell className="px-1 pr-3 text-center">
                     <Button
                       size="sm"
                       variant="secondary"
@@ -293,7 +534,7 @@ export function PremiumTicker({
                       <span className="sm:hidden">진입</span>
                     </Button>
                   </TableCell>
-                  <TableCell className="px-2 font-medium text-xs text-center">
+                  <TableCell className="px-2 pl-3 font-medium text-xs text-center">
                     {it.symbol}
                   </TableCell>
                   <TableCell className="px-2 text-xs text-center">

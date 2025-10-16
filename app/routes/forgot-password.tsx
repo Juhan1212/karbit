@@ -258,7 +258,7 @@ export default function ForgotPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-accent/20 to-secondary/30 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background bg-gradient-to-br from-background via-accent/20 to-secondary/30 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="mb-8 text-center">

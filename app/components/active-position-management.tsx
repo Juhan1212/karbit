@@ -61,12 +61,14 @@ interface ActivePositionManagementProps {
   isLoading?: boolean;
   onPositionClose?: (coinSymbol: string) => void;
   currentExchangeRate?: number;
+  onTickerSelect?: (coinSymbol: string) => void;
 }
 
 export const ActivePositionManagement = React.memo(
   function ActivePositionManagement({
     positions,
     currentExchangeRate = 1300, // 기본값 설정
+    onTickerSelect,
   }: ActivePositionManagementProps) {
     const [closingPositions, setClosingPositions] = useState<Set<string>>(
       new Set()
@@ -74,8 +76,6 @@ export const ActivePositionManagement = React.memo(
     const [positionBalances, setPositionBalances] = useState<
       Map<string, PositionBalance>
     >(new Map());
-    const [isPriceLoading, setIsPriceLoading] = useState(false);
-    const [lastPriceUpdate, setLastPriceUpdate] = useState<Date | null>(null);
 
     // 개별 포지션의 가격 정보 조회 함수 - 서버 API GET 호출
     const fetchPositionPrice = async (position: ActivePosition) => {
@@ -108,7 +108,6 @@ export const ActivePositionManagement = React.memo(
         return;
       }
 
-      setIsPriceLoading(true);
       const newBalances = new Map<string, PositionBalance>();
 
       for (const position of positions) {
@@ -176,8 +175,6 @@ export const ActivePositionManagement = React.memo(
       }
 
       setPositionBalances(newBalances);
-      setIsPriceLoading(false);
-      setLastPriceUpdate(new Date());
     }, [positions, currentExchangeRate]);
 
     // 포지션 가격 및 수익 정보 초기화
@@ -339,7 +336,15 @@ export const ActivePositionManagement = React.memo(
                     {positions.map((position) => {
                       const balance = positionBalances.get(position.coinSymbol);
                       return (
-                        <TableRow key={position.coinSymbol}>
+                        <TableRow
+                          key={position.coinSymbol}
+                          className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() => {
+                            if (onTickerSelect) {
+                              onTickerSelect(position.coinSymbol);
+                            }
+                          }}
+                        >
                           <TableCell className="text-center font-medium">
                             {position.coinSymbol}
                           </TableCell>
