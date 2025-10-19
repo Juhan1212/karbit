@@ -1,20 +1,5 @@
 import nodemailer from "nodemailer";
-
-// 이메일 설정 타입 (OAuth2.0 지원)
-interface EmailConfig {
-  service?: string;
-  host?: string;
-  port?: number;
-  secure?: boolean;
-  auth: {
-    type?: string;
-    user: string;
-    pass?: string;
-    clientId?: string;
-    clientSecret?: string;
-    refreshToken?: string;
-  };
-}
+import { google } from "googleapis";
 
 // 이메일 발송 옵션 타입
 interface EmailOptions {
@@ -24,50 +9,72 @@ interface EmailOptions {
   text?: string;
 }
 
-// 환경변수에서 이메일 설정 가져오기
-const getEmailConfig = (): EmailConfig => {
-  // OAuth2.0 설정이 있는 경우 (Gmail 권장)
-  if (
-    process.env.GOOGLE_CLIENT_ID &&
-    process.env.GOOGLE_CLIENT_SECRET &&
-    process.env.GOOGLE_REFRESH_TOKEN
-  ) {
-    return {
+// OAuth2 클라이언트 생성
+const createOAuth2Client = () => {
+  const OAuth2 = google.auth.OAuth2;
+
+  const oauth2Client = new OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    "https://developers.google.com/oauthplayground" // Redirect URL
+  );
+
+  oauth2Client.setCredentials({
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+  });
+
+  return oauth2Client;
+};
+
+// Access Token 가져오기 (자동 갱신)
+const getAccessToken = async (): Promise<string> => {
+  try {
+    const oauth2Client = createOAuth2Client();
+    const accessToken = await oauth2Client.getAccessToken();
+
+    if (!accessToken.token) {
+      throw new Error("Access Token을 가져올 수 없습니다.");
+    }
+
+    return accessToken.token;
+  } catch (error: any) {
+    // Refresh Token 만료 에러 처리
+    if (error.message?.includes("invalid_grant")) {
+      console.error(
+        "❌ Refresh Token이 만료되었습니다. OAuth2 Playground에서 새로 발급받아야 합니다."
+      );
+      throw new Error(
+        "이메일 인증 토큰이 만료되었습니다. 관리자에게 문의하세요."
+      );
+    }
+
+    console.error("Access Token 발급 실패:", error);
+    throw new Error("이메일 인증에 실패했습니다.");
+  }
+};
+
+// 이메일 전송기 생성 (OAuth2 최신 방식)
+const createTransporter = async () => {
+  try {
+    const accessToken = await getAccessToken();
+
+    const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
         type: "OAuth2",
-        user: process.env.EMAIL_USER || "",
+        user: process.env.EMAIL_USER,
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+        accessToken: accessToken,
       },
-    };
+    } as any);
+
+    return transporter;
+  } catch (error) {
+    console.error("Transporter 생성 실패:", error);
+    throw error;
   }
-
-  // 기본 SMTP 설정 (Mailtrap, 네이버 등)
-  const config = {
-    host: process.env.EMAIL_HOST || "smtp.gmail.com",
-    port: parseInt(process.env.EMAIL_PORT || "587"),
-    secure: process.env.EMAIL_SECURE === "true",
-    auth: {
-      user: process.env.EMAIL_USER || "",
-      pass: process.env.EMAIL_PASS || "",
-    },
-  };
-
-  if (!config.auth.user || !config.auth.pass) {
-    throw new Error(
-      "이메일 인증 정보가 설정되지 않았습니다. EMAIL_USER와 EMAIL_PASS 환경변수를 확인하세요."
-    );
-  }
-
-  return config;
-};
-
-// 이메일 전송기 생성
-const createTransporter = () => {
-  const config = getEmailConfig();
-  return nodemailer.createTransport(config as any);
 };
 
 // 인증코드 생성
@@ -144,7 +151,7 @@ const getPasswordResetEmailTemplate = (verificationCode: string) => {
 // 이메일 발송 함수
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
   try {
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
 
     const mailOptions = {
       from: `"Karbit" <${process.env.EMAIL_USER}>`,
@@ -155,10 +162,18 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log("이메일 발송 성공:", result.messageId);
-  } catch (error) {
-    console.error("이메일 발송 실패:", error);
-    throw new Error("이메일 발송에 실패했습니다.");
+    console.log("✅ 이메일 발송 성공:", result.messageId);
+  } catch (error: any) {
+    console.error("❌ 이메일 발송 실패:", error);
+
+    // 사용자 친화적인 에러 메시지
+    if (error.message?.includes("만료")) {
+      throw new Error(
+        "이메일 서비스 인증이 만료되었습니다. 잠시 후 다시 시도해주세요."
+      );
+    }
+
+    throw new Error("이메일 발송에 실패했습니다. 관리자에게 문의하세요.");
   }
 };
 

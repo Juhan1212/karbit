@@ -177,7 +177,7 @@ export async function action({ request }: ActionFunctionArgs) {
       // 동시에 주문 상세 정보 조회
       const [krSellOrderResult, frBuyOrderResult] = await Promise.allSettled([
         krAdapter.getOrder(krSellOrderId, coinSymbol),
-        frAdapter.getOrder(frBuyOrderId, coinSymbol),
+        frAdapter.getClosedPnl(frBuyOrderId, coinSymbol),
       ]);
 
       // 한국 거래소 매도 주문 결과 처리
@@ -194,7 +194,6 @@ export async function action({ request }: ActionFunctionArgs) {
 
       console.log("한국 거래소 매도 주문 결과:", krSellOrder);
 
-      // 해외 거래소 매수 주문 결과 처리
       let frBuyOrder;
       if (frBuyOrderResult.status === "fulfilled") {
         frBuyOrder = frBuyOrderResult.value;
@@ -229,8 +228,8 @@ export async function action({ request }: ActionFunctionArgs) {
 
       // 5. 현재 환율 조회 (실제 수익률 계산용) - 정밀한 나눗셈 사용
       const exitRate = preciseDivide(
-        safeNumeric(krSellOrder.filled, 0),
-        safeNumeric(frBuyOrder.filled, 0),
+        safeNumeric(krSellOrder.price, 0),
+        safeNumeric(frBuyOrder.avgExitPrice, 0),
         CRYPTO_DECIMALS.RATE
       );
 
@@ -251,7 +250,7 @@ export async function action({ request }: ActionFunctionArgs) {
       // 총 회수금액 = 한국 거래소 매도금 + 해외 거래소 매수금 * USDT 가격
       const krSellAmount = safeNumeric(krSellOrder.filled, 0);
       const frBuyAmountInKrw = preciseMultiply(
-        safeNumeric(frBuyOrder.filled, 0),
+        safeNumeric(positionSettlement.totalFrFunds + frBuyOrder.totalPnl, 0),
         currentUsdtPrice,
         CRYPTO_DECIMALS.FUNDS
       );
@@ -263,25 +262,23 @@ export async function action({ request }: ActionFunctionArgs) {
 
       // 총 수수료 = 기존 수수료 + 이번 거래 수수료
       const existingKrFee = safeNumeric(positionSettlement.totalKrFee, 0);
-      const existingFrFeeInKrw = preciseMultiply(
-        safeNumeric(positionSettlement.totalFrFee, 0),
-        currentUsdtPrice,
+      const currentKrFee = safeNumeric(krSellOrder.fee, 0);
+      let totalKrFees = preciseAdd(
+        existingKrFee,
+        currentKrFee,
         CRYPTO_DECIMALS.FEE
       );
-      const currentKrFee = safeNumeric(krSellOrder.fee, 0);
-      const currentFrFeeInKrw = preciseMultiply(
-        safeNumeric(frBuyOrder.fee, 0),
+      const totalFrFeeInKrw = preciseMultiply(
+        safeNumeric(frBuyOrder.totalFee, 0),
         currentUsdtPrice,
         CRYPTO_DECIMALS.FEE
       );
 
-      let totalFees = preciseAdd(
-        existingKrFee,
-        existingFrFeeInKrw,
+      const totalFees = preciseAdd(
+        totalKrFees,
+        totalFrFeeInKrw,
         CRYPTO_DECIMALS.FEE
       );
-      totalFees = preciseAdd(totalFees, currentKrFee, CRYPTO_DECIMALS.FEE);
-      totalFees = preciseAdd(totalFees, currentFrFeeInKrw, CRYPTO_DECIMALS.FEE);
 
       // 최종 수익 = 회수금액 - 투자금액 - 수수료
       let profit = preciseSubtract(
@@ -317,11 +314,14 @@ export async function action({ request }: ActionFunctionArgs) {
         krFunds: krSellOrder.filled,
         krFee: krSellOrder.fee || 0,
         frExchange: frExchange,
-        frOrderId: frBuyOrder.id,
-        frPrice: frBuyOrder.price,
-        frVolume: frBuyOrder.amount,
-        frFunds: frBuyOrder.filled,
-        frFee: frBuyOrder.fee || 0,
+        frOrderId: frBuyOrderId,
+        frPrice: frBuyOrder.avgExitPrice,
+        frVolume: frBuyOrder.totalVolume,
+        frFunds: safeNumeric(
+          positionSettlement.totalFrFunds + frBuyOrder.totalPnl,
+          0
+        ),
+        frFee: frBuyOrder.closeFee || 0,
         entryRate: positionSettlement.avgEntryRate,
         exitRate: exitRate,
         usdtPrice: currentUsdtPrice,
@@ -361,10 +361,10 @@ export async function action({ request }: ActionFunctionArgs) {
             fee: krSellOrder.fee,
           },
           frOrder: {
-            id: frBuyOrder.id,
-            filled: frBuyOrder.filled,
-            price: frBuyOrder.price,
-            fee: frBuyOrder.fee,
+            id: frBuyOrderId,
+            filled: frBuyOrder.totalVolume,
+            price: frBuyOrder.avgExitPrice,
+            fee: frBuyOrder.closeFee,
           },
           exitRate: exitRate,
         },

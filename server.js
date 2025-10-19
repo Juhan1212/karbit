@@ -1,10 +1,13 @@
 import compression from "compression";
 import express from "express";
 import morgan from "morgan";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { dirname, join } from "path";
 import dotenv from "dotenv";
 import cors from "cors";
+import session from "express-session";
+import cookieParser from "cookie-parser";
+import { setupOAuthRoutes } from "./oauth-routes.js";
 
 dotenv.config();
 
@@ -32,21 +35,56 @@ const app = express();
 app.use(compression());
 app.disable("x-powered-by");
 
+// Body parser and cookie parser
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Session middleware (필수: Passport가 사용)
+app.use(
+  session({
+    secret: process.env.JWT_SECRET || "your-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: !DEVELOPMENT,
+      httpOnly: true,
+      maxAge: 2 * 60 * 60 * 1000, // 2시간
+    },
+  })
+);
+
+// Passport는 Vite 서버 생성 후 초기화할 예정
+let passport;
+
 // CORS 미들웨어
 app.use(
   cors({
     origin: (origin, callback) => {
       // origin이 없으면(서버-서버, Postman 등) 허용
       if (!origin) return callback(null, true);
+
       const allowed = [
         process.env.BASE_URL,
         process.env.BASE_DNS_URL,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
       ];
+
+      // ngrok 도메인 허용 (개발 환경)
+      if (DEVELOPMENT && origin.includes(".ngrok-free.app")) {
+        return callback(null, true);
+      }
+
+      // ngrok.io 도메인 허용 (구버전)
+      if (DEVELOPMENT && origin.includes(".ngrok.io")) {
+        return callback(null, true);
+      }
+
       if (allowed.includes(origin)) {
         return callback(null, true);
       }
+
       callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
@@ -61,6 +99,28 @@ if (DEVELOPMENT) {
         server: { middlewareMode: true },
       })
     );
+
+    // Passport 초기화 (Google OAuth가 설정된 경우에만)
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      try {
+        console.log("Initializing Passport Google OAuth...");
+        const passportModule = await viteDevServer.ssrLoadModule(
+          "./app/config/passport.ts"
+        );
+        passport = passportModule.default;
+        app.use(passport.initialize());
+
+        // OAuth 라우트 등록 (app, passport, viteServer 전달)
+        setupOAuthRoutes(app, passport, viteDevServer);
+
+        console.log("✅ Passport Google OAuth initialized");
+      } catch (error) {
+        console.warn(
+          "⚠️ Passport initialization failed:",
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
 
     // 정적 파일 서빙 (업로드된 이미지) - Vite 미들웨어보다 먼저
     app.use(
@@ -104,6 +164,29 @@ if (DEVELOPMENT) {
   }
 } else {
   console.log("Starting production server");
+
+  // Passport 초기화 (Google OAuth가 설정된 경우에만)
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    try {
+      console.log("Initializing Passport Google OAuth...");
+      const passportPath = pathToFileURL(
+        join(__dirname, "app/config/passport.js")
+      ).href;
+      const passportModule = await import(passportPath);
+      passport = passportModule.default;
+      app.use(passport.initialize());
+
+      // OAuth 라우트 등록 (프로덕션에서는 viteServer 없음)
+      setupOAuthRoutes(app, passport);
+
+      console.log("✅ Passport Google OAuth initialized");
+    } catch (error) {
+      console.warn(
+        "⚠️ Passport initialization failed:",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
 
   // 정적 파일 서빙 (업로드된 이미지)
   app.use(

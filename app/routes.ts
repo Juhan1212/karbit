@@ -35,6 +35,12 @@ export default [
   route("/api/comment-like", "routes/api.comment-like.ts"),
   route("/api/comment-dislike", "routes/api.comment-dislike.ts"),
   route("/api/refund", "routes/api.refund.tsx"),
+  route("/api/telegram/auth", "routes/api.telegram.auth.ts"),
+  route("/api/telegram/webhook", "routes/api.telegram.webhook.ts"),
+  route(
+    "/api/user/telegram-notification",
+    "routes/api.user.telegram-notification.ts"
+  ),
   route("/terms-service", "routes/terms-service.tsx"),
   route("/privacy-policy", "routes/privacy-policy.tsx"),
   route("/community/posts/:postId", "routes/community.posts.$postId.tsx"),

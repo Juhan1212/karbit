@@ -459,4 +459,27 @@ export class BithumbAdapter extends ExchangeAdapter {
       throw error;
     }
   }
+
+  async getPositionInfo(symbol: string): Promise<any> {
+    // Bithumb은 선물 포지션 정보를 제공하지 않음
+    throw new Error("Bithumb does not support position information.");
+  }
+
+  async getClosedPnl(
+    symbol: string,
+    orderId: string,
+    startTime?: number,
+    endTime?: number
+  ): Promise<{
+    symbol: string;
+    totalPnl: number;
+    slippage: number;
+    avgExitPrice: number;
+    totalFee: number;
+    totalVolume: number;
+    orderId: string;
+    closeFee: number;
+  }> {
+    throw new Error("Bithumb does not support closed PnL retrieval.");
+  }
 }

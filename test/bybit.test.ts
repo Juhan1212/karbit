@@ -70,4 +70,75 @@ describe("Bybit API E2E Tests", () => {
       expect(totalBalance).toBeGreaterThan(0);
     }, 60000); // 60초 타임아웃
   });
+
+  describe("포지션 정보 조회 테스트", () => {
+    it("should fetch position info for BTC successfully", async () => {
+      console.log("🚀 Bybit getPositionInfo E2E 테스트 시작");
+
+      const symbol = "BEAM";
+      console.log(`📋 조회 심볼: ${symbol}`);
+
+      const positionInfo = await bybitAdapter.getPositionInfo(symbol);
+
+      console.log("✅ 포지션 정보 조회 성공!");
+      console.log("📦 포지션 정보:", {
+        symbol: positionInfo.symbol,
+        side: positionInfo.side,
+        size: positionInfo.size,
+        entryPrice: positionInfo.entryPrice,
+        markPrice: positionInfo.markPrice,
+        leverage: positionInfo.leverage,
+        unrealizedPnl: positionInfo.unrealizedPnl,
+        realizedPnl: positionInfo.realizedPnl,
+        liquidationPrice: positionInfo.liquidationPrice,
+        marginMode: positionInfo.marginMode,
+      });
+
+      // 반환 데이터 검증
+      expect(positionInfo).toBeDefined();
+      expect(positionInfo.symbol).toBe("BEAM");
+      expect(["long", "short", "none"]).toContain(positionInfo.side);
+      expect(typeof positionInfo.size).toBe("number");
+      expect(typeof positionInfo.entryPrice).toBe("number");
+      expect(typeof positionInfo.markPrice).toBe("number");
+      expect(typeof positionInfo.leverage).toBe("number");
+      expect(typeof positionInfo.unrealizedPnl).toBe("number");
+      expect(typeof positionInfo.realizedPnl).toBe("number");
+      expect(typeof positionInfo.liquidationPrice).toBe("number");
+      expect(["cross", "isolated"]).toContain(positionInfo.marginMode);
+
+      // 사이즈가 0보다 크면 진입가와 마크가격도 있어야 함
+      if (positionInfo.size > 0) {
+        expect(positionInfo.entryPrice).toBeGreaterThan(0);
+        expect(positionInfo.markPrice).toBeGreaterThan(0);
+        expect(positionInfo.side).not.toBe("none");
+        console.log("📊 활성 포지션 감지!");
+      } else {
+        expect(positionInfo.side).toBe("none");
+        console.log("📊 포지션 없음");
+      }
+    }, 60000); // 60초 타임아웃
+
+    it("should fetch position info for ETH successfully", async () => {
+      console.log("🚀 Bybit getPositionInfo (ETH) E2E 테스트 시작");
+
+      const symbol = "ETH";
+      console.log(`📋 조회 심볼: ${symbol}`);
+
+      const positionInfo = await bybitAdapter.getPositionInfo(symbol);
+
+      console.log("✅ 포지션 정보 조회 성공!");
+      console.log("📦 포지션 정보:", {
+        symbol: positionInfo.symbol,
+        side: positionInfo.side,
+        size: positionInfo.size,
+        unrealizedPnl: positionInfo.unrealizedPnl,
+      });
+
+      expect(positionInfo).toBeDefined();
+      expect(positionInfo.symbol).toBe("ETH");
+      expect(["long", "short", "none"]).toContain(positionInfo.side);
+      expect(typeof positionInfo.size).toBe("number");
+    }, 60000); // 60초 타임아웃
+  });
 });

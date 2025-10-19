@@ -21,6 +21,68 @@ export class BinanceAdapter extends ExchangeAdapter {
     });
   }
 
+  /**
+   * 심볼별 주문 최소 단위(lot size) 조회
+   */
+  async getLotSize(symbol: string): Promise<number | null> {
+    try {
+      const symbolInfo = `${symbol.toUpperCase()}USDT`;
+      const exchangeInfo = await this.client.futuresExchangeInfo();
+
+      const symbolData = exchangeInfo.symbols.find(
+        (s: any) => s.symbol === symbolInfo
+      );
+
+      if (!symbolData) {
+        console.warn(`[BinanceAdapter] Symbol not found: ${symbolInfo}`);
+        return null;
+      }
+
+      // LOT_SIZE 필터에서 최소 수량 조회
+      const lotSizeFilter = symbolData.filters.find(
+        (f: any) => f.filterType === "LOT_SIZE"
+      );
+
+      if (!lotSizeFilter) {
+        console.warn(
+          `[BinanceAdapter] LOT_SIZE filter not found for ${symbolInfo}`
+        );
+        return null;
+      }
+
+      return parseFloat(lotSizeFilter.minQty);
+    } catch (err) {
+      console.error("[BinanceAdapter] getLotSize error:", err);
+      return null;
+    }
+  }
+
+  /**
+   * 레버리지 설정
+   */
+  async setLeverage(symbol: string, leverage: string): Promise<any> {
+    try {
+      const symbolInfo = `${symbol.toUpperCase()}USDT`;
+      const result = await this.client.futuresLeverage(
+        symbolInfo,
+        parseInt(leverage, 10)
+      );
+
+      return {
+        success: true,
+        symbol: symbolInfo,
+        leverage: result.leverage,
+        maxNotionalValue: result.maxNotionalValue,
+      };
+    } catch (err: any) {
+      console.error("[BinanceAdapter] setLeverage error:", err);
+      return {
+        success: false,
+        error: err.message || "레버리지 설정 실패",
+      };
+    }
+  }
+
   async getBalance(): Promise<BalanceResult> {
     try {
       // USDT futures balance fetch
@@ -204,6 +266,145 @@ export class BinanceAdapter extends ExchangeAdapter {
       throw new Error(`No ticker data found for ${symbol}`);
     } catch (error) {
       console.error(`Error fetching ${symbol} ticker from Binance:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 포지션 정보 조회
+   */
+  async getPositionInfo(symbol: string): Promise<{
+    symbol: string;
+    side: "long" | "short" | "none";
+    size: number;
+    entryPrice: number;
+    markPrice: number;
+    leverage: number;
+    unrealizedPnl: number;
+    realizedPnl: number;
+    liquidationPrice: number;
+    marginMode: string;
+  }> {
+    try {
+      const binanceSymbol = `${symbol.toUpperCase()}USDT`;
+
+      // Binance 선물 포지션 정보 조회
+      const positions = await this.client.futuresPositionRisk();
+      const position = positions.find((p: any) => p.symbol === binanceSymbol);
+
+      if (!position) {
+        // 심볼을 찾을 수 없는 경우
+        return {
+          symbol: symbol.toUpperCase(),
+          side: "none",
+          size: 0,
+          entryPrice: 0,
+          markPrice: 0,
+          leverage: 0,
+          unrealizedPnl: 0,
+          realizedPnl: 0,
+          liquidationPrice: 0,
+          marginMode: "cross",
+        };
+      }
+
+      const positionAmt = parseFloat(position.positionAmt || "0");
+      const side: "long" | "short" | "none" =
+        positionAmt === 0 ? "none" : positionAmt > 0 ? "long" : "short";
+
+      return {
+        symbol: symbol.toUpperCase(),
+        side,
+        size: Math.abs(positionAmt),
+        entryPrice: parseFloat(position.entryPrice || "0"),
+        markPrice: parseFloat(position.markPrice || "0"),
+        leverage: parseFloat(position.leverage || "0"),
+        unrealizedPnl: parseFloat(position.unRealizedProfit || "0"),
+        realizedPnl: 0, // Binance는 별도 API로 조회 필요
+        liquidationPrice: parseFloat(position.liquidationPrice || "0"),
+        marginMode: position.marginType?.toLowerCase() || "cross",
+      };
+    } catch (error: any) {
+      console.error("Binance getPositionInfo error:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 종료된 포지션의 실현 손익(Closed PnL) 조회
+   */
+  async getClosedPnl(
+    symbol: string,
+    orderId: string,
+    startTime?: number,
+    endTime?: number
+  ): Promise<{
+    orderId: string;
+    symbol: string;
+    totalPnl: number;
+    slippage: number;
+    avgExitPrice: number;
+    totalFee: number;
+    closeFee: number;
+    totalVolume: number;
+  }> {
+    try {
+      const binanceSymbol = `${symbol.toUpperCase()}USDT`;
+
+      // Binance에서는 orderId로 직접 주문 정보 조회
+      const orderInfo = await this.client.futuresGetOrder({
+        symbol: binanceSymbol,
+        orderId: orderId,
+      });
+
+      if (!orderInfo) {
+        return {
+          orderId,
+          symbol: symbol.toUpperCase(),
+          totalPnl: 0,
+          slippage: 0,
+          avgExitPrice: 0,
+          totalFee: 0,
+          closeFee: 0,
+          totalVolume: 0,
+        };
+      }
+
+      // 실현 손익 계산 (Binance는 주문 정보에서 realizedPnl 제공)
+      const totalPnl = parseFloat(orderInfo.realizedPnl || "0");
+
+      // 평균 종료 가격 (avgPrice가 종료 가격)
+      const avgExitPrice = parseFloat(orderInfo.avgPrice || "0");
+
+      // 총 수수료 (Binance는 commission 필드 사용)
+      const totalFee = parseFloat(orderInfo.commission || "0");
+
+      // 청산 수수료 (Binance는 단일 commission만 제공, 청산 수수료 = 총 수수료)
+      const closeFee = parseFloat(orderInfo.commission || "0");
+
+      // 총 거래량 (executedQty: 체결된 수량)
+      const totalVolume = parseFloat(orderInfo.executedQty || "0");
+
+      // 슬리피지 계산: |((avgPrice - price) / price) * 100|
+      const orderPrice = parseFloat(orderInfo.price || "0");
+      const avgPrice = parseFloat(orderInfo.avgPrice || "0");
+      const slippage =
+        orderPrice > 0
+          ? Math.abs(((avgPrice - orderPrice) / orderPrice) * 100)
+          : 0;
+
+      return {
+        orderId,
+        symbol: symbol.toUpperCase(),
+        totalPnl,
+        slippage,
+        avgExitPrice,
+        totalFee,
+        closeFee,
+        totalVolume,
+      };
+    } catch (error: any) {
+      console.error("Binance getClosedPnl error:", error);
       throw error;
     }
   }

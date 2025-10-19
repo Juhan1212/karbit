@@ -93,6 +93,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../components/tooltip";
+import { TelegramConnect } from "../components/TelegramConnect";
 import { formatKRW } from "~/utils/decimal";
 
 export function meta() {
@@ -178,6 +179,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       restrictedCoins,
       tradingHistory,
       tradingStats,
+      telegramChatId: user.telegramChatId, // 텔레그램 연동 상태
+      telegramNotificationEnabled: user.telegramNotificationEnabled ?? false, // 텔레그램 알림 활성화 여부
       pagination: {
         currentPage: page,
         totalPages,
@@ -205,6 +208,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         closedTrades: 0,
         totalProfit: 0,
       },
+      telegramChatId: null, // 텔레그램 연동 상태
+      telegramNotificationEnabled: false, // 텔레그램 알림 활성화 여부
       pagination: {
         currentPage: 1,
         totalPages: 1,
@@ -227,6 +232,8 @@ export default function AutoTrading() {
     tradingHistory: initialTradingHistory,
     tradingStats: initialTradingStats,
     pagination: initialPagination,
+    telegramChatId,
+    telegramNotificationEnabled: initialTelegramNotificationEnabled,
   } = useLoaderData<typeof loader>();
   const user = useUser();
 
@@ -301,6 +308,16 @@ export default function AutoTrading() {
   const [allowAverageUp, setAllowAverageUp] = useState(
     activeStrategy?.allowAverageUp || false
   );
+  const [telegramNotificationEnabled, setTelegramNotificationEnabled] =
+    useState(initialTelegramNotificationEnabled);
+  const [currentTelegramChatId, setCurrentTelegramChatId] =
+    useState(telegramChatId);
+
+  // loader 데이터가 변경될 때마다 telegram state 동기화
+  useEffect(() => {
+    setCurrentTelegramChatId(telegramChatId);
+    setTelegramNotificationEnabled(initialTelegramNotificationEnabled);
+  }, [telegramChatId, initialTelegramNotificationEnabled]);
 
   // 거래소별 잔액 및 환율 관련 state
   const [currentExchangeRate, setCurrentExchangeRate] = useState<number | null>(
@@ -718,6 +735,48 @@ export default function AutoTrading() {
     }
   };
 
+  // 텔레그램 알림 토글 핸들러
+  const handleTelegramNotificationToggle = async (enabled: boolean) => {
+    try {
+      // fetcher를 사용하여 React Router 방식으로 API 호출
+      fetcher.submit(
+        { enabled: enabled.toString() },
+        {
+          method: "POST",
+          action: "/api/user/telegram-notification",
+        }
+      );
+
+      toast.success(
+        enabled
+          ? "텔레그램 알림이 활성화되었습니다"
+          : "텔레그램 연동이 해제되었습니다"
+      );
+    } catch (error) {
+      console.error("텔레그램 알림 설정 오류:", error);
+      toast.error("텔레그램 알림 설정 업데이트에 실패했습니다");
+    }
+  };
+
+  // 텔레그램 연동 해제 핸들러
+  const handleTelegramDisconnect = async () => {
+    try {
+      // fetcher를 사용하여 React Router 방식으로 API 호출
+      fetcher.submit(
+        { enabled: "false" },
+        {
+          method: "POST",
+          action: "/api/user/telegram-notification",
+        }
+      );
+
+      toast.success("텔레그램 연동이 해제되었습니다");
+    } catch (error) {
+      console.error("텔레그램 연동 해제 오류:", error);
+      toast.error("텔레그램 연동 해제에 실패했습니다");
+    }
+  };
+
   // 선택된 코인 목록 필터링
   const getSelectedCoins = () => {
     const coins = [selectedCoin1, selectedCoin2, selectedCoin3].filter(
@@ -1112,44 +1171,48 @@ export default function AutoTrading() {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Seed Amount */}
-            <div className="space-y-3">
-              <div className="border-b border-border pb-2 mb-4">
-                <h3 className="text-base font-semibold text-foreground">
-                  시드 금액 설정
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
+            <Card className="border-2 transition-all hover:shadow-md hover:border-blue-300/70 dark:hover:border-blue-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">💰 시드 금액 설정</CardTitle>
+                <CardDescription>
                   시드금액은 원화 기준이며, 국내 거래소와 해외 거래소에 해당
-                  금액이 각각 준비되어 있어야 합니다. 주문가능금액이 설정한
-                  시드금액보다 부족할 경우 자동매매 주문이 실패할 수 있습니다.
-                </p>
-              </div>
-              <div className="flex justify-between items-center">
-                <label className="text-sm font-medium">시드 금액</label>
-                <span className="text-sm text-muted-foreground">
-                  {formatKRW(seedAmount[0])}
-                </span>
-              </div>
-              <Slider
-                value={seedAmount}
-                onValueChange={setSeedAmount}
-                max={100000000} // 1억
-                min={1000000} // 100만
-                step={1000000} // 100만 단위
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>100만원</span>
-                <span>1억원</span>
-              </div>
-            </div>
+                  금액이 각각 준비되어 있어야 합니다.
+                  <br />
+                  <span className="text-red-600 font-bold">
+                    주문가능금액이 설정한 시드금액보다 부족할 경우 자동매매
+                    주문이 실패할 수 있습니다.
+                  </span>
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-medium">시드 금액</label>
+                  <span className="text-sm text-muted-foreground">
+                    {formatKRW(seedAmount[0])}
+                  </span>
+                </div>
+                <Slider
+                  value={seedAmount}
+                  onValueChange={setSeedAmount}
+                  max={100000000} // 1억
+                  min={1000000} // 100만
+                  step={1000000} // 100만 단위
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>100만원</span>
+                  <span>1억원</span>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Exchange Balance Information */}
-            <div className="space-y-4">
-              <div className="border-b border-border pb-2 mb-4">
+            <Card className="border-2 transition-all hover:shadow-md hover:border-blue-300/70 dark:hover:border-blue-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-foreground">
-                    연결된 거래소별 잔액 현황
-                  </h3>
+                  <CardTitle className="text-base">
+                    🏦 연결된 거래소별 잔액 현황
+                  </CardTitle>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
@@ -1164,16 +1227,15 @@ export default function AutoTrading() {
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <CardDescription>
                   현재 환율: 1 USD ={" "}
                   {currentExchangeRate
                     ? currentExchangeRate.toLocaleString()
                     : "-"}{" "}
                   KRW
-                </p>
-              </div>
-
-              <div className="space-y-3">
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 {exchangeBalances.map((exchange) => {
                   const requiredAmount = calculateRequiredAmount(
                     exchange,
@@ -1271,28 +1333,27 @@ export default function AutoTrading() {
                     </div>
                   );
                 })}
-              </div>
 
-              {exchangeBalances.length === 0 && (
-                <div className="text-center py-4 text-muted-foreground">
-                  <p className="text-sm">연결된 거래소가 없습니다.</p>
-                  <p className="text-xs">
-                    거래소 연동 페이지에서 거래소를 연결해주세요.
-                  </p>
-                </div>
-              )}
-            </div>
+                {exchangeBalances.length === 0 && (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p className="text-sm">연결된 거래소가 없습니다.</p>
+                    <p className="text-xs">
+                      거래소 연동 페이지에서 거래소를 연결해주세요.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Coin Selection Mode */}
-            <div className="space-y-4">
-              <div className="border-b border-border pb-2 mb-4">
-                <h3 className="text-base font-semibold text-foreground">
-                  거래 코인 선택
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  거래할 암호화폐를 선택하세요
-                </p>
-
+            <Card className="border-2 transition-all hover:shadow-md hover:border-blue-300/70 dark:hover:border-blue-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">🪙 거래 코인 선택</CardTitle>
+                <CardDescription>
+                  거래할 암호화폐를 수동으로 선택할 수 있습니다.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 {/* 입출금 제한 코인 표시 */}
                 {currentRestrictedCoins.length > 0 && (
                   <div className="mt-3">
@@ -1325,30 +1386,29 @@ export default function AutoTrading() {
                           최신화됩니다.
                         </div>
                         <div className="border rounded-lg overflow-hidden">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="h-8 text-xs">
-                                  거래소
-                                </TableHead>
-                                <TableHead className="h-8 text-xs">
-                                  코인
-                                </TableHead>
-                                <TableHead className="h-8 text-xs">
-                                  입금
-                                </TableHead>
-                                <TableHead className="h-8 text-xs">
-                                  출금
-                                </TableHead>
-                                <TableHead className="h-8 text-xs">
-                                  네트워크
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {currentRestrictedCoins
-                                .slice(0, 20)
-                                .map((coin, index) => (
+                          <div className="max-h-[400px] overflow-y-auto">
+                            <Table>
+                              <TableHeader className="sticky top-0 bg-background z-10">
+                                <TableRow>
+                                  <TableHead className="h-8 text-xs">
+                                    거래소
+                                  </TableHead>
+                                  <TableHead className="h-8 text-xs">
+                                    코인
+                                  </TableHead>
+                                  <TableHead className="h-8 text-xs">
+                                    입금
+                                  </TableHead>
+                                  <TableHead className="h-8 text-xs">
+                                    출금
+                                  </TableHead>
+                                  <TableHead className="h-8 text-xs">
+                                    네트워크
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {currentRestrictedCoins.map((coin, index) => (
                                   <TableRow key={index} className="text-xs">
                                     <TableCell className="py-2">
                                       {coin.exchangeName}
@@ -1382,217 +1442,213 @@ export default function AutoTrading() {
                                     </TableCell>
                                   </TableRow>
                                 ))}
-                            </TableBody>
-                          </Table>
-                          {currentRestrictedCoins.length > 20 && (
-                            <div className="text-xs text-muted-foreground text-center py-2 bg-muted/30">
-                              {currentRestrictedCoins.length - 20}개 코인 더
-                              있음...
-                            </div>
-                          )}
+                              </TableBody>
+                            </Table>
+                          </div>
                         </div>
                       </CollapsibleContent>
                     </Collapsible>
                   </div>
                 )}
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="auto-select"
-                    checked={coinMode === "auto"}
-                    onCheckedChange={(checked) => {
-                      if (userPlan?.name === "Premium") {
-                        setCoinMode(checked ? "auto" : "custom");
-                      }
-                    }}
-                    disabled={userPlan?.name !== "Premium"}
-                  />
-                  <Label htmlFor="auto-select" className="text-sm">
-                    자동 선택 {userPlan?.name !== "Premium" && "(Premium 전용)"}
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="custom-select"
-                    checked={coinMode === "custom"}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setCoinMode("custom");
-                      } else if (userPlan?.name === "Premium") {
-                        setCoinMode("auto");
-                      }
-                      // 프리미엄이 아닌 사용자가 사용자 정의를 해제하려고 하면 아무것도 하지 않음
-                    }}
-                  />
-                  <Label htmlFor="custom-select" className="text-sm">
-                    사용자 정의
-                  </Label>
-                </div>
-              </div>
 
-              {/* Custom Coin Selection with 3 Select Boxes */}
-              {coinMode === "custom" && (
-                <div className="space-y-3 pl-6 border-l-2 border-muted">
-                  <div className="text-xs text-muted-foreground">
-                    거래할 코인을 선택하세요 (최대 3개)
-                  </div>
-
-                  {/* 거래소 연결 경고문 */}
-                  {!hasConnectedExchanges && (
-                    <Alert className="border-amber-200 bg-amber-50">
-                      <AlertCircle className="h-4 w-4 text-amber-600" />
-                      <AlertDescription className="text-amber-800">
-                        거래소 연결이 완료되지 않아 선택할 수 없습니다. 거래소를
-                        먼저 연결해주세요.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label className="text-sm">코인 1 (필수)</Label>
-                    <AutoComplete
-                      value={selectedCoin1}
-                      onSelect={setSelectedCoin1}
-                      options={getAutoCompleteOptions(selectedCoin1)}
-                      placeholder={
-                        hasConnectedExchanges
-                          ? "코인을 검색하거나 선택하세요"
-                          : "거래소를 먼저 연결해주세요"
-                      }
-                      disabled={!hasConnectedExchanges}
-                      renderOption={(option) => (
-                        <div className="flex items-center gap-2">
-                          <span>{option.metadata.symbol}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {option.metadata.name}
-                            {option.metadata.availableExchanges &&
-                              option.metadata.availableExchanges.length > 0 && (
-                                <span className="ml-1">
-                                  (
-                                  {formatExchangeNames(
-                                    option.metadata.availableExchanges
-                                  )}
-                                  )
-                                </span>
-                              )}
-                          </span>
-                        </div>
-                      )}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-sm">코인 2 (선택)</Label>
-                    <AutoComplete
-                      value={selectedCoin2}
-                      onSelect={setSelectedCoin2}
-                      options={getOptionalAutoCompleteOptions(selectedCoin2)}
-                      placeholder={
-                        hasConnectedExchanges
-                          ? "코인을 검색하거나 선택하세요"
-                          : "거래소를 먼저 연결해주세요"
-                      }
-                      disabled={!hasConnectedExchanges}
-                      renderOption={(option) => {
-                        if (option.value === "none") {
-                          return (
-                            <span className="text-muted-foreground">
-                              선택 안함
-                            </span>
-                          );
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="auto-select"
+                      checked={coinMode === "auto"}
+                      onCheckedChange={(checked) => {
+                        if (userPlan?.name === "Premium") {
+                          setCoinMode(checked ? "auto" : "custom");
                         }
-                        return (
-                          <div className="flex items-center gap-2">
-                            <span>{option.metadata.symbol}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {option.metadata.name}
-                              {option.metadata.availableExchanges &&
-                                option.metadata.availableExchanges.length >
-                                  0 && (
-                                  <span className="ml-1">
-                                    (
-                                    {formatExchangeNames(
-                                      option.metadata.availableExchanges
-                                    )}
-                                    )
-                                  </span>
-                                )}
-                            </span>
-                          </div>
-                        );
+                      }}
+                      disabled={userPlan?.name !== "Premium"}
+                    />
+                    <Label htmlFor="auto-select" className="text-sm">
+                      자동 선택{" "}
+                      {userPlan?.name !== "Premium" && "(Premium 전용)"}
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="custom-select"
+                      checked={coinMode === "custom"}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setCoinMode("custom");
+                        } else if (userPlan?.name === "Premium") {
+                          setCoinMode("auto");
+                        }
+                        // 프리미엄이 아닌 사용자가 사용자 정의를 해제하려고 하면 아무것도 하지 않음
                       }}
                     />
+                    <Label htmlFor="custom-select" className="text-sm">
+                      사용자 정의
+                    </Label>
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-sm">코인 3 (선택)</Label>
-                    <AutoComplete
-                      value={selectedCoin3}
-                      onSelect={setSelectedCoin3}
-                      options={getOptionalAutoCompleteOptions(selectedCoin3)}
-                      placeholder={
-                        hasConnectedExchanges
-                          ? "코인을 검색하거나 선택하세요"
-                          : "거래소를 먼저 연결해주세요"
-                      }
-                      disabled={!hasConnectedExchanges}
-                      renderOption={(option) => {
-                        if (option.value === "none") {
-                          return (
-                            <span className="text-muted-foreground">
-                              선택 안함
-                            </span>
-                          );
-                        }
-                        return (
-                          <div className="flex items-center gap-2">
-                            <span>{option.metadata.symbol}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {option.metadata.name}
-                              {option.metadata.availableExchanges &&
-                                option.metadata.availableExchanges.length >
-                                  0 && (
-                                  <span className="ml-1">
-                                    (
-                                    {formatExchangeNames(
-                                      option.metadata.availableExchanges
-                                    )}
-                                    )
-                                  </span>
-                                )}
-                            </span>
-                          </div>
-                        );
-                      }}
-                    />
-                  </div>
-
-                  {getSelectedCoins().length > 0 && (
+                {/* Custom Coin Selection with 3 Select Boxes */}
+                {coinMode === "custom" && (
+                  <div className="space-y-3 pl-6 border-l-2 border-muted">
                     <div className="text-xs text-muted-foreground">
-                      선택된 코인: {getSelectedCoins().join(", ")} (
-                      {getSelectedCoins().length}/3)
+                      거래할 코인을 선택하세요 (최대 3개)
                     </div>
-                  )}
-                </div>
-              )}
 
-              {/* Auto Selection Info */}
-              {coinMode === "auto" && userPlan?.name === "Premium" && (
-                <div className="text-xs text-muted-foreground bg-primary/5 p-3 rounded border-l-2 border-primary">
-                  💡 AI가 김치 프리미엄 분석을 통해 최적의 코인을 자동으로
-                  선택합니다
-                </div>
-              )}
-            </div>
+                    {/* 거래소 연결 경고문 */}
+                    {!hasConnectedExchanges && (
+                      <Alert className="border-amber-200 bg-amber-50">
+                        <AlertCircle className="h-4 w-4 text-amber-600" />
+                        <AlertDescription className="text-amber-800">
+                          거래소 연결이 완료되지 않아 선택할 수 없습니다.
+                          거래소를 먼저 연결해주세요.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label className="text-sm">코인 1 (필수)</Label>
+                      <AutoComplete
+                        value={selectedCoin1}
+                        onSelect={setSelectedCoin1}
+                        options={getAutoCompleteOptions(selectedCoin1)}
+                        placeholder={
+                          hasConnectedExchanges
+                            ? "코인을 검색하거나 선택하세요"
+                            : "거래소를 먼저 연결해주세요"
+                        }
+                        disabled={!hasConnectedExchanges}
+                        renderOption={(option) => (
+                          <div className="flex items-center gap-2">
+                            <span>{option.metadata.symbol}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {option.metadata.name}
+                              {option.metadata.availableExchanges &&
+                                option.metadata.availableExchanges.length >
+                                  0 && (
+                                  <span className="ml-1">
+                                    (
+                                    {formatExchangeNames(
+                                      option.metadata.availableExchanges
+                                    )}
+                                    )
+                                  </span>
+                                )}
+                            </span>
+                          </div>
+                        )}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm">코인 2 (선택)</Label>
+                      <AutoComplete
+                        value={selectedCoin2}
+                        onSelect={setSelectedCoin2}
+                        options={getOptionalAutoCompleteOptions(selectedCoin2)}
+                        placeholder={
+                          hasConnectedExchanges
+                            ? "코인을 검색하거나 선택하세요"
+                            : "거래소를 먼저 연결해주세요"
+                        }
+                        disabled={!hasConnectedExchanges}
+                        renderOption={(option) => {
+                          if (option.value === "none") {
+                            return (
+                              <span className="text-muted-foreground">
+                                선택 안함
+                              </span>
+                            );
+                          }
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span>{option.metadata.symbol}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {option.metadata.name}
+                                {option.metadata.availableExchanges &&
+                                  option.metadata.availableExchanges.length >
+                                    0 && (
+                                    <span className="ml-1">
+                                      (
+                                      {formatExchangeNames(
+                                        option.metadata.availableExchanges
+                                      )}
+                                      )
+                                    </span>
+                                  )}
+                              </span>
+                            </div>
+                          );
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm">코인 3 (선택)</Label>
+                      <AutoComplete
+                        value={selectedCoin3}
+                        onSelect={setSelectedCoin3}
+                        options={getOptionalAutoCompleteOptions(selectedCoin3)}
+                        placeholder={
+                          hasConnectedExchanges
+                            ? "코인을 검색하거나 선택하세요"
+                            : "거래소를 먼저 연결해주세요"
+                        }
+                        disabled={!hasConnectedExchanges}
+                        renderOption={(option) => {
+                          if (option.value === "none") {
+                            return (
+                              <span className="text-muted-foreground">
+                                선택 안함
+                              </span>
+                            );
+                          }
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span>{option.metadata.symbol}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {option.metadata.name}
+                                {option.metadata.availableExchanges &&
+                                  option.metadata.availableExchanges.length >
+                                    0 && (
+                                    <span className="ml-1">
+                                      (
+                                      {formatExchangeNames(
+                                        option.metadata.availableExchanges
+                                      )}
+                                      )
+                                    </span>
+                                  )}
+                              </span>
+                            </div>
+                          );
+                        }}
+                      />
+                    </div>
+
+                    {getSelectedCoins().length > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        선택된 코인: {getSelectedCoins().join(", ")} (
+                        {getSelectedCoins().length}/3)
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Auto Selection Info */}
+                {coinMode === "auto" && userPlan?.name === "Premium" && (
+                  <div className="text-xs text-muted-foreground bg-primary/5 p-3 rounded border-l-2 border-primary">
+                    💡 AI가 김치 프리미엄 분석을 통해 최적의 코인을 자동으로
+                    선택합니다
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Exchange Rate Settings */}
-            <div className="space-y-4">
-              <div className="border-b border-border pb-2 mb-4">
+            <Card className="border-2 transition-all hover:shadow-md hover:border-blue-300/70 dark:hover:border-blue-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-foreground">
-                    환율 설정
-                  </h3>
+                  <CardTitle className="text-base">💱 환율 설정</CardTitle>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
@@ -1607,168 +1663,201 @@ export default function AutoTrading() {
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <CardDescription>
                   포지션 진입과 종료 기준 환율을 설정하세요
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                  <br />
                   현재 환율: 1 USD ={" "}
                   {currentExchangeRate
                     ? currentExchangeRate.toLocaleString()
                     : "-"}{" "}
                   KRW
-                </p>
-              </div>
-
-              {/* Entry Rate */}
-              <div className="space-y-2">
-                <Label className="text-sm">포지션 진입 환율</Label>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => adjustRate("entry", "decrease")}
-                    className="p-2 h-8 w-8"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </Button>
-                  <div className="flex-1 relative">
-                    <Input
-                      type="number"
-                      value={entryRate.toFixed(2)}
-                      onChange={(e) =>
-                        setEntryRate(parseFloat(e.target.value) || 0)
-                      }
-                      className="text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                      step="0.01"
-                      min="0"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                      원
-                    </span>
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Entry Rate */}
+                <div className="space-y-2">
+                  <Label className="text-sm">포지션 진입 환율</Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => adjustRate("entry", "decrease")}
+                      className="p-2 h-8 w-8"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </Button>
+                    <div className="flex-1 relative">
+                      <Input
+                        type="number"
+                        value={entryRate.toFixed(2)}
+                        onChange={(e) =>
+                          setEntryRate(parseFloat(e.target.value) || 0)
+                        }
+                        className="text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                        step="0.01"
+                        min="0"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                        원
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => adjustRate("entry", "increase")}
+                      className="p-2 h-8 w-8"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => adjustRate("entry", "increase")}
-                    className="p-2 h-8 w-8"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
                 </div>
-              </div>
 
-              {/* Exit Rate */}
-              <div className="space-y-2">
-                <Label className="text-sm">포지션 종료 환율</Label>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => adjustRate("exit", "decrease")}
-                    className="p-2 h-8 w-8"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </Button>
-                  <div className="flex-1 relative">
-                    <Input
-                      type="number"
-                      value={exitRate.toFixed(2)}
-                      onChange={(e) =>
-                        setExitRate(parseFloat(e.target.value) || 0)
-                      }
-                      className="text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                      step="0.01"
-                      min="0"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                      원
-                    </span>
+                {/* Exit Rate */}
+                <div className="space-y-2">
+                  <Label className="text-sm">포지션 종료 환율</Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => adjustRate("exit", "decrease")}
+                      className="p-2 h-8 w-8"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </Button>
+                    <div className="flex-1 relative">
+                      <Input
+                        type="number"
+                        value={exitRate.toFixed(2)}
+                        onChange={(e) =>
+                          setExitRate(parseFloat(e.target.value) || 0)
+                        }
+                        className="text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                        step="0.01"
+                        min="0"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                        원
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => adjustRate("exit", "increase")}
+                      className="p-2 h-8 w-8"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => adjustRate("exit", "increase")}
-                    className="p-2 h-8 w-8"
+                </div>
+
+                <div className="text-xs bg-green-50 dark:bg-green-950 p-2 rounded text-green-700 dark:text-green-300">
+                  💡 진입 환율이 종료 환율보다 낮으면 환율 하락 시 매수, 상승 시
+                  매도하는 전략입니다.
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Seed Division Setting (show card only when seedDivision >= 2) */}
+            {seedDivision < 2 && (
+              <div className="flex items-center justify-between border rounded-lg p-3">
+                <div>
+                  <div className="text-sm font-medium">✂️ 시드 분할</div>
+                  <div className="text-xs text-muted-foreground">
+                    현재: 일괄 진입 (분할 없음)
+                  </div>
+                </div>
+                <div className="w-32">
+                  <Select
+                    value={seedDivision.toString()}
+                    onValueChange={(value) => setSeedDivision(parseInt(value))}
                   >
-                    <Plus className="w-3 h-3" />
-                  </Button>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1회</SelectItem>
+                      <SelectItem value="2">2회</SelectItem>
+                      <SelectItem value="3">3회</SelectItem>
+                      <SelectItem value="4">4회</SelectItem>
+                      <SelectItem value="5">5회</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+            )}
 
-              <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
-                💡 진입 환율이 종료 환율보다 낮으면 환율 하락 시 매수, 상승 시
-                매도하는 전략입니다.
-              </div>
-            </div>
+            {seedDivision >= 2 && (
+              <Card className="border-2 transition-all hover:shadow-md hover:border-blue-300/70 dark:hover:border-blue-400/70 hover:-translate-y-0.5">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">
+                      ✂️ 시드 분할 설정
+                    </CardTitle>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="w-3 h-3 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-sm text-white">
+                            시드를 여러 번에 나누어 진입하여 리스크를 분산할 수
+                            있습니다.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <CardDescription>
+                    시드를 분할하여 리스크를 분산하세요
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm">분할 횟수</Label>
+                    <Select
+                      value={seedDivision.toString()}
+                      onValueChange={(value) =>
+                        setSeedDivision(parseInt(value))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1회 (일괄 진입)</SelectItem>
+                        <SelectItem value="2">2회 분할</SelectItem>
+                        <SelectItem value="3">3회 분할</SelectItem>
+                        <SelectItem value="4">4회 분할</SelectItem>
+                        <SelectItem value="5">5회 분할</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="text-xs text-muted-foreground">
+                      {seedDivision === 1
+                        ? "전체 시드를 한 번에 투입합니다"
+                        : `시드를 ${seedDivision}번에 나누어 진입합니다 (회당 ${Math.round(
+                            100 / seedDivision
+                          )}%씩)`}
+                    </div>
+                  </div>
 
-            {/* Seed Division Setting */}
-            <div className="space-y-4">
-              <div className="border-b border-border pb-2 mb-4">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-foreground">
-                    시드 분할 설정
-                  </h3>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="w-3 h-3 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-sm text-white">
-                          시드를 여러 번에 나누어 진입하여 리스크를 분산할 수
-                          있습니다.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  시드를 분할하여 리스크를 분산하세요
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm">분할 횟수</Label>
-                <Select
-                  value={seedDivision.toString()}
-                  onValueChange={(value) => setSeedDivision(parseInt(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1회 (일괄 진입)</SelectItem>
-                    <SelectItem value="2">2회 분할</SelectItem>
-                    <SelectItem value="3">3회 분할</SelectItem>
-                    <SelectItem value="4">4회 분할</SelectItem>
-                    <SelectItem value="5">5회 분할</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="text-xs text-muted-foreground">
-                  {seedDivision === 1
-                    ? "전체 시드를 한 번에 투입합니다"
-                    : `시드를 ${seedDivision}번에 나누어 진입합니다 (회당 ${Math.round(
-                        100 / seedDivision
-                      )}%씩)`}
-                </div>
-              </div>
-
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  거래소에 주문 가능한 잔액이 부족하거나 소진되면 포지션 주문이
-                  실패할 수 있습니다. 충분한 잔액을 유지해 주세요.
-                </AlertDescription>
-              </Alert>
-            </div>
+                  {/* <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    거래소에 주문 가능한 잔액이 부족하거나 소진되면 포지션 주문이
+                    실패할 수 있습니다. 충분한 잔액을 유지해 주세요.
+                  </AlertDescription>
+                </Alert> */}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Leverage Settings */}
-            <div className="space-y-4">
-              <div className="border-b border-border pb-2 mb-4">
+            <Card className="border-2 transition-all hover:shadow-md hover:border-blue-300/70 dark:hover:border-blue-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-foreground">
-                    해외거래소 레버리지 설정
-                  </h3>
+                  <CardTitle className="text-base">
+                    ⚡ 해외거래소 레버리지 설정
+                  </CardTitle>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
@@ -1784,142 +1873,141 @@ export default function AutoTrading() {
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <CardDescription>
                   해외거래소 선물거래 레버리지 배수를 설정하세요
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm">레버리지 배수</Label>
-                <Select
-                  value={leverage.toString()}
-                  onValueChange={(value) => setLeverage(parseInt(value))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1배</SelectItem>
-                    <SelectItem value="2">2배</SelectItem>
-                    <SelectItem value="3">3배</SelectItem>
-                    <SelectItem value="5">5배</SelectItem>
-                  </SelectContent>
-                </Select>
-                <div className="text-xs text-muted-foreground">
-                  {leverage === 1
-                    ? "현물거래로 진행됩니다 (레버리지 없음)"
-                    : `${leverage}배 레버리지가 적용됩니다`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm">레버리지 배수</Label>
+                  <Select
+                    value={leverage.toString()}
+                    onValueChange={(value) => setLeverage(parseInt(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1배</SelectItem>
+                      <SelectItem value="2">2배</SelectItem>
+                      <SelectItem value="3">3배</SelectItem>
+                      <SelectItem value="5">5배</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="text-xs text-muted-foreground">
+                    {leverage === 1
+                      ? "현물거래로 진행됩니다 (레버리지 없음)"
+                      : `${leverage}배 레버리지가 적용됩니다`}
+                  </div>
                 </div>
-              </div>
 
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  레버리지는 수익과 손실을 모두 증폭시킵니다. 높은 레버리지 사용
-                  시 충분한 마진을 유지하여 강제청산을 방지하세요.
-                </AlertDescription>
-              </Alert>
-            </div>
+                <Alert className="border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/50">
+                  <AlertTriangle
+                    className="h-4 w-4 !text-red-600 dark:!text-red-400"
+                    strokeWidth={2.5}
+                  />
+                  <AlertDescription className="text-xs text-red-700 dark:text-red-300 font-semibold">
+                    레버리지는 수익과 손실을 모두 증폭시킵니다. 높은 레버리지
+                    사용 시 충분한 마진을 유지하여 강제청산을 방지하세요.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
 
             {/* Average Down/Up Settings */}
-            <div className="space-y-4">
-              <div className="border-b border-border pb-2 mb-4">
-                <h3 className="text-base font-semibold text-foreground">
-                  추가 진입 설정
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
+            <Card className="border-2 transition-all hover:shadow-md hover:border-blue-300/70 dark:hover:border-blue-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">📈 추가 진입 설정</CardTitle>
+                <CardDescription>
                   물타기와 불타기 허용 여부를 설정하세요
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">물타기 허용</span>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <Info className="w-3 h-3 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="max-w-sm text-white">
-                              현재 진입 환율보다 낮은 환율에서 추가 진입을
-                              허용합니다.
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm">물타기 허용</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="w-3 h-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-sm text-white">
+                                현재 진입 환율보다 낮은 환율에서 추가 진입을
+                                허용합니다.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        현재 진입 환율보다 낮을 때 추가 진입
+                      </div>
                     </div>
+                    <Switch
+                      checked={allowAverageDown}
+                      onCheckedChange={setAllowAverageDown}
+                      disabled={userPlan?.name === "Free"}
+                    />
+                  </div>
+
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm">불타기 허용</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="w-3 h-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-sm text-white">
+                                현재 진입 환율보다 높은 환율에서도 추가 진입을
+                                허용합니다.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        현재 진입 환율보다 높아도 추가 진입
+                      </div>
+                    </div>
+                    <Switch
+                      checked={allowAverageUp}
+                      onCheckedChange={setAllowAverageUp}
+                      disabled={userPlan?.name === "Free"}
+                    />
+                  </div>
+
+                  {userPlan?.name === "Free" && (
                     <div className="text-xs text-muted-foreground">
-                      현재 진입 환율보다 낮을 때 추가 진입
+                      추가 진입 설정은 Starter 플랜 이상에서 사용 가능합니다
                     </div>
-                  </div>
-                  <Switch
-                    checked={allowAverageDown}
-                    onCheckedChange={setAllowAverageDown}
-                    disabled={userPlan?.name === "Free"}
-                  />
+                  )}
                 </div>
-
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm">불타기 허용</span>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger>
-                            <Info className="w-3 h-3 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="max-w-sm text-white">
-                              현재 진입 환율보다 높은 환율에서도 추가 진입을
-                              허용합니다.
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      현재 진입 환율보다 높아도 추가 진입
-                    </div>
-                  </div>
-                  <Switch
-                    checked={allowAverageUp}
-                    onCheckedChange={setAllowAverageUp}
-                    disabled={userPlan?.name === "Free"}
-                  />
-                </div>
-
-                {userPlan?.name === "Free" && (
-                  <div className="text-xs text-muted-foreground">
-                    추가 진입 설정은 Starter 플랜 이상에서 사용 가능합니다
-                  </div>
-                )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </CardContent>
         </Card>
 
         {/* Advanced Strategy */}
-        <Card>
+        <Card className="border-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
               고급 전략
-              <Badge variant="secondary" className="ml-auto">
-                Premium
-              </Badge>
             </CardTitle>
             <CardDescription>AI 기반 고급 전략 및 알림 설정</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="border-b border-border pb-2 mb-4">
+            {/* AI Strategy Mode */}
+            <Card className="border-2 transition-all hover:shadow-md hover:border-amber-300/70 dark:hover:border-amber-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-semibold text-foreground">
-                    AI 전략 모드
-                  </h3>
+                  <CardTitle className="text-base">🤖 AI 전략 모드</CardTitle>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger>
@@ -1933,81 +2021,61 @@ export default function AutoTrading() {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
+                  <Badge variant="secondary" className="ml-auto">
+                    Premium
+                  </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  고정된 환율이 아닌 실시간 AI 분석으로 유동적 진입
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Select disabled={userPlan?.name !== "Premium"}>
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        userPlan?.name === "Premium"
-                          ? "AI 모드 선택"
-                          : "Premium 플랜 필요"
-                      }
-                    />
-                  </SelectTrigger>
-                  {userPlan?.name === "Premium" && (
-                    <SelectContent>
-                      <SelectItem value="conservative">보수적 AI</SelectItem>
-                      <SelectItem value="balanced">균형 AI</SelectItem>
-                      <SelectItem value="aggressive">공격적 AI</SelectItem>
-                    </SelectContent>
-                  )}
-                </Select>
-                <div className="text-xs text-muted-foreground bg-primary/5 p-3 rounded border-l-2 border-primary">
-                  💡 AI 모드는 실시간 테더가격과의 갭, 차트 백테스팅 결과,
-                  기술적 지표들을 종합 분석하여 사용자가 설정한 고정 환율이 아닌
-                  유동적인 기준으로 포지션에 진입합니다. 시장 상황에 따라 최적의
-                  타이밍을 AI가 판단하여 자동으로 매매를 실행합니다.
+                <CardDescription>
+                  고정된 환율이 아닌 실시간 AI 분석으로 자동 진입
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Select disabled={userPlan?.name !== "Premium"}>
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          userPlan?.name === "Premium"
+                            ? "AI 모드 선택"
+                            : "Premium 플랜 필요"
+                        }
+                      />
+                    </SelectTrigger>
+                    {userPlan?.name === "Premium" && (
+                      <SelectContent>
+                        <SelectItem value="conservative">보수적 AI</SelectItem>
+                        <SelectItem value="balanced">균형 AI</SelectItem>
+                        <SelectItem value="aggressive">공격적 AI</SelectItem>
+                      </SelectContent>
+                    )}
+                  </Select>
+                  <div className="text-xs text-muted-foreground bg-primary/5 p-3 rounded border-l-2 border-primary">
+                    💡 AI 모드는 실시간 테더가격과의 갭, 차트 백테스팅 결과,
+                    기술적 지표들을 종합 분석하여 사용자가 설정한 고정 환율이
+                    아닌 유동적인 기준으로 포지션에 진입합니다. 시장 상황에 따라
+                    최적의 타이밍을 AI가 판단하여 자동으로 매매를 실행합니다.
+                  </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="border-b border-border pb-2 mb-4">
-                  <h3 className="text-base font-semibold text-foreground">
-                    알림 설정
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    거래 알림 방식을 설정하세요
-                  </p>
+            {/* Notification Settings */}
+            <Card className="border-2 transition-all hover:shadow-md hover:border-amber-300/70 dark:hover:border-amber-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">🔔 알림 설정</CardTitle>
+                  <Badge variant="secondary" className="ml-auto">
+                    Premium
+                  </Badge>
                 </div>
-
+                <CardDescription>거래 알림 방식을 설정하세요</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm">웹훅 알림</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-sm text-white">
-                                포지션 진입 시 상세 정보와 진입 근거를 웹훅으로
-                                전송합니다.
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        포지션 진입점 상세 정보와 진입 근거 전송
-                      </div>
-                    </div>
-                    <Switch disabled={userPlan?.name === "Free"} />
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm">텔레그램 알림</span>
+                        <span className="text-sm">텔레그램 알림 상태</span>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger>
@@ -2016,61 +2084,66 @@ export default function AutoTrading() {
                             <TooltipContent>
                               <p className="max-w-sm text-white">
                                 포지션 진입 시 텔레그램으로 실시간 알림을
-                                받습니다.
+                                받습니다. 아래 버튼으로 연동/해제할 수 있습니다.
                               </p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        포지션 진입점 상세 정보와 진입 근거 전송
+                        {telegramNotificationEnabled
+                          ? "텔레그램 알림이 활성화되어 있습니다"
+                          : "텔레그램 알림이 비활성화되어 있습니다"}
                       </div>
                     </div>
-                    <Switch disabled={userPlan?.name === "Free"} />
+                    <Switch
+                      checked={telegramNotificationEnabled}
+                      disabled={true}
+                    />
+                  </div>
+
+                  {/* 텔레그램 연동 상태 - 항상 표시 */}
+                  <div className="pl-6 mt-4 border-l-2 border-primary">
+                    <TelegramConnect
+                      isConnected={telegramNotificationEnabled}
+                      onDisconnect={handleTelegramDisconnect}
+                      isLoading={fetcher.state !== "idle"}
+                    />
                   </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
 
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="border-b border-border pb-2 mb-4">
-                  <h3 className="text-base font-semibold text-foreground">
-                    백테스트
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Karbit 독점 김치프리미엄 매매 백테스팅
-                  </p>
+            {/* Backtesting Settings */}
+            <Card className="border-2 transition-all hover:shadow-md hover:border-amber-300/70 dark:hover:border-amber-400/70 hover:-translate-y-0.5">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-base">📊 백테스트</CardTitle>
+                  <Badge variant="outline" className="text-xs">
+                    준비중
+                  </Badge>
+                  <Badge variant="secondary" className="ml-auto">
+                    Premium
+                  </Badge>
                 </div>
-
+                <CardDescription>
+                  Karbit 독점 김치프리미엄 매매 백테스팅
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Select disabled={userPlan?.name !== "Premium"}>
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          userPlan?.name === "Premium"
-                            ? "기간 선택"
-                            : "Premium 플랜 필요"
-                        }
-                      />
+                  <Select disabled>
+                    <SelectTrigger className="opacity-60">
+                      <SelectValue placeholder="준비중입니다" />
                     </SelectTrigger>
-                    {userPlan?.name === "Premium" && (
-                      <SelectContent>
-                        <SelectItem value="1m">1개월</SelectItem>
-                        <SelectItem value="3m">3개월</SelectItem>
-                        <SelectItem value="6m">6개월</SelectItem>
-                        <SelectItem value="1y">1년</SelectItem>
-                      </SelectContent>
-                    )}
                   </Select>
-                  <div className="text-xs text-muted-foreground bg-secondary/50 p-3 rounded border-l-2 border-secondary">
-                    🚀 Karbit에서만 제공하는 독점적인 김치프리미엄 기반 자동매매
-                    백테스팅을 통해 전략의 과거 성과를 분석하고 최적화된
-                    매개변수를 찾을 수 있습니다.
+                  <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded border-l-2 border-muted">
+                    🔧 김치프리미엄 기반 자동매매 백테스팅 기능을 개발 중입니다.
+                    곧 만나보실 수 있습니다!
                   </div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </CardContent>
         </Card>
       </div>

@@ -1,0 +1,1 @@
+ALTER TABLE "positions" ADD COLUMN "slippage" numeric(10, 4);

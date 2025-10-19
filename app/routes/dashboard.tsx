@@ -171,7 +171,6 @@ export default function Dashboard() {
   const {
     activePositions: rawActivePositions,
     activePositionCount: initialActivePositionCount,
-    activePlan,
     tradingStats: initialTradingStats,
     tradingHistory: initialTradingHistory,
     pagination: initialPagination,
@@ -487,8 +486,6 @@ export default function Dashboard() {
   if (!user) {
     return null; // useEffect에서 리다이렉트 처리
   }
-
-  const currentPlan = activePlan; // 현재 플랜 상태
 
   return (
     <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">

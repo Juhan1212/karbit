@@ -302,6 +302,34 @@
       "when": 1760187464968,
       "tag": "0042_foamy_wolfpack",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1760781193183,
+      "tag": "0043_chilly_the_fallen",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1760783388377,
+      "tag": "0044_violet_iceman",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1760801840825,
+      "tag": "0045_productive_white_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1760867984291,
+      "tag": "0046_lean_black_crow",
+      "breakpoints": true
     }
   ]
 }

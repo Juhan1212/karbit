@@ -256,6 +256,10 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 
+  // OAuth 관련 필드
+  googleId: varchar("google_id", { length: 255 }), // 구글 OAuth ID
+  googleAvatar: varchar("google_avatar", { length: 500 }), // 구글 프로필 이미지
+
   // 누적 상태 관리
   totalEntryCount: integer("total_entry_count").default(0), // 누적 포지션 진입 횟수 (수동 + 자동)
   totalSelfEntryCount: integer("total_self_entry_count").default(0), // 누적 수동매매 진입 횟수
@@ -273,7 +277,34 @@ export const users = pgTable("users", {
   // 일일 진입 제한 추적 (Free 플랜용)
   lastEntryDate: date("last_entry_date"), // 마지막 포지션 진입 날짜
   dailyEntryCount: integer("daily_entry_count").default(0), // 당일 포지션 진입 횟수
+
+  // 텔레그램 연동 정보
+  telegramChatId: varchar("telegram_chat_id", { length: 100 }), // 텔레그램 chat_id
+  telegramUsername: varchar("telegram_username", { length: 100 }), // 텔레그램 사용자명
+  telegramConnectedAt: timestamp("telegram_connected_at"), // 텔레그램 연동 시각
+  telegramNotificationsEnabled: boolean(
+    "telegram_notifications_enabled"
+  ).default(false), // 알림 활성화 여부 (기본값: 비활성화)
 });
+
+// 텔레그램 인증 토큰 (일회용)
+export const telegramAuthTokens = pgTable(
+  "telegram_auth_tokens",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: varchar({ length: 64 }).notNull().unique(), // 인증 토큰
+    expiresAt: timestamp("expires_at").notNull(), // 만료 시간 (10분)
+    used: boolean().default(false), // 사용 여부
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_telegram_auth_tokens_token").on(table.token),
+    index("idx_telegram_auth_tokens_user").on(table.userId),
+  ]
+);
 
 export const userPlanHistory = pgTable(
   "user_plan_history",
@@ -589,6 +620,7 @@ export const positions = pgTable(
     usdtPrice: numeric("usdt_price", { precision: 10, scale: 2 }),
     entryRate: numeric("entry_rate", { precision: 10, scale: 2 }).notNull(),
     exitRate: numeric("exit_rate", { precision: 10, scale: 2 }),
+    slippage: numeric("slippage", { precision: 10, scale: 4 }), // 슬리피지 (%)
     profit: numeric("profit", { precision: 18, scale: 2 }),
     profitRate: numeric("profit_rate", { precision: 10, scale: 2 }),
     entryTime: timestamp("entry_time").defaultNow(),

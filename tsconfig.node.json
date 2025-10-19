@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "include": [
     "server.js",
+    "oauth-routes.js",
     "vite.config.ts",
     "app/core/redisCache.ts",
     "app/utils/redis.server.ts",

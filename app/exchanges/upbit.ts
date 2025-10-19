@@ -466,4 +466,26 @@ export class UpbitAdapter extends ExchangeAdapter {
   async setLeverage(symbol: string, leverage: string): Promise<any> {
     throw new Error("Upbit does not support leverage settings.");
   }
+
+  async getPositionInfo(symbol: string): Promise<any> {
+    throw new Error("Upbit does not support position information.");
+  }
+
+  async getClosedPnl(
+    symbol: string,
+    orderId: string,
+    startTime?: number,
+    endTime?: number
+  ): Promise<{
+    symbol: string;
+    totalPnl: number;
+    slippage: number;
+    avgExitPrice: number;
+    totalFee: number;
+    totalVolume: number;
+    orderId: string;
+    closeFee: number;
+  }> {
+    throw new Error("Upbit does not support closed PnL retrieval.");
+  }
 }

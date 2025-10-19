@@ -20,4 +20,15 @@ export default defineConfig(({ isSsrBuild }) => ({
     },
   },
   assetsInclude: ["**/*.svg"],
+  server: {
+    host: true, // 외부 접근 허용
+    allowedHosts: [
+      "localhost",
+      ".ngrok-free.app", // 모든 ngrok 도메인 허용
+      ".ngrok.io", // 구버전 ngrok 도메인
+    ],
+    hmr: {
+      clientPort: 443, // ngrok HTTPS 포트
+    },
+  },
 }));

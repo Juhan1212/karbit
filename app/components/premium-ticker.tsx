@@ -448,11 +448,11 @@ export function PremiumTicker({
         >
           <Table className="text-xs w-full table-fixed">
             <colgroup>
-              <col style={{ width: "12%" }} /> {/* 진입 버튼 */}
-              <col style={{ width: "20%" }} /> {/* 티커 (넓게) */}
-              <col style={{ width: "18%" }} /> {/* 환율 */}
-              <col style={{ width: "25%" }} /> {/* 한국거래소 */}
-              <col style={{ width: "25%" }} /> {/* 해외거래소 */}
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "25%" }} />
+              <col style={{ width: "25%" }} />
             </colgroup>
             <TableHeader>
               <TableRow>

@@ -23,6 +23,7 @@ export interface OrderResult {
   price: number;
   fee?: number;
   timestamp: number;
+  slippage?: number;
 }
 
 export interface TickerResult {
@@ -113,4 +114,33 @@ export abstract class ExchangeAdapter {
    * @returns TickerResult (symbol, price, timestamp)
    */
   abstract getTicker(symbol: string): Promise<TickerResult>;
+
+  /**
+   * 포지션 정보 조회
+   */
+  abstract getPositionInfo(symbol: string): Promise<any>;
+
+  /**
+   * 종료된 포지션의 실현 손익(Closed PnL) 조회
+   * @param symbol 거래쌍(예: BTC)
+   * @param orderId 주문 ID
+   * @param startTime 조회 시작 시간 (optional, 밀리초 타임스탬프)
+   * @param endTime 조회 종료 시간 (optional, 밀리초 타임스탬프)
+   * @returns 실현 손익 정보
+   */
+  abstract getClosedPnl(
+    symbol: string,
+    orderId: string,
+    startTime?: number,
+    endTime?: number
+  ): Promise<{
+    orderId: string;
+    symbol: string;
+    totalPnl: number;
+    slippage: number;
+    avgExitPrice: number;
+    totalFee: number;
+    closeFee: number;
+    totalVolume: number;
+  }>;
 }

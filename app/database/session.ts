@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { database } from "./context";
+import { db as standaloneDb } from "./db";
 import { userSessions, users } from "./schema";
 import {
   generateToken,
@@ -22,13 +23,13 @@ export interface SessionData {
 }
 
 // 세션 만료 시간 (7일)
-const SESSION_EXPIRES_IN = 7 * 24 * 60 * 60 * 1000; // 7일 (밀리초)
+const SESSION_EXPIRES_IN = 2 * 60 * 60 * 1000; // 2시간
 
 /**
- * 세션 생성
+ * 세션 생성 (독립 DB 연결 사용 - Passport OAuth 등에서 사용)
  */
 export async function createSession(userId: number): Promise<string> {
-  const db = database();
+  const db = standaloneDb;
 
   // 사용자 정보 조회
   const user = await db.query.users.findFirst({
@@ -101,6 +102,8 @@ export async function validateSession(token: string): Promise<AuthUser | null> {
       totalSelfEntryCount: user.totalSelfEntryCount ?? 0,
       totalAutoEntryCount: user.totalAutoEntryCount ?? 0,
       totalAlarmCount: user.totalAlarmCount ?? 0,
+      telegramChatId: user.telegramChatId,
+      telegramNotificationEnabled: user.telegramNotificationsEnabled ?? false,
       plan: user.plan,
     };
   } catch (error) {

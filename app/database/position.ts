@@ -572,6 +572,7 @@ export async function insertOpenPosition(positionData: {
   entryRate: number;
   usdtPrice?: number;
   entryTime: Date;
+  slippage?: number;
 }) {
   const db = database();
 
@@ -600,6 +601,7 @@ export async function insertOpenPosition(positionData: {
     profit: null,
     profitRate: null,
     exitTime: null,
+    slippage: positionData.slippage?.toString() || null,
   });
 
   console.log(

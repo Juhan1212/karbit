@@ -1,4 +1,3 @@
-import type { Request, Response } from "express";
 import { LoaderFunctionArgs } from "react-router";
 import { createExchangeAdapter } from "~/exchanges";
 
@@ -21,17 +20,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const krAdapterInstance = createExchangeAdapter(krExchange as any);
     const frAdapterInstance = createExchangeAdapter(frExchange as any);
     // 가격 동시 조회
-    const [krTicker, frTicker] = await Promise.all([
+    const [krTicker, frPositionInfo] = await Promise.all([
       krAdapterInstance.getTicker(coinSymbol as string),
-      frAdapterInstance.getTicker(coinSymbol as string),
+      frAdapterInstance.getPositionInfo(coinSymbol as string),
     ]);
     return new Response(
       JSON.stringify({
         coinSymbol,
         krPrice: krTicker.price,
-        frPrice: frTicker.price,
+        frUnrealizedPnl: frPositionInfo.unrealizedPnl,
         krTimestamp: krTicker.timestamp,
-        frTimestamp: frTicker.timestamp,
       }),
       { status: 200 }
     );

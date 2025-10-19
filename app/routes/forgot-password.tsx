@@ -1,6 +1,5 @@
 import React, { useState } from "react";
-import type { Route } from "./+types/forgot-password";
-import { useNavigate } from "react-router";
+import { LoaderFunctionArgs, useNavigate } from "react-router";
 import { Button } from "../components/button";
 import {
   Card,
@@ -26,7 +25,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader({ context }: LoaderFunctionArgs) {
   return {
     message: "Forgot password page loaded successfully",
   };

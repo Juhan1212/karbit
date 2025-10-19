@@ -13,6 +13,8 @@ export interface AuthUser {
   totalSelfEntryCount?: number;
   totalAutoEntryCount?: number;
   totalAlarmCount?: number;
+  telegramChatId?: string | null;
+  telegramNotificationEnabled?: boolean;
   plan?: {
     id: number;
     name: string;

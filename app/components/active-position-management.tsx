@@ -94,6 +94,7 @@ export const ActivePositionManagement = React.memo(
           coinSymbol: position.coinSymbol,
           krPrice: data.krPrice ?? 0,
           frPrice: data.frPrice ?? 0,
+          frUnrealizedPnl: data.frUnrealizedPnl ?? 0,
         };
       } catch (error) {
         console.error(`가격 조회 실패 (${position.coinSymbol}):`, error);
@@ -117,14 +118,13 @@ export const ActivePositionManagement = React.memo(
           if (priceData) {
             // DB에서 받은 실제 보유량과 투자금액
             const totalKrVolume = position.totalKrVolume || 0;
-            const totalFrVolume = position.totalFrVolume || 0;
             const totalKrFunds = position.totalKrFunds || 0;
             const totalFrFunds = position.totalFrFunds || 0;
 
             // 실시간 잔액 계산 (1원 단위 반올림)
             const krBalanceKrw = Math.round(totalKrVolume * priceData.krPrice);
             const frBalanceKrw = Math.round(
-              totalFrVolume * priceData.frPrice * currentExchangeRate
+              (totalFrFunds + priceData.frUnrealizedPnl) * currentExchangeRate
             );
 
             // 총 투자금액 계산 - NaN 방지를 위한 안전한 처리

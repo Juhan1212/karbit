@@ -251,6 +251,7 @@ export async function action({ request }: ActionFunctionArgs) {
         Math.round((krBuyOrder.filled / frSellOrder.filled) * 100) / 100,
       usdtPrice,
       entryTime: new Date(),
+      slippage: frSellOrder.slippage,
     });
 
     // 사용자 수동매매 카운트 증가
