@@ -302,7 +302,7 @@ function AuthContent({
 
           <div className="flex items-center justify-center gap-3 mb-4">
             <img
-              src="/karbit_logo.png"
+              src="/karbit-logo.png"
               alt="Karbit Logo"
               className="w-40 h-40 object-contain"
             />
