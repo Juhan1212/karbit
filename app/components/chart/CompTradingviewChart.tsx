@@ -672,7 +672,7 @@ const CompTradingviewChart = memo(
       const isMobile = window.innerWidth <= 768; // Common breakpoint for mobile
 
       // 워터마크 추가
-      createImageWatermark(chartRef.current.panes()[0], "/ultimate-logo.png", {
+      createImageWatermark(chartRef.current.panes()[0], "/karbit-logo.png", {
         alpha: 0.3,
         maxHeight: chartContainerRef.current.clientWidth * 0.1,
         maxWidth: chartContainerRef.current.clientWidth * 0.1,
