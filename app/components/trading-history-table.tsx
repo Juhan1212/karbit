@@ -16,6 +16,7 @@ import { ChevronLeft, ChevronRight, BarChart3, Loader } from "lucide-react";
 interface TradingHistoryTableProps {
   tradingHistory: Array<{
     id: number;
+    userId: number;
     coinSymbol: string;
     status: string | null;
     krExchange: string;
@@ -25,17 +26,19 @@ interface TradingHistoryTableProps {
     krVolume: string;
     krFee: string;
     krFunds: string;
+    frOriginalPrice: string | null; // 해외거래소 진입시초가
     frPrice: string;
+    frSlippage: string | null; // 해외거래소 슬리피지
     frVolume: string;
     frFee: string;
     frFunds: string;
-    entryRate: string | null;
-    exitRate: string | null;
+    exchangeRate: string | null;
     usdtPrice: string | null;
-    profitRate: string | null;
     profit: string | null;
-    entryTime: Date | null;
-    exitTime: Date | null;
+    profitRate: string | null;
+    openedAt: Date | null;
+    closedAt: Date | null;
+    createdAt: Date | null; // Nullable (Drizzle ORM inference)
   }>;
   pagination: {
     currentPage: number;
@@ -85,7 +88,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold">
             <BarChart3 className="w-4 h-4" />
             거래 내역
           </CardTitle>
@@ -105,7 +108,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
           <BarChart3 className="w-4 h-4" />
           거래 내역
         </CardTitle>
@@ -131,7 +134,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                     <TableHead>해외거래소</TableHead>
                     <TableHead className="text-right">레버리지</TableHead>
                     <TableHead className="text-right">
-                      한국거래소 진입가
+                      한국거래소 진입평균가
                     </TableHead>
                     <TableHead className="text-right">
                       한국거래소 주문량
@@ -143,7 +146,13 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                       한국거래소 주문금액
                     </TableHead>
                     <TableHead className="text-right">
-                      해외거래소 진입가
+                      해외거래소 진입시초가
+                    </TableHead>
+                    <TableHead className="text-right">
+                      해외거래소 진입평균가
+                    </TableHead>
+                    <TableHead className="text-right">
+                      해외거래소 슬리피지
                     </TableHead>
                     <TableHead className="text-right">
                       해외거래소 주문량
@@ -191,7 +200,17 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right">
+                        {trade.frOriginalPrice
+                          ? `$${parseFloat(trade.frOriginalPrice).toLocaleString()}`
+                          : "-"}
+                      </TableCell>
+                      <TableCell className="text-right">
                         ${parseFloat(trade.frPrice).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {trade.frSlippage
+                          ? `${parseFloat(trade.frSlippage).toFixed(4)}%`
+                          : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         {parseFloat(trade.frVolume).toLocaleString()}{" "}
@@ -208,13 +227,9 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {trade.status === "OPEN"
-                          ? trade.entryRate
-                            ? `${parseFloat(trade.entryRate).toLocaleString()}원`
-                            : "-"
-                          : trade.exitRate
-                            ? `${parseFloat(trade.exitRate).toLocaleString()}원`
-                            : "-"}
+                        {trade.exchangeRate
+                          ? `${parseFloat(trade.exchangeRate).toLocaleString()}원`
+                          : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         {trade.usdtPrice
@@ -247,7 +262,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                           ? `${parseFloat(trade.profit).toLocaleString()}원`
                           : "-"}
                       </TableCell>
-                      <TableCell>{formatDate(trade.entryTime)}</TableCell>
+                      <TableCell>{formatDate(trade.openedAt)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

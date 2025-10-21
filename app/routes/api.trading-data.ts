@@ -22,7 +22,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // URL에서 페이지 파라미터 추출
     const url = new URL(request.url);
     const page = parseInt(url.searchParams.get("page") || "1", 10);
-    const limit = 10; // 페이지당 항목 수
+    const limit = 5; // 페이지당 항목 수
 
     // 사용자의 거래 내역 조회 (페이지네이션)
     const tradingHistory = await getUserTradingHistoryPaginated(

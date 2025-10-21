@@ -416,9 +416,9 @@ export class UpbitAdapter extends ExchangeAdapter {
         filled: totalFunds,
         price: avgPrice,
         fee: parseFloat(
-          order?.reserved_fee && order.reserved_fee !== "0"
-            ? order.reserved_fee
-            : order.paid_fee
+          order?.paid_fee && order?.paid_fee !== "0"
+            ? order.paid_fee
+            : order.reserved_fee
         ),
         timestamp: new Date(order.created_at).getTime(),
       };
@@ -480,6 +480,7 @@ export class UpbitAdapter extends ExchangeAdapter {
     symbol: string;
     totalPnl: number;
     slippage: number;
+    orderPrice: number;
     avgExitPrice: number;
     totalFee: number;
     totalVolume: number;

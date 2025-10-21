@@ -607,7 +607,8 @@ export const positions = pgTable(
     krFee: numeric("kr_fee", { precision: 18, scale: 8 }).notNull(),
     frExchange: varchar("fr_exchange", { length: 50 }).notNull(),
     frOrderId: varchar("fr_order_id", { length: 100 }).notNull(), // 주문 UUID
-    frPrice: numeric("fr_price", { precision: 18, scale: 8 }).notNull(),
+    frPrice: numeric("fr_price", { precision: 18, scale: 8 }).notNull(), // 평균 체결가
+    frOriginalPrice: numeric("fr_original_price", { precision: 18, scale: 8 }), // 주문 시점 가격
     frVolume: numeric("fr_volume", {
       precision: 18,
       scale: 8,
@@ -620,7 +621,7 @@ export const positions = pgTable(
     usdtPrice: numeric("usdt_price", { precision: 10, scale: 2 }),
     entryRate: numeric("entry_rate", { precision: 10, scale: 2 }).notNull(),
     exitRate: numeric("exit_rate", { precision: 10, scale: 2 }),
-    slippage: numeric("slippage", { precision: 10, scale: 4 }), // 슬리피지 (%)
+    frSlippage: numeric("fr_slippage", { precision: 10, scale: 4 }), // 해외거래소 슬리피지 (%)
     profit: numeric("profit", { precision: 18, scale: 2 }),
     profitRate: numeric("profit_rate", { precision: 10, scale: 2 }),
     entryTime: timestamp("entry_time").defaultNow(),

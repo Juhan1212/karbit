@@ -1,0 +1,1 @@
+ALTER TABLE "positions" RENAME COLUMN "slippage" TO "fr_slippage";

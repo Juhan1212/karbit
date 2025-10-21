@@ -87,12 +87,7 @@ import {
   Check,
 } from "lucide-react";
 import { Alert, AlertDescription } from "../components/alert";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "../components/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../components/tooltip";
 import { TelegramConnect } from "../components/TelegramConnect";
 import { formatKRW } from "~/utils/decimal";
 
@@ -1047,30 +1042,28 @@ export default function AutoTrading() {
                 )}
               </Button>
               {isEnabled && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="lg"
-                        variant="outline"
-                        onClick={handleAutoTradingUpdate}
-                        disabled={fetcher.state === "submitting"}
-                        className="gap-2 px-6"
-                      >
-                        <Settings className="w-4 h-4" />
-                        {fetcher.state === "submitting"
-                          ? "설정 변경 중..."
-                          : "설정 변경"}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="text-white">
-                      <p>
-                        자동매매 설정을 변경할 수 있습니다. 예를 들어, 커스텀
-                        모드일 때, 거래코인을 변경할 수 있습니다
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={handleAutoTradingUpdate}
+                      disabled={fetcher.state === "submitting"}
+                      className="gap-2 px-6"
+                    >
+                      <Settings className="w-4 h-4" />
+                      {fetcher.state === "submitting"
+                        ? "설정 변경 중..."
+                        : "설정 변경"}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-white">
+                    <p>
+                      자동매매 설정을 변경할 수 있습니다. 예를 들어, 커스텀
+                      모드일 때, 거래코인을 변경할 수 있습니다
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
           </div>
@@ -1213,19 +1206,17 @@ export default function AutoTrading() {
                   <CardTitle className="text-base">
                     🏦 연결된 거래소별 잔액 현황
                   </CardTitle>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="w-3 h-3 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-sm text-white">
-                          연결된 거래소별 주문가능잔액과 시드금액 기준
-                          필요자금을 확인하세요.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="w-3 h-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-sm text-white">
+                        연결된 거래소별 주문가능잔액과 시드금액 기준 필요자금을
+                        확인하세요.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
                 <CardDescription>
                   현재 환율: 1 USD ={" "}
@@ -1649,19 +1640,18 @@ export default function AutoTrading() {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-base">💱 환율 설정</CardTitle>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="w-3 h-3 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-sm text-white">
-                          포지션 진입과 종료 시점을 결정하는 USD/KRW 환율을
-                          설정합니다.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="w-3 h-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-sm text-white">
+                        포지션 진입과 종료 시점을 결정하는 USD/KRW 환율을
+                        설정합니다.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
                 <CardDescription>
                   포지션 진입과 종료 기준 환율을 설정하세요
@@ -1793,19 +1783,18 @@ export default function AutoTrading() {
                     <CardTitle className="text-base">
                       ✂️ 시드 분할 설정
                     </CardTitle>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Info className="w-3 h-3 text-muted-foreground" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="max-w-sm text-white">
-                            시드를 여러 번에 나누어 진입하여 리스크를 분산할 수
-                            있습니다.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <Info className="w-3 h-3 text-muted-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="max-w-sm text-white">
+                          시드를 여러 번에 나누어 진입하여 리스크를 분산할 수
+                          있습니다.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                   <CardDescription>
                     시드를 분할하여 리스크를 분산하세요
@@ -1858,20 +1847,19 @@ export default function AutoTrading() {
                   <CardTitle className="text-base">
                     ⚡ 해외거래소 레버리지 설정
                   </CardTitle>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="w-3 h-3 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-sm text-white">
-                          해외거래소(바이낸스, 바이비트, OKX)에서 사용할
-                          레버리지 배수를 설정합니다. 높은 레버리지는 높은
-                          수익률과 함께 높은 리스크를 동반합니다.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="w-3 h-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-sm text-white">
+                        해외거래소(바이낸스, 바이비트, OKX)에서 사용할 레버리지
+                        배수를 설정합니다. 높은 레버리지는 높은 수익률과 함께
+                        높은 리스크를 동반합니다.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
                 <CardDescription>
                   해외거래소 선물거래 레버리지 배수를 설정하세요
@@ -1928,19 +1916,18 @@ export default function AutoTrading() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm">물타기 허용</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-sm text-white">
-                                현재 진입 환율보다 낮은 환율에서 추가 진입을
-                                허용합니다.
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="w-3 h-3 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="max-w-sm text-white">
+                              현재 진입 환율보다 낮은 환율에서 추가 진입을
+                              허용합니다.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       <div className="text-xs text-muted-foreground">
                         현재 진입 환율보다 낮을 때 추가 진입
@@ -1957,19 +1944,18 @@ export default function AutoTrading() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm">불타기 허용</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-sm text-white">
-                                현재 진입 환율보다 높은 환율에서도 추가 진입을
-                                허용합니다.
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="w-3 h-3 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="max-w-sm text-white">
+                              현재 진입 환율보다 높은 환율에서도 추가 진입을
+                              허용합니다.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       <div className="text-xs text-muted-foreground">
                         현재 진입 환율보다 높아도 추가 진입
@@ -2008,19 +1994,19 @@ export default function AutoTrading() {
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-base">🤖 AI 전략 모드</CardTitle>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="w-3 h-3 text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="max-w-md text-white">
-                          AI가 실시간 분석으로 포지션 진입과 종료 환율을 자동
-                          조정합니다.
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="w-3 h-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-md text-white">
+                        AI가 실시간 분석으로 포지션 진입과 종료 환율을 자동
+                        조정합니다.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+
                   <Badge variant="secondary" className="ml-auto">
                     Premium
                   </Badge>
@@ -2076,19 +2062,18 @@ export default function AutoTrading() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm">텔레그램 알림 상태</span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Info className="w-3 h-3 text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-sm text-white">
-                                포지션 진입 시 텔레그램으로 실시간 알림을
-                                받습니다. 아래 버튼으로 연동/해제할 수 있습니다.
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="w-3 h-3 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="max-w-sm text-white">
+                              포지션 진입 시 텔레그램으로 실시간 알림을
+                              받습니다. 아래 버튼으로 연동/해제할 수 있습니다.
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {telegramNotificationEnabled

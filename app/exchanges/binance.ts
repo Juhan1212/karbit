@@ -343,6 +343,7 @@ export class BinanceAdapter extends ExchangeAdapter {
     symbol: string;
     totalPnl: number;
     slippage: number;
+    orderPrice: number;
     avgExitPrice: number;
     totalFee: number;
     closeFee: number;
@@ -363,6 +364,7 @@ export class BinanceAdapter extends ExchangeAdapter {
           symbol: symbol.toUpperCase(),
           totalPnl: 0,
           slippage: 0,
+          orderPrice: 0,
           avgExitPrice: 0,
           totalFee: 0,
           closeFee: 0,
@@ -398,6 +400,7 @@ export class BinanceAdapter extends ExchangeAdapter {
         symbol: symbol.toUpperCase(),
         totalPnl,
         slippage,
+        orderPrice,
         avgExitPrice,
         totalFee,
         closeFee,

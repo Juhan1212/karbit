@@ -1,4 +1,4 @@
-import { eq, and, desc, count, sql, gte, lt } from "drizzle-orm";
+import { eq, and, desc, asc, count, sql, gte, lt } from "drizzle-orm";
 import { database } from "./context";
 import { positions } from "./schema";
 import {
@@ -7,6 +7,7 @@ import {
   preciseWeightedAverage,
   safeNumeric,
   CRYPTO_DECIMALS,
+  truncateToDecimal,
 } from "~/utils/decimal";
 
 /**
@@ -347,6 +348,7 @@ export async function getUserTradingHistoryPaginated(
   const data = await db
     .select({
       id: positions.id,
+      userId: positions.userId,
       coinSymbol: positions.coinSymbol,
       status: positions.status,
       krExchange: positions.krExchange,
@@ -356,17 +358,19 @@ export async function getUserTradingHistoryPaginated(
       krVolume: positions.krVolume,
       krFee: positions.krFee,
       krFunds: positions.krFunds,
+      frOriginalPrice: positions.frOriginalPrice, // 해외거래소 진입시초가
       frPrice: positions.frPrice,
+      frSlippage: positions.frSlippage, // 해외거래소 슬리피지
       frVolume: positions.frVolume,
       frFee: positions.frFee,
       frFunds: positions.frFunds,
-      usdtPrice: positions.usdtPrice,
-      entryRate: positions.entryRate,
-      exitRate: positions.exitRate,
+      exchangeRate: positions.usdtPrice,
       profit: positions.profit,
       profitRate: positions.profitRate,
-      entryTime: positions.entryTime,
-      exitTime: positions.exitTime,
+      openedAt: positions.entryTime,
+      closedAt: positions.exitTime,
+      createdAt: positions.createdAt, // 생성일시 추가
+      usdtPrice: positions.usdtPrice,
     })
     .from(positions)
     .where(eq(positions.userId, userId))
@@ -453,6 +457,27 @@ export async function getUserDailyProfit(userId: number): Promise<number> {
 }
 
 /**
+ * 누적 수익 차트를 위한 전체 종료된 거래 내역 조회 (경량)
+ * CLOSED 상태의 거래만 조회하며, 차트에 필요한 최소 필드만 반환
+ */
+export async function getUserClosedTradesForChart(userId: number) {
+  const db = database();
+
+  const data = await db
+    .select({
+      id: positions.id,
+      coinSymbol: positions.coinSymbol,
+      profit: positions.profit,
+      createdAt: positions.createdAt,
+    })
+    .from(positions)
+    .where(and(eq(positions.userId, userId), eq(positions.status, "CLOSED")))
+    .orderBy(asc(positions.createdAt)); // 시간순 정렬
+
+  return data;
+}
+
+/**
  * 특정 코인 심볼의 활성 포지션을 강제 종료합니다
  */
 export async function closePositionByCoinSymbol(
@@ -504,6 +529,7 @@ export async function insertClosedPosition(positionData: {
   krFee: number; // 추가된 필수 필드
   frExchange: string;
   frOrderId: string;
+  frOriginalPrice?: number; // 주문 시점 가격 (해외 선물거래소)
   frPrice: number;
   frVolume: number;
   frFunds: number;
@@ -515,6 +541,7 @@ export async function insertClosedPosition(positionData: {
   profitRate?: number;
   entryTime: Date;
   exitTime: Date;
+  frSlippage?: number;
 }) {
   const db = database();
 
@@ -526,23 +553,37 @@ export async function insertClosedPosition(positionData: {
     status: "CLOSED",
     krExchange: positionData.krExchange,
     krOrderId: positionData.krOrderId,
-    krPrice: positionData.krPrice.toString(),
-    krVolume: positionData.krVolume.toString(),
-    krFunds: positionData.krFunds.toString(),
-    krFee: positionData.krFee.toString(), // 추가된 필드
+    krPrice: truncateToDecimal(positionData.krPrice, 8).toString(),
+    krVolume: truncateToDecimal(positionData.krVolume, 8).toString(),
+    krFunds: truncateToDecimal(positionData.krFunds, 8).toString(),
+    krFee: truncateToDecimal(positionData.krFee, 8).toString(), // 추가된 필드
     frExchange: positionData.frExchange,
     frOrderId: positionData.frOrderId,
-    frPrice: positionData.frPrice.toString(),
-    frVolume: positionData.frVolume.toString(),
-    frFunds: positionData.frFunds.toString(),
-    frFee: positionData.frFee.toString(), // 추가된 필드
-    entryRate: positionData.entryRate.toString(), // 추가된 필드
-    exitRate: positionData.exitRate?.toString() || null,
-    usdtPrice: positionData.usdtPrice?.toString() || null,
-    profit: positionData.profit?.toString() || null,
-    profitRate: positionData.profitRate?.toString() || null,
+    frOriginalPrice: positionData.frOriginalPrice
+      ? truncateToDecimal(positionData.frOriginalPrice, 8).toString()
+      : null,
+    frPrice: truncateToDecimal(positionData.frPrice, 8).toString(),
+    frVolume: truncateToDecimal(positionData.frVolume, 8).toString(),
+    frFunds: truncateToDecimal(positionData.frFunds, 8).toString(),
+    frFee: truncateToDecimal(positionData.frFee, 8).toString(), // 추가된 필드
+    entryRate: truncateToDecimal(positionData.entryRate, 2).toString(), // 추가된 필드
+    exitRate: positionData.exitRate
+      ? truncateToDecimal(positionData.exitRate, 2).toString()
+      : null,
+    usdtPrice: positionData.usdtPrice
+      ? truncateToDecimal(positionData.usdtPrice, 2).toString()
+      : null,
+    profit: positionData.profit
+      ? truncateToDecimal(positionData.profit, 2).toString()
+      : null,
+    profitRate: positionData.profitRate
+      ? truncateToDecimal(positionData.profitRate, 2).toString()
+      : null,
     entryTime: positionData.entryTime,
     exitTime: positionData.exitTime,
+    frSlippage: positionData.frSlippage
+      ? truncateToDecimal(positionData.frSlippage, 4).toString()
+      : null,
   });
 
   console.log(
@@ -566,13 +607,14 @@ export async function insertOpenPosition(positionData: {
   frExchange: string;
   frOrderId: string;
   frPrice: number;
+  frOriginalPrice?: number; // 주문 시점 가격 (해외 선물거래소)
   frVolume: number;
   frFunds: number;
   frFee: number;
   entryRate: number;
   usdtPrice?: number;
   entryTime: Date;
-  slippage?: number;
+  frSlippage?: number;
 }) {
   const db = database();
 
@@ -584,24 +626,31 @@ export async function insertOpenPosition(positionData: {
     status: "OPEN",
     krExchange: positionData.krExchange,
     krOrderId: positionData.krOrderId,
-    krPrice: positionData.krPrice.toString(),
-    krVolume: positionData.krVolume.toString(),
-    krFunds: positionData.krFunds.toString(),
-    krFee: positionData.krFee.toString(),
+    krPrice: truncateToDecimal(positionData.krPrice, 8).toString(),
+    krVolume: truncateToDecimal(positionData.krVolume, 8).toString(),
+    krFunds: truncateToDecimal(positionData.krFunds, 8).toString(),
+    krFee: truncateToDecimal(positionData.krFee, 8).toString(),
     frExchange: positionData.frExchange,
     frOrderId: positionData.frOrderId,
-    frPrice: positionData.frPrice.toString(),
-    frVolume: positionData.frVolume.toString(),
-    frFunds: positionData.frFunds.toString(),
-    frFee: positionData.frFee.toString(),
-    entryRate: positionData.entryRate.toString(),
-    usdtPrice: positionData.usdtPrice?.toString() || null,
+    frPrice: truncateToDecimal(positionData.frPrice, 8).toString(),
+    frOriginalPrice: positionData.frOriginalPrice
+      ? truncateToDecimal(positionData.frOriginalPrice, 8).toString()
+      : null,
+    frVolume: truncateToDecimal(positionData.frVolume, 8).toString(),
+    frFunds: truncateToDecimal(positionData.frFunds, 8).toString(),
+    frFee: truncateToDecimal(positionData.frFee, 8).toString(),
+    entryRate: truncateToDecimal(positionData.entryRate, 2).toString(),
+    usdtPrice: positionData.usdtPrice
+      ? truncateToDecimal(positionData.usdtPrice, 2).toString()
+      : null,
     entryTime: positionData.entryTime,
     exitRate: null,
     profit: null,
     profitRate: null,
     exitTime: null,
-    slippage: positionData.slippage?.toString() || null,
+    frSlippage: positionData.frSlippage
+      ? truncateToDecimal(positionData.frSlippage, 4).toString()
+      : null,
   });
 
   console.log(

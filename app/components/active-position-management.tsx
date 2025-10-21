@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Button } from "./button";
 import { Badge } from "./badge";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -124,7 +124,8 @@ export const ActivePositionManagement = React.memo(
             // 실시간 잔액 계산 (1원 단위 반올림)
             const krBalanceKrw = Math.round(totalKrVolume * priceData.krPrice);
             const frBalanceKrw = Math.round(
-              (totalFrFunds + priceData.frUnrealizedPnl) * currentExchangeRate
+              (Number(totalFrFunds) + Number(priceData.frUnrealizedPnl)) *
+                currentExchangeRate
             );
 
             // 총 투자금액 계산 - NaN 방지를 위한 안전한 처리
@@ -233,7 +234,9 @@ export const ActivePositionManagement = React.memo(
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-            <CardTitle>실시간 포지션 관리</CardTitle>
+            <CardTitle className="text-lg font-semibold">
+              실시간 포지션 관리
+            </CardTitle>
             <Badge variant="secondary" className="gap-1">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               5초마다 업데이트
@@ -259,7 +262,7 @@ export const ActivePositionManagement = React.memo(
                         총 투자금액
                       </TableHead>
                       <TableHead className="text-center font-semibold">
-                        현재 수익
+                        현재 예상수익(수수료/슬리피지 제외)
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -319,7 +322,7 @@ export const ActivePositionManagement = React.memo(
                         총 투자금액
                       </TableHead>
                       <TableHead className="text-center font-semibold">
-                        현재 수익
+                        현재 예상수익(수수료/슬리피지 제외)
                       </TableHead>
                       <TableHead className="text-center font-semibold">
                         수익률
@@ -405,9 +408,14 @@ export const ActivePositionManagement = React.memo(
                                 handlePositionClose(position.coinSymbol);
                               }}
                             >
-                              {closingPositions.has(position.coinSymbol)
-                                ? "종료 중..."
-                                : "포지션 종료"}
+                              {closingPositions.has(position.coinSymbol) ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                  종료 중...
+                                </>
+                              ) : (
+                                "포지션 종료"
+                              )}
                             </Button>
                           </TableCell>
                         </TableRow>

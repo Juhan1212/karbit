@@ -40,7 +40,7 @@ export const TradingStats = React.memo(function TradingStats({
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">총 거래</CardTitle>
+          <CardTitle className="text-lg font-semibold">총 거래</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{stats.totalTrades}</div>
@@ -48,7 +48,7 @@ export const TradingStats = React.memo(function TradingStats({
       </Card>
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">
+          <CardTitle className="text-lg font-semibold">
             총 포지션 진입횟수
           </CardTitle>
         </CardHeader>
@@ -60,7 +60,7 @@ export const TradingStats = React.memo(function TradingStats({
       </Card>
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">
+          <CardTitle className="text-lg font-semibold">
             총 포지션 종료횟수
           </CardTitle>
         </CardHeader>
@@ -70,7 +70,7 @@ export const TradingStats = React.memo(function TradingStats({
       </Card>
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">총 수익</CardTitle>
+          <CardTitle className="text-lg font-semibold">총 수익</CardTitle>
         </CardHeader>
         <CardContent>
           <div

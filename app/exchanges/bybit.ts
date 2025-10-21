@@ -310,11 +310,9 @@ export class BybitAdapter extends ExchangeAdapter {
 
         const historyOrder = historyResult.result.list[0];
         const originalPrice = parseFloat(
-          historyOrder.price ?? historyOrder.lastPriceOnCreated ?? "0"
+          historyOrder.lastPriceOnCreated ?? "0"
         );
-        const avgPrice = parseFloat(
-          historyOrder.avgPrice ?? historyOrder.lastPriceOnCreated ?? "0"
-        );
+        const avgPrice = parseFloat(historyOrder.avgPrice ?? "0");
         let slippage = 0;
         if (originalPrice > 0) {
           slippage = (Math.abs(avgPrice - originalPrice) / originalPrice) * 100;
@@ -327,21 +325,16 @@ export class BybitAdapter extends ExchangeAdapter {
           side: (historyOrder.side || "").toLowerCase(),
           amount: parseFloat(historyOrder.qty),
           filled: parseFloat(historyOrder.cumExecValue),
-          price: parseFloat(
-            historyOrder.lastPriceOnCreated || historyOrder.avgPrice || "0"
-          ),
+          price: avgPrice, // 평균 체결가
+          original_price: originalPrice, // 주문 시점 가격
           fee: parseFloat(historyOrder.cumExecFee || "0"),
           timestamp: parseInt(historyOrder.updatedTime),
           slippage: parseFloat(slippage.toFixed(4)),
         };
       }
 
-      const originalPrice = parseFloat(
-        order.price ?? order.lastPriceOnCreated ?? "0"
-      );
-      const avgPrice = parseFloat(
-        order.avgPrice ?? order.lastPriceOnCreated ?? "0"
-      );
+      const originalPrice = parseFloat(order.lastPriceOnCreated ?? "0");
+      const avgPrice = parseFloat(order.avgPrice ?? "0");
       let slippage = 0;
       if (originalPrice > 0) {
         slippage = (Math.abs(avgPrice - originalPrice) / originalPrice) * 100;
@@ -354,7 +347,8 @@ export class BybitAdapter extends ExchangeAdapter {
         side: order.side.toLowerCase(),
         amount: parseFloat(order.qty),
         filled: parseFloat(order.cumExecValue),
-        price: parseFloat(order.lastPriceOnCreated || order.avgPrice || "0"),
+        price: avgPrice, // 평균 체결가
+        original_price: originalPrice, // 주문 시점 가격
         fee: parseFloat(order.cumExecFee || "0"),
         timestamp: parseInt(order.updatedTime),
         slippage: parseFloat(slippage.toFixed(4)),
@@ -447,6 +441,7 @@ export class BybitAdapter extends ExchangeAdapter {
     symbol: string;
     totalPnl: number;
     slippage: number;
+    orderPrice: number;
     avgExitPrice: number;
     totalFee: number;
     closeFee: number;
@@ -470,6 +465,8 @@ export class BybitAdapter extends ExchangeAdapter {
 
       const result = await this.client.getClosedPnL(params);
 
+      console.log(JSON.stringify(result, null, 2));
+
       if (result.retCode !== 0) {
         throw new Error(`Bybit getClosedPnl failed: ${result.retMsg}`);
       }
@@ -487,6 +484,7 @@ export class BybitAdapter extends ExchangeAdapter {
           symbol: symbol.toUpperCase(),
           totalPnl: 0,
           slippage: 0,
+          orderPrice: 0,
           avgExitPrice: 0,
           totalFee: 0,
           closeFee: 0,
@@ -524,6 +522,7 @@ export class BybitAdapter extends ExchangeAdapter {
         symbol: symbol.toUpperCase(),
         totalPnl,
         slippage,
+        orderPrice,
         avgExitPrice,
         totalFee,
         closeFee,

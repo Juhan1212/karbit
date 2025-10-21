@@ -9,6 +9,7 @@ import {
   getUserTradingHistoryPaginated,
   getUserTradingHistoryCount,
   getUserDailyProfit,
+  getUserClosedTradesForChart,
 } from "~/database/position";
 import { getUserExchangeBalances } from "~/database/exchange";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ import { getUserCurrentPlan } from "~/database/plan";
 import { ActivePositionManagement } from "~/components/active-position-management";
 import { TradingStats } from "~/components/trading-stats";
 import { TradingHistoryTable } from "~/components/trading-history-table";
+import { TradingProfitChart } from "~/components/trading-profit-chart";
 import CompChart from "~/components/chart/CompChart";
 import "~/assets/styles/chart/index.scss";
 import { Badge } from "~/components/badge";
@@ -66,7 +68,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // URL에서 페이지네이션 파라미터 추출
     const url = new URL(request.url);
     const page = parseInt(url.searchParams.get("page") || "1", 10);
-    const limit = parseInt(url.searchParams.get("limit") || "20", 10);
+    const limit = parseInt(url.searchParams.get("limit") || "5", 10);
 
     // 사용자의 활성 포지션 조회
     const activePositions = await getUserActivePositions(user.id);
@@ -92,6 +94,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // 일일 수익 조회
     const dailyProfit = await getUserDailyProfit(user.id);
 
+    // 누적 수익 차트용 전체 종료 거래 조회 (경량)
+    const closedTradesForChart = await getUserClosedTradesForChart(user.id);
+
     // 사용자의 거래소별 잔액 조회 (에러 발생 시에도 navigation은 되도록)
     let exchangeBalances: Awaited<ReturnType<typeof getUserExchangeBalances>> =
       [];
@@ -108,6 +113,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           tradingStats,
           tradingHistory,
           dailyProfit,
+          closedTradesForChart,
           exchangeBalances,
           pagination: {
             currentPage: page,
@@ -129,6 +135,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       tradingStats,
       tradingHistory,
       dailyProfit,
+      closedTradesForChart,
       exchangeBalances,
       pagination: {
         currentPage: page,
@@ -151,11 +158,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
       },
       tradingHistory: [],
       dailyProfit: 0,
+      closedTradesForChart: [],
       pagination: {
         currentPage: 1,
         totalPages: 1,
         totalCount: 0,
-        limit: 20,
+        limit: 5,
       },
       message: "Error loading dashboard data",
     };
@@ -175,6 +183,7 @@ export default function Dashboard() {
     tradingHistory: initialTradingHistory,
     pagination: initialPagination,
     dailyProfit: initialDailyProfit,
+    closedTradesForChart: initialClosedTradesForChart,
     exchangeBalances,
     message,
   } = loaderData;
@@ -210,6 +219,9 @@ export default function Dashboard() {
 
   // 선택된 티커 아이템 상태 (PremiumTicker에서 받아온 값)
   const [selectedTickerItem, setSelectedTickerItem] = useState<any>(null);
+
+  // 차트 새로고침을 위한 키
+  const [chartRefreshKey, setChartRefreshKey] = useState<number>(0);
 
   // 평균 환율과 테더 가격 비교 계산
   const tetherComparisonData = useMemo(() => {
@@ -523,7 +535,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">테더 가격</CardTitle>
+            <CardTitle className="text-lg font-semibold">테더 가격</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between mb-2">
@@ -557,7 +569,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">활성 포지션</CardTitle>
+            <CardTitle className="text-lg font-semibold">활성 포지션</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between mb-2">
@@ -580,7 +592,7 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">일일 수익</CardTitle>
+            <CardTitle className="text-lg font-semibold">일일 수익</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between mb-2">
@@ -611,7 +623,9 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">현재 원화&USDT 자산</CardTitle>
+            <CardTitle className="text-lg font-semibold">
+              현재 원화&USDT 자산
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between mb-2">
@@ -695,16 +709,29 @@ export default function Dashboard() {
       {selectedTickerItem && (
         <Card className="chart-card-container">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              실시간 {selectedTickerItem.symbol} 환율 차트
-            </CardTitle>
-            <CardDescription>
-              선택한 티커의 실시간 환율을 확인하세요
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                  <TrendingUp className="w-5 h-5" />
+                  실시간 {selectedTickerItem.symbol} 환율 차트
+                </CardTitle>
+                <CardDescription>
+                  선택한 티커의 실시간 환율을 확인하세요
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setChartRefreshKey((prev) => prev + 1)}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                차트 새로고침
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="chart-card-content" noPadding={true}>
             <CompChart
+              key={chartRefreshKey}
               koreanEx={selectedTickerItem?.korean_ex || "UPBIT"}
               foreignEx={selectedTickerItem?.foreign_ex || "BYBIT"}
               symbol={selectedTickerItem.symbol}
@@ -740,22 +767,38 @@ export default function Dashboard() {
       {activePositionCount > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              실시간 활성 포지션 환율 차트
-            </CardTitle>
-            <CardDescription>
-              현재 포지션 추이를 실시간으로 확인하세요.
-              <br />
-              <span className="text-xs text-muted-foreground/80 mt-1 block">
-                ※ 빗썸 거래소 측에서 현재 캔들 데이터를 제공하지 않고 있으나
-                개발단계에 있습니다. 거래소 업데이트가 되는대로 반영할
-                예정입니다.
-              </span>
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                  <TrendingUp className="w-5 h-5" />
+                  실시간 활성 포지션 환율 차트
+                </CardTitle>
+                <CardDescription>
+                  현재 포지션 추이를 실시간으로 확인하세요.
+                  <br />
+                  <span className="text-xs text-muted-foreground/80 mt-1 block">
+                    ※ 빗썸 거래소 측에서 현재 캔들 데이터를 제공하지 않고 있으나
+                    개발단계에 있습니다. 거래소 업데이트가 되는대로 반영할
+                    예정입니다.
+                    <br />
+                    차트가 정상적으로 표시되지 않으면, 우측의 '차트 새로고침'
+                    버튼을 클릭해보세요.
+                  </span>
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setChartRefreshKey((prev) => prev + 1)}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                차트 새로고침
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="chart-card-content" noPadding={true}>
             <CompChart
+              key={chartRefreshKey}
               koreanEx={selectedPosition?.krExchange || "UPBIT"}
               foreignEx={selectedPosition?.frExchange || "BYBIT"}
               symbol={selectedTicker}
@@ -771,8 +814,8 @@ export default function Dashboard() {
       {activePositionCount === 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
+            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+              <TrendingUp className="w-5 h-5" />
               실시간 활성 포지션 환율 차트
             </CardTitle>
             <CardDescription>
@@ -808,6 +851,12 @@ export default function Dashboard() {
         isLoading={isLoadingTradingData}
       />
 
+      {/* Trading Profit Chart */}
+      <TradingProfitChart
+        closedTrades={initialClosedTradesForChart || []}
+        isLoading={isLoadingTradingData}
+      />
+
       {/* Trading History */}
       <TradingHistoryTable
         tradingHistory={tradingHistory || []}
@@ -816,7 +865,7 @@ export default function Dashboard() {
             currentPage: 1,
             totalPages: 1,
             totalCount: 0,
-            limit: 20,
+            limit: 5,
           }
         }
         isLoading={isLoadingTradingData}

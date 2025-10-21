@@ -150,6 +150,7 @@ const CompTradingviewChart = memo(
         };
 
         const isMobile = window.innerWidth <= 768; // Common breakpoint for mobile
+
         // 범례 텍스트 셋팅
         const setLegendText = ({
           open,
@@ -176,34 +177,37 @@ const CompTradingviewChart = memo(
                   font-family: Pretendard Variable !important;  
                   font-weight: 300; 
                   display: flex;
-                  flex-direction: ${isMobile ? "column" : "row"};
-                  align-items: ${isMobile ? "flex-start" : "center"};
-                  gap: ${isMobile ? "4px" : "8px"};
+                  flex-direction: column;
+                  align-items: flex-start;
+                  gap: ${isMobile ? "2px" : "4px"};
                   color: #ccc;">
-        <span>${exchange1}:${symbol}_KRW/${exchange2}:${symbol}_USDT.P</span>
-        ${
-          isMobile
-            ? `<div style="display: flex; align-items: center; gap: 4px;">
-            <span style="color: #00c16e;">O ${open}</span>
-            <span style="color: #00c16e;">H ${high}</span>
-            <span style="color: #00c16e;">L ${low}</span>
-            <span style="color: #00c16e;">C ${close}</span>
-            <span style="color: #00c16e; font-weight: bold;">${
-              parseFloat(changes) > 0 ? "+" + changes : "-" + changes
-            } (${
-              parseFloat(percentage) > 0 ? "+" + percentage : "-" + percentage
-            }%)</span>
-          </div>`
-            : `<span style="color: #00c16e;">O ${open}</span>
-           <span style="color: #00c16e;">H ${high}</span>
-           <span style="color: #00c16e;">L ${low}</span>
-           <span style="color: #00c16e;">C ${close}</span>
-           <span style="color: #00c16e; font-weight: bold;">${
-             parseFloat(changes) > 0 ? "+" + changes : "-" + changes
-           } (${
-             parseFloat(percentage) > 0 ? "+" + percentage : "-" + percentage
-           }%)</span>`
-        }
+        <div style="display: flex; flex-direction: ${isMobile ? "column" : "row"}; align-items: ${isMobile ? "flex-start" : "center"}; gap: ${isMobile ? "4px" : "8px"};">
+          <span>${exchange1}:${symbol}_KRW/${exchange2}:${symbol}_USDT.P</span>
+          ${
+            isMobile
+              ? `<div style="display: flex; align-items: center; gap: 4px;">
+              <span style="color: #00c16e;">O ${open}</span>
+              <span style="color: #00c16e;">H ${high}</span>
+              <span style="color: #00c16e;">L ${low}</span>
+              <span style="color: #00c16e;">C ${close}</span>
+              <span style="color: #00c16e; font-weight: bold;">${
+                parseFloat(changes) > 0 ? "+" + changes : "-" + changes
+              } (${
+                parseFloat(percentage) > 0 ? "+" + percentage : "-" + percentage
+              }%)</span>
+            </div>`
+              : `<span style="color: #00c16e;">O ${open}</span>
+             <span style="color: #00c16e;">H ${high}</span>
+             <span style="color: #00c16e;">L ${low}</span>
+             <span style="color: #00c16e;">C ${close}</span>
+             <span style="color: #00c16e; font-weight: bold;">${
+               parseFloat(changes) > 0 ? "+" + changes : "-" + changes
+             } (${
+               parseFloat(percentage) > 0 ? "+" + percentage : "-" + percentage
+             }%)</span>`
+          }
+        </div>
+        <span style="color: #2962FF; font-size: ${isMobile ? "8px" : "12px"};">━ USDT 가격</span>
       </div>
       `;
           }
@@ -713,26 +717,29 @@ const CompTradingviewChart = memo(
                   font-family: Pretendard Variable;  
                   font-weight: 300; 
                   display: flex;
-                  flex-direction: ${isMobile ? "column" : "row"};
-                  align-items: ${isMobile ? "flex-start" : "center"};
-                  gap: ${isMobile ? "4px" : "8px"};
+                  flex-direction: column;
+                  align-items: flex-start;
+                  gap: ${isMobile ? "2px" : "4px"};
                   color: #ccc;">
-          <span>${exchange1}:${symbol}_KRW/${exchange2}:${symbol}_USDT.P</span>
-          ${
-            isMobile
-              ? `<div style="display: flex; align-items: center; gap: 4px;">
-              <span style="color: #00c16e;">O 0.0000000</span>
-              <span style="color: #00c16e;">H 0.0000000</span>
-              <span style="color: #00c16e;">L 0.0000000</span>
-              <span style="color: #00c16e;">C 0.0000000</span>
-              <span style="color: #00c16e; font-weight: bold;">+0.0000000 (+0.00%)</span>
-            </div>`
-              : `<span style="color: #00c16e;">O 0.0000000</span>
-             <span style="color: #00c16e;">H 0.0000000</span>
-             <span style="color: #00c16e;">L 0.0000000</span>
-             <span style="color: #00c16e;">C 0.0000000</span>
-             <span style="color: #00c16e; font-weight: bold;">+0.0000000 (+0.00%)</span>`
-          }
+          <div style="display: flex; flex-direction: ${isMobile ? "column" : "row"}; align-items: ${isMobile ? "flex-start" : "center"}; gap: ${isMobile ? "4px" : "8px"};">
+            <span>${exchange1}:${symbol}_KRW/${exchange2}:${symbol}_USDT.P</span>
+            ${
+              isMobile
+                ? `<div style="display: flex; align-items: center; gap: 4px;">
+                <span style="color: #00c16e;">O 0.0000000</span>
+                <span style="color: #00c16e;">H 0.0000000</span>
+                <span style="color: #00c16e;">L 0.0000000</span>
+                <span style="color: #00c16e;">C 0.0000000</span>
+                <span style="color: #00c16e; font-weight: bold;">+0.0000000 (+0.00%)</span>
+              </div>`
+                : `<span style="color: #00c16e;">O 0.0000000</span>
+               <span style="color: #00c16e;">H 0.0000000</span>
+               <span style="color: #00c16e;">L 0.0000000</span>
+               <span style="color: #00c16e;">C 0.0000000</span>
+               <span style="color: #00c16e; font-weight: bold;">+0.0000000 (+0.00%)</span>`
+            }
+          </div>
+          <span style="color: #2962FF; font-size: ${isMobile ? "8px" : "12px"};">━ USDT 가격</span>
         </div>
       `;
         chartContainerRef.current?.appendChild(legend);

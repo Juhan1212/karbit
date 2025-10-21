@@ -330,6 +330,20 @@
       "when": 1760867984291,
       "tag": "0046_lean_black_crow",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1760968818230,
+      "tag": "0047_brainy_leper_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1760969157434,
+      "tag": "0048_friendly_richard_fisk",
+      "breakpoints": true
     }
   ]
 }

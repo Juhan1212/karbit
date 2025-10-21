@@ -61,14 +61,29 @@ export function AppSidebar({
     onTabChange("plans");
   };
   const menuItems = [
-    { id: "dashboard", label: "대시보드", icon: Home },
-    { id: "exchanges", label: "거래소 연동", icon: Link2 },
-    { id: "autotrading", label: "자동매매 설정", icon: TrendingUp },
-    { id: "plans", label: "플랜 관리", icon: Crown },
-    { id: "news", label: "거래소 뉴스", icon: Newspaper },
-    { id: "leaderboard", label: "자동매매 리더보드", icon: Trophy },
-    { id: "community", label: "커뮤니티", icon: MessageCircle },
-    { id: "payback", label: "거래소 페이백", icon: Gift },
+    { id: "dashboard", label: "대시보드", icon: Home, disabled: false },
+    { id: "exchanges", label: "거래소 연동", icon: Link2, disabled: false },
+    {
+      id: "autotrading",
+      label: "자동매매 설정",
+      icon: TrendingUp,
+      disabled: false,
+    },
+    { id: "plans", label: "플랜 관리", icon: Crown, disabled: false },
+    { id: "news", label: "거래소 뉴스", icon: Newspaper, disabled: false },
+    {
+      id: "leaderboard",
+      label: "자동매매 리더보드",
+      icon: Trophy,
+      disabled: false,
+    },
+    {
+      id: "community",
+      label: "커뮤니티",
+      icon: MessageCircle,
+      disabled: false,
+    },
+    { id: "payback", label: "거래소 페이백", icon: Gift, disabled: true },
   ];
 
   const sidebarClasses = isMobile
@@ -80,8 +95,12 @@ export function AppSidebar({
       {/* Logo */}
       <div className="p-6">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <BarChart3 className="w-5 h-5 text-primary-foreground text-white" />
+          <div className="w-8 h-8 flex items-center justify-center">
+            <img
+              src="/logo-no-bg.png"
+              alt="Karbit Logo"
+              className="w-100 h-100 object-contain"
+            />
           </div>
           <h1 className="text-xl font-medium">Karbit</h1>
         </div>
@@ -95,11 +114,19 @@ export function AppSidebar({
             <Button
               key={item.id}
               variant={activeTab === item.id ? "secondary" : "ghost"}
-              className="w-full justify-start gap-3 h-11"
-              onClick={() => onTabChange(item.id)}
+              className={`w-full justify-start gap-3 h-11 ${item.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+              onClick={() => !item.disabled && onTabChange(item.id)}
+              disabled={item.disabled}
             >
               <Icon className="w-4 h-4" />
-              {item.label}
+              <span className="flex items-center gap-2">
+                {item.label}
+                {item.disabled && (
+                  <Badge variant="secondary" className="text-xs">
+                    준비중
+                  </Badge>
+                )}
+              </span>
             </Button>
           );
         })}

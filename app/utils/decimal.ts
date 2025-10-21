@@ -24,6 +24,16 @@ function toFixed(num: number, decimals: number = 8): number {
 }
 
 /**
+ * 부동소수점 숫자를 지정된 소수점 자리에서 버림 (truncate)
+ * @param num 변환할 숫자
+ * @param decimals 소수점 자릿수 (기본값: 8)
+ */
+export function truncateToDecimal(num: number, decimals: number = 8): number {
+  const factor = Math.pow(10, decimals);
+  return Math.floor(num * factor) / factor;
+}
+
+/**
  * 정확한 덧셈 연산
  * @param a 첫 번째 수
  * @param b 두 번째 수

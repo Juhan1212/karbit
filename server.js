@@ -34,24 +34,24 @@ const app = express();
 app.use(compression());
 app.disable("x-powered-by");
 
-// Body parser and cookie parser
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
+// // Body parser and cookie parser
+// app.use(express.json());
+// app.use(express.urlencoded({ extended: true }));
+// app.use(cookieParser());
 
-// Session middleware (필수: app.ts에서 Passport가 사용)
-app.use(
-  session({
-    secret: process.env.JWT_SECRET || "your-secret-key",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: !DEVELOPMENT,
-      httpOnly: true,
-      maxAge: 2 * 60 * 60 * 1000, // 2시간
-    },
-  })
-);
+// // Session middleware (필수: app.ts에서 Passport가 사용)
+// app.use(
+//   session({
+//     secret: process.env.JWT_SECRET || "your-secret-key",
+//     resave: false,
+//     saveUninitialized: false,
+//     cookie: {
+//       secure: !DEVELOPMENT,
+//       httpOnly: true,
+//       maxAge: 2 * 60 * 60 * 1000, // 2시간
+//     },
+//   })
+// );
 
 // CORS 미들웨어
 app.use(

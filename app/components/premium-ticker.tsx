@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Crown, Lock } from "lucide-react";
+import { ChevronDown, ChevronUp, Crown, Lock, Loader2 } from "lucide-react";
 import { Button } from "./button";
 import { toast } from "sonner";
 import {
@@ -64,6 +64,7 @@ export function PremiumTicker({
   const [pinnedItem, setPinnedItem] = useState<
     (TickPayload & { _rate: number | null }) | null
   >(null);
+  const [loadingButtons, setLoadingButtons] = useState<Set<string>>(new Set());
   const esRef = useRef<EventSource | null>(null);
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -246,12 +247,69 @@ export function PremiumTicker({
     setShowSuggestions(false);
   };
 
+  // 포지션 진입 로딩 상태 관리
+  const setButtonLoading = (symbol: string, loading: boolean) => {
+    setLoadingButtons((prev) => {
+      const newSet = new Set(prev);
+      if (loading) {
+        newSet.add(symbol);
+      } else {
+        newSet.delete(symbol);
+      }
+      return newSet;
+    });
+  };
+
+  const isButtonLoading = (symbol: string) => {
+    return loadingButtons.has(symbol);
+  };
+
+  // 포지션 진입 핸들러
+  const handleOpenPosition = async (
+    symbol: string,
+    koreanEx?: string,
+    foreignEx?: string
+  ) => {
+    setButtonLoading(symbol, true);
+    try {
+      const res = await fetch("/api/open-position", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          coinSymbol: symbol,
+          krExchange: koreanEx?.toUpperCase(),
+          frExchange: foreignEx?.toUpperCase(),
+          amount: 10000,
+          leverage: 2,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(`${symbol} 포지션진입 성공!`);
+      } else {
+        toast.error(data.message || `${symbol} 포지션진입 실패`);
+        // 거래소 인증 에러인 경우 리다이렉트
+        if (data.redirectTo) {
+          setTimeout(() => {
+            window.location.href = data.redirectTo;
+          }, 1000);
+        }
+      }
+    } catch (error) {
+      toast.error(`포지션진입 실패: ${error}`);
+    } finally {
+      setButtonLoading(symbol, false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
               호가창 반영 실시간 환율
               {/* ⭐ Free 플랜도 볼 수 있으므로 Lock 아이콘 제거 */}
             </CardTitle>
@@ -383,43 +441,22 @@ export function PremiumTicker({
                       className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300 mx-auto"
                       onClick={async (e: React.MouseEvent) => {
                         e.stopPropagation();
-                        try {
-                          const res = await fetch("/api/open-position", {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify({
-                              coinSymbol: pinnedItem.symbol,
-                              krExchange: pinnedItem.korean_ex?.toUpperCase(),
-                              frExchange: pinnedItem.foreign_ex?.toUpperCase(),
-                              amount: 10000,
-                              leverage: 2,
-                            }),
-                          });
-                          const data = await res.json();
-                          if (res.ok && data.success) {
-                            toast.success(
-                              `${pinnedItem.symbol} 포지션진입 성공!`
-                            );
-                          } else {
-                            toast.error(
-                              data.message ||
-                                `${pinnedItem.symbol} 포지션진입 실패`
-                            );
-                            if (data.redirectTo) {
-                              setTimeout(() => {
-                                window.location.href = data.redirectTo;
-                              }, 1000);
-                            }
-                          }
-                        } catch (error) {
-                          toast.error(`포지션진입 실패: ${error}`);
-                        }
+                        await handleOpenPosition(
+                          pinnedItem.symbol,
+                          pinnedItem.korean_ex,
+                          pinnedItem.foreign_ex
+                        );
                       }}
+                      disabled={isButtonLoading(pinnedItem.symbol)}
                     >
-                      <span className="hidden sm:inline">포지션진입</span>
-                      <span className="sm:hidden">진입</span>
+                      {isButtonLoading(pinnedItem.symbol) ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">포지션진입</span>
+                          <span className="sm:hidden">진입</span>
+                        </>
+                      )}
                     </Button>
                   </TableCell>
                   <TableCell className="px-2 pl-4 font-medium text-xs text-center">
@@ -497,41 +534,22 @@ export function PremiumTicker({
                       className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300 mx-auto"
                       onClick={async (e: React.MouseEvent) => {
                         e.stopPropagation();
-                        try {
-                          const res = await fetch("/api/open-position", {
-                            method: "POST",
-                            headers: {
-                              "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify({
-                              coinSymbol: it.symbol,
-                              krExchange: it.korean_ex?.toUpperCase(),
-                              frExchange: it.foreign_ex?.toUpperCase(),
-                              amount: 10000,
-                              leverage: 2,
-                            }),
-                          });
-                          const data = await res.json();
-                          if (res.ok && data.success) {
-                            toast.success(`${it.symbol} 포지션진입 성공!`);
-                          } else {
-                            toast.error(
-                              data.message || `${it.symbol} 포지션진입 실패`
-                            );
-                            // 거래소 인증 에러인 경우 리다이렉트
-                            if (data.redirectTo) {
-                              setTimeout(() => {
-                                window.location.href = data.redirectTo;
-                              }, 1000);
-                            }
-                          }
-                        } catch (error) {
-                          toast.error(`포지션진입 실패: ${error}`);
-                        }
+                        await handleOpenPosition(
+                          it.symbol,
+                          it.korean_ex,
+                          it.foreign_ex
+                        );
                       }}
+                      disabled={isButtonLoading(it.symbol)}
                     >
-                      <span className="hidden sm:inline">포지션진입</span>
-                      <span className="sm:hidden">진입</span>
+                      {isButtonLoading(it.symbol) ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">포지션진입</span>
+                          <span className="sm:hidden">진입</span>
+                        </>
+                      )}
                     </Button>
                   </TableCell>
                   <TableCell className="px-2 pl-3 font-medium text-xs text-center">

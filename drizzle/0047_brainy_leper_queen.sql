@@ -1,0 +1,1 @@
+ALTER TABLE "positions" ADD COLUMN "fr_original_price" numeric(18, 8);

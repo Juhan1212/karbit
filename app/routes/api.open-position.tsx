@@ -35,13 +35,6 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    if (request.method !== "POST") {
-      return Response.json(
-        { success: false, message: "잘못된 요청 방식입니다." },
-        { status: 405 }
-      );
-    }
-
     // ⭐ 일일 포지션 진입 제한 확인 (Free 플랜)
     const entryCheck = await canUserEnterPosition(user.id);
     if (!entryCheck.canEnter) {
@@ -136,7 +129,7 @@ export async function action({ request }: ActionFunctionArgs) {
     console.log("한국 거래소 매수 주문 ID:", krBuyOrderId);
 
     // 3.5. 주문 결과 조회 및 수량 추출
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     const krBuyOrderResult = await krAdapter.getOrder(krBuyOrderId, coinSymbol);
     console.log("한국 거래소 매수 주문 결과:", krBuyOrderResult);
     if (!krBuyOrderResult || !krBuyOrderResult.amount) {
@@ -183,7 +176,7 @@ export async function action({ request }: ActionFunctionArgs) {
       side: "sell",
       amount: String(roundedVolume),
     });
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 500));
     const frSellOrderResult = await frAdapter.getOrder(
       frSellOrderId,
       coinSymbol
@@ -244,6 +237,7 @@ export async function action({ request }: ActionFunctionArgs) {
       frExchange,
       frOrderId: frSellOrder.id,
       frPrice: frSellOrder.price,
+      frOriginalPrice: frSellOrder.original_price, // 주문 시점 가격
       frVolume: frSellOrder.amount,
       frFunds: frSellOrder.filled,
       frFee: frSellOrder.fee || 0,
@@ -251,7 +245,7 @@ export async function action({ request }: ActionFunctionArgs) {
         Math.round((krBuyOrder.filled / frSellOrder.filled) * 100) / 100,
       usdtPrice,
       entryTime: new Date(),
-      slippage: frSellOrder.slippage,
+      frSlippage: frSellOrder.slippage,
     });
 
     // 사용자 수동매매 카운트 증가

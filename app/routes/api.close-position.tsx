@@ -168,7 +168,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
       // 4. 주문 완료 후 상세 정보 조회 (체결 정보 포함)
       // 시장가 주문의 경우 즉시 체결되지만, 안전을 위해 짧은 대기 후 조회
-      await new Promise((resolve) => setTimeout(resolve, 200)); // 200ms 대기
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1000ms 대기
 
       // for mock test
       // const krSellOrderId = "1fc437c5-4fb6-42f6-843e-b1d3a23eaa19";
@@ -177,7 +177,7 @@ export async function action({ request }: ActionFunctionArgs) {
       // 동시에 주문 상세 정보 조회
       const [krSellOrderResult, frBuyOrderResult] = await Promise.allSettled([
         krAdapter.getOrder(krSellOrderId, coinSymbol),
-        frAdapter.getClosedPnl(frBuyOrderId, coinSymbol),
+        frAdapter.getClosedPnl(coinSymbol, frBuyOrderId),
       ]);
 
       // 한국 거래소 매도 주문 결과 처리
@@ -315,7 +315,9 @@ export async function action({ request }: ActionFunctionArgs) {
         krFee: krSellOrder.fee || 0,
         frExchange: frExchange,
         frOrderId: frBuyOrderId,
+        frOriginalPrice: frBuyOrder.orderPrice,
         frPrice: frBuyOrder.avgExitPrice,
+        frSlippage: frBuyOrder.slippage,
         frVolume: frBuyOrder.totalVolume,
         frFunds: safeNumeric(
           positionSettlement.totalFrFunds + frBuyOrder.totalPnl,

@@ -24,6 +24,7 @@ export interface OrderResult {
   fee?: number;
   timestamp: number;
   slippage?: number;
+  original_price?: number; // 주문 시점 가격 (해외 선물거래소 전용)
 }
 
 export interface TickerResult {
@@ -138,6 +139,7 @@ export abstract class ExchangeAdapter {
     symbol: string;
     totalPnl: number;
     slippage: number;
+    orderPrice: number;
     avgExitPrice: number;
     totalFee: number;
     closeFee: number;
