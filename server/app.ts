@@ -23,6 +23,21 @@ declare module "react-router" {
 
 export const app = express();
 
+// Express-session 미들웨어 적용 (세션 옵션은 필요에 따라 조정)
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "karbit-secret-key",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 2 * 60 * 60 * 1000, // 2시간
+    },
+  })
+);
+
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
 
 const client = postgres(process.env.DATABASE_URL, {
