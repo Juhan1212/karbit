@@ -338,6 +338,7 @@ export const userSessions = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     token: text().notNull().unique(),
     expiresAt: timestamp("expires_at").notNull(),
+    sessionData: text("session_data"), // express-session 데이터 저장용
   },
   (table) => [index("idx_user_sessions_token").on(table.token)]
 );

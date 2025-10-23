@@ -14,6 +14,7 @@ import { db as mainDb } from "../app/database/db";
 import { users } from "../app/database/schema";
 import { eq } from "drizzle-orm";
 import { createSession } from "../app/database/session";
+import { DrizzleSessionStore } from "~/database/DrizzleSessionStore";
 
 declare module "react-router" {
   interface AppLoadContext {
@@ -26,6 +27,7 @@ export const app = express();
 // Express-session 미들웨어 적용 (세션 옵션은 필요에 따라 조정)
 app.use(
   session({
+    store: new DrizzleSessionStore(),
     secret: process.env.SESSION_SECRET || "karbit-secret-key",
     resave: false,
     saveUninitialized: false,
@@ -153,7 +155,6 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   // Google OAuth 인증 시작
   app.get("/api/auth/google", (req, res, next) => {
     const isSignupMode = req.query.mode === "signup";
-
     if (isSignupMode) {
       (req as any).session.isGoogleSignupMode = true;
     } else {
@@ -163,6 +164,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     (req as any).session.save(() => {
       passport.authenticate("google", {
         scope: ["profile", "email"],
+        state: JSON.stringify({ isGoogleSignupMode: isSignupMode }),
       })(req, res, next);
     });
   });
@@ -182,7 +184,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           return res.redirect("/auth?error=사용자 정보를 가져올 수 없습니다");
         }
 
-        const isSignupMode = (req as any).session.isGoogleSignupMode;
+        const isSignupMode =
+          JSON.parse((req as any).query.state).isGoogleSignupMode ?? false;
 
         // 회원가입 모드
         if (isSignupMode) {
@@ -204,7 +207,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 
         // 로그인 모드
         if (!user.id) {
-          return res.redirect("/auth?tab=signup&login=fail");
+          return res.redirect("/auth?tab=signup");
         }
 
         const sessionToken = await createSession(user.id);

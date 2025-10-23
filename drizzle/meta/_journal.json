@@ -344,6 +344,13 @@
       "when": 1760969157434,
       "tag": "0048_friendly_richard_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1761239812095,
+      "tag": "0049_chief_quicksilver",
+      "breakpoints": true
     }
   ]
 }

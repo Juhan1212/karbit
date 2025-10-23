@@ -103,35 +103,6 @@ function AuthContent({
     if (loginStatus === "fail") {
       toast.error("가입되지 않은 사용자입니다.");
     }
-
-    // 구글 회원가입 플래그 확인
-    const isGoogleSignup = params.get("isGoogleSignup") === "true";
-
-    if (isGoogleSignup) {
-      // 서버 세션에서 Google 정보 가져오기
-      fetch("/api/auth/google/signup-data", {
-        credentials: "include",
-      })
-        .then((res) => res.json())
-        .then((result) => {
-          if (result.success && result.data) {
-            setGoogleSignupData({
-              ...result.data,
-              isGoogleSignup: true,
-            });
-
-            // 회원가입 폼에 자동 채우기
-            setSignupData((prev) => ({
-              ...prev,
-              email: result.data.email || "",
-              username: result.data.name || "",
-            }));
-          }
-        })
-        .catch((error) => {
-          console.error("Google 회원가입 정보 로드 실패:", error);
-        });
-    }
   }, []);
 
   // Login form state
@@ -153,6 +124,10 @@ function AuthContent({
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [validationError, setValidationError] = useState<{
+    terms?: boolean;
+    privacy?: boolean;
+  }>({});
 
   // 비밀번호 일치 여부 확인
   const passwordsMatch = signupData.password === signupData.confirmPassword;
@@ -192,55 +167,21 @@ function AuthContent({
     e.preventDefault();
     setIsLoading(true);
 
-    // 구글 회원가입인 경우
-    if (googleSignupData?.isGoogleSignup) {
-      // 약관 동의 확인
-      if (!signupData.agreeTerms) {
-        toast.error("이용약관에 동의해주세요.");
-        setIsLoading(false);
-        return;
-      }
+    if (!signupData.agreeTerms) {
+      setValidationError({ terms: true });
+      toast.error("이용약관에 동의해주세요.");
+      setIsLoading(false);
+      return;
+    }
 
-      if (!signupData.agreePrivacy) {
-        toast.error("개인정보처리방침에 동의해주세요.");
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        // 구글 회원가입 API 호출
-        const response = await fetch("/api/auth/google/complete-signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: googleSignupData.email,
-            name: signupData.username || googleSignupData.name,
-            googleId: googleSignupData.googleId,
-            googleAvatar: googleSignupData.googleAvatar,
-            agreeMarketing: signupData.agreeMarketing,
-          }),
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          toast.success("구글 회원가입이 완료되었습니다!");
-          // 쿠키가 설정되었으므로 바로 대시보드로 이동
-          window.location.href = "/dashboard";
-        } else {
-          toast.error(result.message || "회원가입 중 오류가 발생했습니다.");
-        }
-      } catch (error) {
-        console.error("Google signup error:", error);
-        toast.error("회원가입 중 오류가 발생했습니다. 다시 시도해주세요.");
-      } finally {
-        setIsLoading(false);
-      }
+    if (!signupData.agreePrivacy) {
+      setValidationError({ privacy: true });
+      toast.error("개인정보처리방침에 동의해주세요.");
+      setIsLoading(false);
       return;
     }
 
     // 일반 회원가입
-    // Basic validation
     if (!signupData.username || !signupData.email || !signupData.password) {
       toast.error("필수 정보를 모두 입력해주세요.");
       setIsLoading(false);
@@ -253,18 +194,7 @@ function AuthContent({
       return;
     }
 
-    if (!signupData.agreeTerms) {
-      toast.error("이용약관에 동의해주세요.");
-      setIsLoading(false);
-      return;
-    }
-
-    if (!signupData.agreePrivacy) {
-      toast.error("개인정보처리방침에 동의해주세요.");
-      setIsLoading(false);
-      return;
-    }
-
+    setValidationError({});
     try {
       const result = await signup(
         signupData.username,
@@ -583,6 +513,11 @@ function AuthContent({
                           })
                         }
                         required
+                        style={
+                          validationError.terms
+                            ? { outline: "2px solid red" }
+                            : {}
+                        }
                       />
                       <Label
                         htmlFor="agree-terms"
@@ -613,6 +548,11 @@ function AuthContent({
                           })
                         }
                         required
+                        style={
+                          validationError.privacy
+                            ? { outline: "2px solid red" }
+                            : {}
+                        }
                       />
                       <Label
                         htmlFor="agree-privacy"
@@ -686,6 +626,22 @@ function AuthContent({
                 variant="outline"
                 className="w-full gap-2"
                 onClick={() => {
+                  if (activeTab === "signup") {
+                    if (!signupData.agreeTerms) {
+                      setValidationError({ terms: true });
+                      toast.error("이용약관에 동의해주세요.");
+                      setIsLoading(false);
+                      return;
+                    }
+
+                    if (!signupData.agreePrivacy) {
+                      setValidationError({ privacy: true });
+                      toast.error("개인정보처리방침에 동의해주세요.");
+                      setIsLoading(false);
+                      return;
+                    }
+                  }
+
                   // 현재 탭에 따라 다른 URL로 이동
                   const url =
                     activeTab === "signup"
@@ -715,10 +671,10 @@ function AuthContent({
                 </svg>
                 Google {activeTab === "login" ? "로그인" : "회원가입"}
               </Button>
-              <Button variant="outline" className="w-full gap-2" disabled>
+              {/* <Button variant="outline" className="w-full gap-2" disabled>
                 <div className="w-5 h-5 bg-yellow-400 rounded"></div>
                 카카오로 계속하기
-              </Button>
+              </Button> */}
             </div>
 
             {/* Trust Indicators */}

@@ -166,7 +166,13 @@ const server = app.listen(PORT, "127.0.0.1", () => {
 
 server.on("error", (error) => {
   console.error("Server error:", error);
-  if (error.code === "EADDRINUSE") {
+  // error 객체에 code 프로퍼티가 있는지 타입 가드로 확인
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "EADDRINUSE"
+  ) {
     console.error(
       `❌ Port ${PORT} is already in use. Stop the existing process first.`
     );
