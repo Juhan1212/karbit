@@ -134,7 +134,7 @@ curl -X POST "https://api.telegram.org/bot8343048488:AAH7tP0ILe897MOCptIx0zZ49oi
 curl -X POST "https://api.telegram.org/bot8343048488:AAH7tP0ILe897MOCptIx0zZ49oiru5Kik9c/setWebhook" \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "http://ec2-54-180-237-154.ap-northeast-2.compute.amazonaws.com/api/telegram/webhook",
+    "url": "https://karbit.world/api/telegram/webhook",
     "allowed_updates": ["message", "callback_query"]
   }'
 ```

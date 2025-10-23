@@ -12,25 +12,29 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const BUILD_PATH = join(__dirname, "build/server/index.js");
+
 if (!process.env.NODE_ENV) {
   console.error(
     "NODE_ENV 환경 변수가 설정되어 있지 않습니다. .env 파일을 확인하세요."
   );
   process.exit(1);
 }
+
 const DEVELOPMENT = process.env.NODE_ENV === "development";
-if (!process.env.PORT) {
-  console.error(
-    "PORT 환경 변수가 설정되어 있지 않습니다. .env 파일을 확인하세요."
-  );
-  process.exit(1);
-}
-const PORT = DEVELOPMENT ? 3000 : Number.parseInt(process.env.PORT);
+
+// 프로덕션에서는 항상 3000포트 사용 (Nginx 리버스 프록시)
+const PORT = 3000;
+
+console.log(`Environment: ${process.env.NODE_ENV}`);
+console.log(`Port: ${PORT}`);
 
 const app = express();
 
 app.use(compression());
 app.disable("x-powered-by");
+
+// Trust proxy - Nginx 뒤에서 실제 클라이언트 IP 받기
+app.set("trust proxy", true);
 
 // CORS 미들웨어
 app.use(
@@ -44,6 +48,8 @@ app.use(
         process.env.BASE_DNS_URL,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://karbit.world",
+        "https://www.karbit.world",
       ];
 
       // ngrok 도메인 허용 (개발 환경)
@@ -116,7 +122,7 @@ if (DEVELOPMENT) {
     process.exit(1);
   }
 } else {
-  console.log("Starting production server");
+  console.log("Starting production server (behind Nginx reverse proxy)");
 
   // 정적 파일 서빙 (업로드된 이미지)
   app.use(
@@ -148,15 +154,23 @@ if (DEVELOPMENT) {
   }
 }
 
-const server = app.listen(PORT, () => {
-  const baseUrl = DEVELOPMENT
-    ? `http://localhost:${PORT}`
-    : process.env.BASE_URL;
-  console.log(`Server is running on ${baseUrl}`);
+const server = app.listen(PORT, "127.0.0.1", () => {
+  console.log(`✅ Server is running on http://127.0.0.1:${PORT}`);
+  console.log(
+    `🔒 Listening only on localhost (Nginx will handle external traffic)`
+  );
+  if (!DEVELOPMENT) {
+    console.log(`🌐 Public URL: https://karbit.world`);
+  }
 });
 
 server.on("error", (error) => {
   console.error("Server error:", error);
+  if (error.code === "EADDRINUSE") {
+    console.error(
+      `❌ Port ${PORT} is already in use. Stop the existing process first.`
+    );
+  }
 });
 
 process.on("uncaughtException", (error) => {
