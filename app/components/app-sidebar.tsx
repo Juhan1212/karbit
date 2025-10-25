@@ -16,6 +16,7 @@ import {
   Trophy,
   MessageCircle,
   Gift,
+  Lightbulb,
 } from "lucide-react";
 
 interface AppSidebarProps {
@@ -62,6 +63,12 @@ export function AppSidebar({
   };
   const menuItems = [
     { id: "dashboard", label: "대시보드", icon: Home, disabled: false },
+    {
+      id: "tradeExplain",
+      label: "거래 설명",
+      icon: Lightbulb,
+      disabled: false,
+    },
     { id: "exchanges", label: "거래소 연동", icon: Link2, disabled: false },
     {
       id: "autotrading",

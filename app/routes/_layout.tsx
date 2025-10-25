@@ -52,6 +52,7 @@ export default function AppLayout() {
   const getActiveTab = () => {
     const path = location.pathname;
     if (path === "/dashboard") return "dashboard";
+    if (path === "/trade-explain") return "trade-explain";
     if (path === "/exchanges") return "exchanges";
     if (path === "/autotrading") return "autotrading";
     if (path === "/plans") return "plans";
@@ -65,6 +66,7 @@ export default function AppLayout() {
     // 탭 변경시 해당 경로로 네비게이션
     const routes: { [key: string]: string } = {
       dashboard: "/dashboard",
+      tradeExplain: "/trade-explain",
       exchanges: "/exchanges",
       autotrading: "/autotrading",
       plans: "/plans",

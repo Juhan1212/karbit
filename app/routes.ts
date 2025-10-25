@@ -46,6 +46,7 @@ export default [
   route("/community/posts/:postId", "routes/community.posts.$postId.tsx"),
   layout("routes/_layout.tsx", [
     route("/dashboard", "routes/dashboard.tsx"),
+    route("/trade-explain", "routes/trade-explain.tsx"),
     route("/exchanges", "routes/exchanges.tsx"),
     route("/autotrading", "routes/autotrading.tsx"),
     route("/plans", "routes/plans.tsx"),
