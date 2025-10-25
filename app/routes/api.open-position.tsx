@@ -227,7 +227,7 @@ export async function action({ request }: ActionFunctionArgs) {
       userId: user.id,
       strategyId: activeStrategy.id,
       coinSymbol,
-      leverage: activeStrategy.leverage,
+      leverage: leverage,
       krExchange,
       krOrderId: krBuyOrder.id,
       krPrice: krBuyOrder.price,

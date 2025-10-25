@@ -351,6 +351,13 @@
       "when": 1761239812095,
       "tag": "0049_chief_quicksilver",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1761401625441,
+      "tag": "0050_cooing_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

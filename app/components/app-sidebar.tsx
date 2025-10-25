@@ -73,7 +73,7 @@ export function AppSidebar({
     { id: "news", label: "거래소 뉴스", icon: Newspaper, disabled: false },
     {
       id: "leaderboard",
-      label: "자동매매 리더보드",
+      label: "리더보드",
       icon: Trophy,
       disabled: false,
     },

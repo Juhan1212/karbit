@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLoaderData } from "react-router";
+import { LoaderFunctionArgs, useLoaderData } from "react-router";
 import {
   Card,
   CardContent,
@@ -33,7 +33,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { Route } from "./+types/leaderboard";
+// import { Route } from "./+types/leaderboard";
 import {
   getLeaderboardStats,
   getTopTradersPerformanceTrend,
@@ -50,42 +50,30 @@ interface Trader {
   totalTrades: number;
   winRate: number;
   strategy: string;
-  tier: "diamond" | "platinum" | "gold" | "silver" | "bronze";
+  tier: "premium" | "starter" | "free";
   totalProfit: number;
   avgDailyProfit: number;
 }
 
 const getTierConfig = (tier: Trader["tier"]) => {
   switch (tier) {
-    case "diamond":
+    case "premium":
       return {
-        color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/50",
+        color: "bg-yellow-400/20 text-yellow-500 border-yellow-400/50",
         icon: Crown,
-        label: "다이아몬드",
+        label: "프리미엄",
       };
-    case "platinum":
+    case "starter":
       return {
-        color: "bg-purple-500/20 text-purple-400 border-purple-500/50",
-        icon: Trophy,
-        label: "플래티넘",
-      };
-    case "gold":
-      return {
-        color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/50",
+        color: "bg-blue-400/20 text-blue-400 border-blue-400/50",
         icon: Medal,
-        label: "골드",
+        label: "스타터",
       };
-    case "silver":
+    case "free":
       return {
-        color: "bg-gray-400/20 text-gray-300 border-gray-400/50",
-        icon: Target,
-        label: "실버",
-      };
-    case "bronze":
-      return {
-        color: "bg-orange-700/20 text-orange-400 border-orange-700/50",
+        color: "bg-gray-400/20 text-gray-400 border-gray-400/50",
         icon: Zap,
-        label: "브론즈",
+        label: "프리",
       };
   }
 };
@@ -100,7 +88,7 @@ const formatCurrency = (value: number) => {
   return `${value.toLocaleString()}원`;
 };
 
-export async function loader({ context, request }: Route.LoaderArgs) {
+export async function loader({ context, request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const period = (url.searchParams.get("period") || "30d") as TimePeriod;
 
@@ -137,10 +125,10 @@ export default function AutoTradingLeaderboard() {
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <Trophy className="w-6 h-6 text-accent" />
-          <h1 className="text-2xl">자동매매 리더보드</h1>
+          <h1 className="text-2xl">리더보드</h1>
         </div>
         <p className="text-muted-foreground">
-          상위 트레이더들의 실시간 자동매매 성과를 확인하세요
+          상위 트레이더들의 실시간 트레이딩 성과를 확인하세요
         </p>
       </div>
 
@@ -178,7 +166,7 @@ export default function AutoTradingLeaderboard() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">총 거래량</p>
+                <p className="text-sm text-muted-foreground">총누적 거래량</p>
                 <p className="text-2xl mt-1">
                   {formatCurrency(Number(stats.totalVolume))}
                 </p>
@@ -193,7 +181,7 @@ export default function AutoTradingLeaderboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">
-                  총 김프진입 횟수
+                  총누적 김프진입 횟수
                 </p>
                 <p className="text-2xl mt-1">
                   {stats.totalEntries.toLocaleString()}
@@ -330,7 +318,7 @@ export default function AutoTradingLeaderboard() {
         <CardHeader>
           <CardTitle>트레이더 순위</CardTitle>
           <CardDescription>
-            최고 성과를 내고 있는 자동매매 트레이더 TOP 10
+            최고 성과를 내고 있는 트레이더 TOP 10
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -349,7 +337,106 @@ export default function AutoTradingLeaderboard() {
                       }`}
                     >
                       <CardContent className="p-4">
-                        <div className="flex items-center gap-4">
+                        {/* Mobile Layout - Stack vertically */}
+                        <div className="lg:hidden space-y-3">
+                          {/* Top Row: Rank and Avatar & Name */}
+                          <div className="flex items-center gap-3">
+                            {/* Rank */}
+                            <div className="flex-shrink-0 w-10 text-center">
+                              {trader.rank <= 3 ? (
+                                <div
+                                  className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${
+                                    trader.rank === 1
+                                      ? "bg-yellow-500/20 text-yellow-400"
+                                      : trader.rank === 2
+                                        ? "bg-gray-300/20 text-gray-300"
+                                        : "bg-orange-600/20 text-orange-500"
+                                  }`}
+                                >
+                                  <Trophy className="w-4 h-4" />
+                                </div>
+                              ) : (
+                                <span className="text-lg text-muted-foreground">
+                                  #{trader.rank}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Avatar & Name */}
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <Avatar className="w-10 h-10 border-2 border-primary/30">
+                                <AvatarFallback className="bg-primary/20 text-primary text-sm">
+                                  {trader.nickname.substring(0, 2)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium truncate">
+                                    {trader.nickname}
+                                  </p>
+                                  <Badge
+                                    variant="outline"
+                                    className={`${tierConfig.color} border flex items-center gap-1 text-xs`}
+                                  >
+                                    <TierIcon className="w-2.5 h-2.5" />
+                                    {tierConfig.label}
+                                  </Badge>
+                                </div>
+                                {trader.strategy && (
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    자동매매 전략 사용중
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Bottom Row: Stats */}
+                          <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border">
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground">
+                                수익률
+                              </p>
+                              <p
+                                className={`text-sm font-medium ${
+                                  trader.profitRate > 0
+                                    ? "text-green-500"
+                                    : "text-red-500"
+                                }`}
+                              >
+                                {trader.profitRate > 0 ? "+" : ""}
+                                {trader.profitRate.toFixed(2)}%
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground">
+                                승률
+                              </p>
+                              <p className="text-sm font-medium">
+                                {trader.winRate}%
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground">
+                                거래
+                              </p>
+                              <p className="text-sm font-medium">
+                                {trader.totalTrades.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-muted-foreground">
+                                일평균
+                              </p>
+                              <p className="text-sm font-medium text-green-500">
+                                {formatCurrency(trader.avgDailyProfit)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Desktop Layout - Horizontal */}
+                        <div className="hidden lg:flex items-center gap-4">
                           {/* Rank */}
                           <div className="flex-shrink-0 w-12 text-center">
                             {trader.rank <= 3 ? (
@@ -391,14 +478,16 @@ export default function AutoTradingLeaderboard() {
                                   {tierConfig.label}
                                 </Badge>
                               </div>
-                              <p className="text-sm text-muted-foreground truncate">
-                                {trader.strategy}
-                              </p>
+                              {trader.strategy && (
+                                <p className="text-sm text-muted-foreground truncate">
+                                  자동매매 전략 사용중
+                                </p>
+                              )}
                             </div>
                           </div>
 
                           {/* Stats Grid */}
-                          <div className="hidden lg:grid lg:grid-cols-4 gap-6">
+                          <div className="grid grid-cols-4 gap-6">
                             <div className="text-center">
                               <p className="text-sm text-muted-foreground">
                                 수익률
@@ -436,41 +525,6 @@ export default function AutoTradingLeaderboard() {
                                 {formatCurrency(trader.avgDailyProfit)}
                               </p>
                             </div>
-                          </div>
-
-                          {/* Mobile Stats */}
-                          <div className="lg:hidden flex flex-col gap-1 text-right">
-                            <p
-                              className={`${
-                                trader.profitRate > 0
-                                  ? "text-green-500"
-                                  : "text-red-500"
-                              }`}
-                            >
-                              {trader.profitRate > 0 ? "+" : ""}
-                              {trader.profitRate.toFixed(2)}%
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              승률 {trader.winRate}%
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Mobile Additional Stats */}
-                        <div className="lg:hidden mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">
-                              거래:{" "}
-                            </span>
-                            <span>{trader.totalTrades.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">
-                              일평균:{" "}
-                            </span>
-                            <span className="text-green-500">
-                              {formatCurrency(trader.avgDailyProfit)}
-                            </span>
                           </div>
                         </div>
                       </CardContent>

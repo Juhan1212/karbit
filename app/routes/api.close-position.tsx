@@ -175,10 +175,12 @@ export async function action({ request }: ActionFunctionArgs) {
       // const frBuyOrderId = "2560f9ff-2065-4c36-9ae4-ff3018e1e310";
 
       // 동시에 주문 상세 정보 조회
-      const [krSellOrderResult, frBuyOrderResult] = await Promise.allSettled([
-        krAdapter.getOrder(krSellOrderId, coinSymbol),
-        frAdapter.getClosedPnl(coinSymbol, frBuyOrderId),
-      ]);
+      const [krSellOrderResult, frBuyOrderResult, frBuyOrderDetailResult] =
+        await Promise.allSettled([
+          krAdapter.getOrder(krSellOrderId, coinSymbol),
+          frAdapter.getClosedPnl(coinSymbol, frBuyOrderId),
+          frAdapter.getOrder(frBuyOrderId, coinSymbol), // 추가된 부분
+        ]);
 
       // 한국 거래소 매도 주문 결과 처리
       let krSellOrder;
@@ -203,6 +205,17 @@ export async function action({ request }: ActionFunctionArgs) {
           frBuyOrderResult.reason
         );
         throw new Error("해외 거래소 주문 정보를 조회할 수 없습니다.");
+      }
+
+      let frBuyOrderDetail;
+      if (frBuyOrderDetailResult.status === "fulfilled") {
+        frBuyOrderDetail = frBuyOrderDetailResult.value;
+      } else {
+        console.warn(
+          "해외 거래소 주문 상세 조회 실패, 기본값 사용:",
+          frBuyOrderDetailResult.reason
+        );
+        throw new Error("해외 거래소 주문 상세 정보를 조회할 수 없습니다.");
       }
 
       console.log("해외 거래소 매수 주문 결과:", frBuyOrder);
@@ -317,7 +330,7 @@ export async function action({ request }: ActionFunctionArgs) {
         frOrderId: frBuyOrderId,
         frOriginalPrice: frBuyOrder.orderPrice,
         frPrice: frBuyOrder.avgExitPrice,
-        frSlippage: frBuyOrder.slippage,
+        frSlippage: frBuyOrderDetail.slippage,
         frVolume: frBuyOrder.totalVolume,
         frFunds: safeNumeric(
           positionSettlement.totalFrFunds + frBuyOrder.totalPnl,

@@ -233,14 +233,16 @@ export const ActivePositionManagement = React.memo(
     return (
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+          <div className="relative flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <CardTitle className="text-lg font-semibold">
               실시간 포지션 관리
             </CardTitle>
-            <Badge variant="secondary" className="gap-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              5초마다 업데이트
-            </Badge>
+            <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+              <Badge variant="secondary" className="gap-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                5초마다 업데이트
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -304,6 +306,9 @@ export const ActivePositionManagement = React.memo(
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-center font-semibold">
+                        포지션
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
                         코인
                       </TableHead>
                       <TableHead className="text-center font-semibold">
@@ -330,9 +335,6 @@ export const ActivePositionManagement = React.memo(
                       <TableHead className="text-center font-semibold">
                         마지막 업데이트
                       </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        포지션 종료
-                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -348,6 +350,35 @@ export const ActivePositionManagement = React.memo(
                             }
                           }}
                         >
+                          <TableCell className="text-center">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={closingPositions.has(
+                                position.coinSymbol
+                              )}
+                              onClick={async () => {
+                                setClosingPositions((prev) =>
+                                  new Set(prev).add(position.coinSymbol)
+                                );
+                                await handleForceClose(
+                                  position.coinSymbol,
+                                  position.krExchange,
+                                  position.frExchange
+                                );
+                                handlePositionClose(position.coinSymbol);
+                              }}
+                            >
+                              {closingPositions.has(position.coinSymbol) ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                  종료 중...
+                                </>
+                              ) : (
+                                "종료"
+                              )}
+                            </Button>
+                          </TableCell>
                           <TableCell className="text-center font-medium">
                             {position.coinSymbol}
                           </TableCell>
@@ -389,35 +420,6 @@ export const ActivePositionManagement = React.memo(
                                 )
                               : "-"}
                           </TableCell>
-                          <TableCell className="text-center">
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              disabled={closingPositions.has(
-                                position.coinSymbol
-                              )}
-                              onClick={async () => {
-                                setClosingPositions((prev) =>
-                                  new Set(prev).add(position.coinSymbol)
-                                );
-                                await handleForceClose(
-                                  position.coinSymbol,
-                                  position.krExchange,
-                                  position.frExchange
-                                );
-                                handlePositionClose(position.coinSymbol);
-                              }}
-                            >
-                              {closingPositions.has(position.coinSymbol) ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                  종료 중...
-                                </>
-                              ) : (
-                                "포지션 종료"
-                              )}
-                            </Button>
-                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -425,7 +427,7 @@ export const ActivePositionManagement = React.memo(
                 </Table>
               </div>
 
-              <div className="flex justify-end gap-2 mt-4">
+              {/* <div className="flex justify-end gap-2 mt-4">
                 <Button
                   onClick={() => {
                     // 모든 포지션 새로 고침
@@ -437,7 +439,7 @@ export const ActivePositionManagement = React.memo(
                   <RefreshCw className="h-4 w-4" />
                   새로 고침
                 </Button>
-              </div>
+              </div> */}
             </>
           )}
         </CardContent>

@@ -23,7 +23,7 @@ import {
 } from "../components/card";
 import { Button } from "../components/button";
 import { RefreshCw, TrendingUp, TrendingDown, Crown } from "lucide-react";
-import { PremiumTicker } from "../components/premium-ticker";
+import PremiumTicker from "../components/premium-ticker";
 import { getUserCurrentPlan } from "~/database/plan";
 import { ActivePositionManagement } from "~/components/active-position-management";
 import { TradingStats } from "~/components/trading-stats";
@@ -229,7 +229,7 @@ export default function Dashboard() {
       return {
         percentage: 0,
         isHigher: true,
-        description: "실시간 전체 티커 평균환율보다",
+        description: "호가창 반영 실시간 평균환율대비",
       };
     }
 
@@ -239,7 +239,7 @@ export default function Dashboard() {
     return {
       percentage: Math.abs(percentage),
       isHigher: diff > 0,
-      description: "실시간 전체 티커 평균환율보다",
+      description: "호가창 반영 실시간 평균환율대비",
     };
   }, [currentExchangeRate, averageRate]);
 
@@ -264,6 +264,10 @@ export default function Dashboard() {
   const tradingStatsRef = useRef(tradingStats);
   const tradingHistoryRef = useRef(tradingHistory);
   const paginationRef = useRef(pagination);
+
+  // Interval ID들을 관리하기 위한 ref
+  const exchangeRateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const activePositionsIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // rawActivePositions를 올바른 형태로 변환
   const activePositions = useMemo(() => {
@@ -312,83 +316,92 @@ export default function Dashboard() {
   }, [polledActivePositions, selectedTicker]);
 
   // 활성 포지션 및 트레이딩 통계 폴링 함수
-  const pollActivePositions = useCallback(async (showLoading = false) => {
-    if (showLoading) {
-      setIsLoadingPositions(true);
-      setIsLoadingTradingData(true);
-    }
-    try {
-      const response = await fetch("/api/active-positions");
-
-      if (response.ok) {
+  const pollActivePositions = useCallback(
+    async (showLoading = false) => {
+      if (showLoading) {
+        setIsLoadingPositions(true);
+        setIsLoadingTradingData(true);
+      }
+      try {
+        const response = await fetch("/api/active-positions");
         const data = await response.json();
 
-        // 활성 포지션 데이터 처리
-        const transformedPositions = data.activePositions.map(
-          (position: any) => ({
-            coinSymbol: position.coin_symbol,
-            krExchange: position.kr_exchange,
-            frExchange: position.fr_exchange,
-            totalKrVolume: position.total_kr_volume,
-            totalFrVolume: position.total_fr_volume,
-            totalKrFunds: position.total_kr_funds,
-            totalFrFunds: position.total_fr_funds,
-            positionCount: position.position_count,
-            latestEntryTime: position.latest_entry_time,
-          })
-        );
-
-        // 데이터가 실제로 변경되었는지 확인
-        const positionsChanged =
-          JSON.stringify(polledActivePositionsRef.current) !==
-            JSON.stringify(transformedPositions) ||
-          activePositionCountRef.current !== data.activePositionCount;
-
-        const statsChanged =
-          JSON.stringify(tradingStatsRef.current) !==
-          JSON.stringify(data.tradingStats);
-
-        const historyChanged =
-          JSON.stringify(tradingHistoryRef.current) !==
-          JSON.stringify(data.tradingHistory);
-
-        const dailyProfitChanged = data.dailyProfit !== dailyProfit;
-
-        // 변경된 경우에만 상태 업데이트
-        if (positionsChanged) {
-          setPolledActivePositions(transformedPositions);
-          setActivePositionCount(data.activePositionCount);
-          polledActivePositionsRef.current = transformedPositions;
-          activePositionCountRef.current = data.activePositionCount;
+        // redirectTo가 있으면 인증 페이지로 리다이렉션
+        if (data.redirectTo) {
+          navigate("/auth", { replace: true });
+          return;
         }
 
-        if (statsChanged) {
-          setTradingStats(data.tradingStats);
-          tradingStatsRef.current = data.tradingStats;
-        }
+        if (response.ok) {
+          // 활성 포지션 데이터 처리
+          const transformedPositions = data.activePositions.map(
+            (position: any) => ({
+              coinSymbol: position.coin_symbol,
+              krExchange: position.kr_exchange,
+              frExchange: position.fr_exchange,
+              totalKrVolume: position.total_kr_volume,
+              totalFrVolume: position.total_fr_volume,
+              totalKrFunds: position.total_kr_funds,
+              totalFrFunds: position.total_fr_funds,
+              positionCount: position.position_count,
+              latestEntryTime: position.latest_entry_time,
+            })
+          );
 
-        if (historyChanged) {
-          setTradingHistory(data.tradingHistory);
-          tradingHistoryRef.current = data.tradingHistory;
-        }
+          // 데이터가 실제로 변경되었는지 확인
+          const positionsChanged =
+            JSON.stringify(polledActivePositionsRef.current) !==
+              JSON.stringify(transformedPositions) ||
+            activePositionCountRef.current !== data.activePositionCount;
 
-        if (dailyProfitChanged) {
-          setDailyProfit(data.dailyProfit);
+          const statsChanged =
+            JSON.stringify(tradingStatsRef.current) !==
+            JSON.stringify(data.tradingStats);
+
+          const historyChanged =
+            JSON.stringify(tradingHistoryRef.current) !==
+            JSON.stringify(data.tradingHistory);
+
+          const dailyProfitChanged = data.dailyProfit !== dailyProfit;
+
+          // 변경된 경우에만 상태 업데이트
+          if (positionsChanged) {
+            setPolledActivePositions(transformedPositions);
+            setActivePositionCount(data.activePositionCount);
+            polledActivePositionsRef.current = transformedPositions;
+            activePositionCountRef.current = data.activePositionCount;
+          }
+
+          if (statsChanged) {
+            setTradingStats(data.tradingStats);
+            tradingStatsRef.current = data.tradingStats;
+          }
+
+          if (historyChanged) {
+            setTradingHistory(data.tradingHistory);
+            tradingHistoryRef.current = data.tradingHistory;
+          }
+
+          if (dailyProfitChanged) {
+            setDailyProfit(data.dailyProfit);
+          }
+        }
+      } catch (error) {
+        console.error("Polling error:", error);
+      } finally {
+        if (showLoading) {
+          setIsLoadingPositions(false);
+          setIsLoadingTradingData(false);
         }
       }
-    } catch (error) {
-      console.error("Polling error:", error);
-    } finally {
-      if (showLoading) {
-        setIsLoadingPositions(false);
-        setIsLoadingTradingData(false);
-      }
-    }
-  }, []);
+    },
+    [navigate]
+  );
 
-  // 환율 가져오기 로직
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
+  // 페이지 가시성에 따른 interval 제어 함수들
+  const startExchangeRatePolling = useCallback(() => {
+    if (exchangeRateIntervalRef.current) return; // 이미 실행 중이면 중복 실행 방지
+
     let retryCount = 0;
     const maxRetries = 5;
 
@@ -404,61 +417,115 @@ export default function Dashboard() {
       return data[0]?.trade_price || "-";
     };
 
-    const initializeExchangeRate = async () => {
-      // 1. 먼저 초기 환율을 REST API로 조회
+    const updateExchangeRate = async () => {
       try {
-        const initialRate = await fetchUpbitRate();
-        setCurrentExchangeRate(initialRate);
+        const rate = await fetchUpbitRate();
+        setCurrentExchangeRate(rate);
+        retryCount = 0; // 성공 시 재시도 카운터 초기화
       } catch (error) {
-        console.error("초기 환율 조회 오류:", error);
-      }
+        console.error("환율 업데이트 오류:", error);
+        retryCount++;
 
-      // 2. REST API 폴링으로 실시간 업데이트
-      const updateExchangeRate = async () => {
-        try {
-          const rate = await fetchUpbitRate();
-          setCurrentExchangeRate(rate);
-
-          // 성공 시 재시도 카운터 초기화
-          retryCount = 0;
-        } catch (error) {
-          console.error("환율 업데이트 오류:", error);
-          retryCount++;
-
-          if (retryCount >= maxRetries) {
-            // 최대 재시도 횟수 초과 시 폴링 중단
-            if (intervalId) {
-              clearInterval(intervalId);
-              intervalId = null;
-            }
-            console.error("업비트 api 서버와 연결이 원활하지 않습니다");
+        if (retryCount >= maxRetries) {
+          // 최대 재시도 횟수 초과 시 폴링 중단
+          if (exchangeRateIntervalRef.current) {
+            clearInterval(exchangeRateIntervalRef.current);
+            exchangeRateIntervalRef.current = null;
           }
+          console.error("업비트 api 서버와 연결이 원활하지 않습니다");
         }
-      };
-
-      // 폴링 시작 (1초 간격)
-      intervalId = setInterval(updateExchangeRate, 1000);
-    };
-
-    initializeExchangeRate();
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
       }
     };
+
+    // 초기 환율 조회
+    fetchUpbitRate().then(setCurrentExchangeRate).catch(console.error);
+
+    // 1초 간격으로 폴링 시작
+    exchangeRateIntervalRef.current = setInterval(updateExchangeRate, 1000);
   }, []);
 
-  // 활성 포지션 폴링 시작 (5초 간격)
-  useEffect(() => {
+  const stopExchangeRatePolling = useCallback(() => {
+    if (exchangeRateIntervalRef.current) {
+      clearInterval(exchangeRateIntervalRef.current);
+      exchangeRateIntervalRef.current = null;
+    }
+  }, []);
+
+  const startActivePositionsPolling = useCallback(() => {
+    if (activePositionsIntervalRef.current) return; // 이미 실행 중이면 중복 실행 방지
+
     // 초기 데이터 로드
     pollActivePositions(true);
 
-    // 5초마다 폴링
-    const interval = setInterval(() => pollActivePositions(false), 5000);
-
-    return () => clearInterval(interval);
+    // 5초 간격으로 폴링 시작
+    activePositionsIntervalRef.current = setInterval(
+      () => pollActivePositions(false),
+      5000
+    );
   }, [pollActivePositions]);
+
+  const stopActivePositionsPolling = useCallback(() => {
+    if (activePositionsIntervalRef.current) {
+      clearInterval(activePositionsIntervalRef.current);
+      activePositionsIntervalRef.current = null;
+    }
+  }, []);
+
+  // visibilityChange 이벤트 핸들러
+  const handleVisibilityChange = useCallback(() => {
+    if (document.visibilityState === "visible") {
+      // 페이지가 다시 보이게 되었을 때 폴링 재시작
+      startExchangeRatePolling();
+      startActivePositionsPolling();
+    } else {
+      // 페이지가 숨겨졌을 때 폴링 중지
+      stopExchangeRatePolling();
+      stopActivePositionsPolling();
+    }
+  }, [
+    startExchangeRatePolling,
+    stopExchangeRatePolling,
+    startActivePositionsPolling,
+    stopActivePositionsPolling,
+  ]);
+
+  // 환율 가져오기 및 visibilityChange 이벤트 설정
+  useEffect(() => {
+    // 초기 폴링 시작
+    startExchangeRatePolling();
+
+    // visibilityChange 이벤트 리스너 등록
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      // cleanup: 이벤트 리스너 제거 및 interval 중지
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopExchangeRatePolling();
+    };
+  }, [
+    startExchangeRatePolling,
+    stopExchangeRatePolling,
+    handleVisibilityChange,
+  ]);
+
+  // 활성 포지션 폴링 시작 및 visibilityChange 이벤트 설정
+  useEffect(() => {
+    // 초기 폴링 시작
+    startActivePositionsPolling();
+
+    // visibilityChange 이벤트 리스너 등록
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      // cleanup: 이벤트 리스너 제거 및 interval 중지
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopActivePositionsPolling();
+    };
+  }, [
+    startActivePositionsPolling,
+    stopActivePositionsPolling,
+    handleVisibilityChange,
+  ]);
 
   // tradingStats ref를 최신 상태로 유지
   useEffect(() => {
@@ -474,6 +541,12 @@ export default function Dashboard() {
   useEffect(() => {
     paginationRef.current = pagination;
   }, [pagination]);
+
+  // loaderData가 변경될 때마다 로컬 state 업데이트 (pagination 변경 시)
+  useEffect(() => {
+    setTradingHistory(initialTradingHistory);
+    setPagination(initialPagination);
+  }, [initialTradingHistory, initialPagination]);
 
   // 인증 체크 및 리다이렉트
   useEffect(() => {
@@ -518,7 +591,7 @@ export default function Dashboard() {
           }}
         >
           <RefreshCw className="w-4 h-4 mr-2" />
-          새로고침
+          페이지 새로고침
         </Button>
       </div>
 
@@ -535,20 +608,22 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold">테더 가격</CardTitle>
+            <div className="relative flex items-center justify-between mb-2">
+              <CardTitle className="text-lg font-semibold">테더 가격</CardTitle>
+              <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+                <Badge
+                  variant="secondary"
+                  className="text-xs bg-green-900 text-green-300"
+                >
+                  실시간
+                </Badge>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-green-900 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-green-300" />
-              </div>
-              <Badge
-                variant="secondary"
-                className="text-xs bg-green-900 text-green-300"
-              >
-                실시간
-              </Badge>
-            </div>
+            {/* <div className="w-10 h-10 bg-green-900 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-green-300" />
+            </div> */}
             <div className="text-xl lg:text-2xl">₩{currentExchangeRate}</div>
             <div
               className={`flex items-center gap-1 text-xs ${tetherComparisonData.isHigher ? "text-green-600" : "text-red-600"}`}
@@ -569,46 +644,56 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold">활성 포지션</CardTitle>
+            <div className="relative flex items-center justify-between mb-2">
+              <CardTitle className="text-lg font-semibold">
+                현재 포지션
+              </CardTitle>
+              <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+                <Badge
+                  variant="outline"
+                  className="text-xs text-blue-300 bg-blue-900"
+                >
+                  {activePositionCount > 0 ? "ON" : "대기중"}
+                </Badge>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-blue-900 rounded-lg flex items-center justify-center">
+              {/* <div className="w-10 h-10 bg-blue-900 rounded-lg flex items-center justify-center">
                 <RefreshCw className="w-5 h-5 text-blue-300" />
-              </div>
-              <Badge
-                variant="outline"
-                className="text-xs text-blue-300 bg-blue-900"
-              >
-                대기중
-              </Badge>
+              </div> */}
             </div>
             <div className="text-xl lg:text-2xl">{activePositionCount}</div>
             <div className="text-xs text-muted-foreground">
-              {activePositionCount > 0 ? "진행중" : "비활성화"}
+              {activePositionCount > 0 ? "진행중" : "없음"}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold">일일 수익</CardTitle>
+            <div className="relative flex items-center justify-between mb-2">
+              <CardTitle className="text-lg font-semibold">일일 수익</CardTitle>
+              <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+                <Badge
+                  variant="secondary"
+                  className="text-xs text-yellow-300 bg-yellow-900"
+                >
+                  오늘
+                </Badge>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-yellow-900 rounded-lg flex items-center justify-center">
+              {/* <div className="w-10 h-10 bg-yellow-900 rounded-lg flex items-center justify-center">
                 {dailyProfit >= 0 ? (
                   <TrendingUp className="w-5 h-5 text-yellow-300" />
                 ) : (
                   <TrendingDown className="w-5 h-5 text-yellow-300" />
                 )}
-              </div>
-              <Badge
-                variant="secondary"
-                className="text-xs text-yellow-300 bg-yellow-900"
-              >
-                오늘
-              </Badge>
+              </div> */}
             </div>
             <div className="text-xl lg:text-2xl">
               {dailyProfit >= 0 ? "+" : ""}₩{dailyProfit.toLocaleString()}
@@ -623,21 +708,25 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold">
-              현재 원화&USDT 자산
-            </CardTitle>
+            <div className="relative flex items-center justify-between mb-2">
+              <CardTitle className="text-lg font-semibold">
+                연동거래소 자산
+              </CardTitle>
+              {/* <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+                <Badge
+                  variant="outline"
+                  className="text-xs text-purple-300 bg-purple-900"
+                >
+                  전체
+                </Badge>
+              </div> */}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between mb-2">
-              <div className="w-10 h-10 bg-purple-900 rounded-lg flex items-center justify-center">
+              {/* <div className="w-10 h-10 bg-purple-900 rounded-lg flex items-center justify-center">
                 <Crown className="w-5 h-5 text-purple-300" />
-              </div>
-              <Badge
-                variant="outline"
-                className="text-xs text-purple-300 bg-purple-900"
-              >
-                전체
-              </Badge>
+              </div> */}
             </div>
             {exchangeBalances && exchangeBalances.length > 0 ? (
               <div className="space-y-2">
@@ -697,19 +786,43 @@ export default function Dashboard() {
 
       {/* Live Kimchi Premium Ticker */}
       <PremiumTicker
-        onAverageRateChange={(avgRate, seed) => {
+        onAverageRateChange={(avgRate: number | null, seed: number | null) => {
           setAverageRate(avgRate);
         }}
-        onItemSelected={(item) => {
+        onItemSelected={(item: object | null) => {
           setSelectedTickerItem(item);
         }}
+        exchangeBalances={(exchangeBalances || []).map((exchange: any) => {
+          const isKorean = exchange.currency === "KRW";
+          let krwBalance = 0;
+          if (isKorean) {
+            krwBalance =
+              typeof exchange.availableBalance === "number"
+                ? exchange.availableBalance
+                : 0;
+          } else {
+            krwBalance =
+              typeof exchange.availableBalance === "number" &&
+              typeof currentExchangeRate === "number"
+                ? Math.floor(exchange.availableBalance * currentExchangeRate)
+                : 0;
+          }
+          // 10000원 단위로 절삭
+          const truncatedBalance = Math.floor(krwBalance / 10000) * 10000;
+          krwBalance = truncatedBalance;
+          return {
+            name: exchange.exchangeName,
+            krwBalance,
+            currency: exchange.currency,
+          };
+        })}
       />
 
       {/* Selected Ticker Chart - Only show when a ticker is selected */}
       {selectedTickerItem && (
         <Card className="chart-card-container">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="relative flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2 text-lg font-semibold">
                   <TrendingUp className="w-5 h-5" />
@@ -717,16 +830,24 @@ export default function Dashboard() {
                 </CardTitle>
                 <CardDescription>
                   선택한 티커의 실시간 환율을 확인하세요
+                  <span className="text-xs text-muted-foreground/80 mt-1 block">
+                    ※ 빗썸 거래소 측에서 현재 캔들 데이터를 제공하지 않고 있으나
+                    개발단계에 있습니다. 거래소 업데이트가 되는대로 반영할
+                    예정입니다.
+                    <br />※ 차트가 정상적으로 표시되지 않으면, 우측의 '차트
+                    새로고침' 버튼을 클릭해보세요.
+                  </span>
                 </CardDescription>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setChartRefreshKey((prev) => prev + 1)}
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                차트 새로고침
-              </Button>
+              <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChartRefreshKey((prev) => prev + 1)}
+                >
+                  <RefreshCw />
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="chart-card-content" noPadding={true}>
@@ -767,33 +888,30 @@ export default function Dashboard() {
       {activePositionCount > 0 && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="relative flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2 text-lg font-semibold">
                   <TrendingUp className="w-5 h-5" />
-                  실시간 활성 포지션 환율 차트
+                  실시간 현재 포지션 환율 차트
                 </CardTitle>
                 <CardDescription>
-                  현재 포지션 추이를 실시간으로 확인하세요.
                   <br />
                   <span className="text-xs text-muted-foreground/80 mt-1 block">
-                    ※ 빗썸 거래소 측에서 현재 캔들 데이터를 제공하지 않고 있으나
-                    개발단계에 있습니다. 거래소 업데이트가 되는대로 반영할
-                    예정입니다.
-                    <br />
-                    차트가 정상적으로 표시되지 않으면, 우측의 '차트 새로고침'
-                    버튼을 클릭해보세요.
+                    ※ 빗썸 거래소는 현재 실시간 캔들 데이터 미제공
+                    <br />※ 차트가 정상적으로 표시되지 않으면, 우측의 '차트
+                    새로고침' 버튼을 클릭해보세요.
                   </span>
                 </CardDescription>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setChartRefreshKey((prev) => prev + 1)}
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                차트 새로고침
-              </Button>
+              <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChartRefreshKey((prev) => prev + 1)}
+                >
+                  <RefreshCw />
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="chart-card-content" noPadding={true}>
@@ -816,11 +934,8 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg font-semibold">
               <TrendingUp className="w-5 h-5" />
-              실시간 활성 포지션 환율 차트
+              실시간 현재 포지션 환율 차트
             </CardTitle>
-            <CardDescription>
-              현재 포지션 추이를 실시간으로 확인하세요
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col items-center justify-center py-12 text-center">

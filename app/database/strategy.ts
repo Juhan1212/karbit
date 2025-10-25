@@ -19,6 +19,7 @@ export interface CreateStrategyData {
   telegramEnabled?: boolean;
   backtestPeriod: string;
   portfolioRebalancing?: boolean;
+  tradeMode?: "custom" | "auto";
 }
 
 export interface UpdateStrategyData extends Partial<CreateStrategyData> {
@@ -52,6 +53,7 @@ export async function createStrategy(userId: number, data: CreateStrategyData) {
         telegramEnabled: data.telegramEnabled || false,
         backtestPeriod: data.backtestPeriod,
         portfolioRebalancing: data.portfolioRebalancing || false,
+        tradeMode: data.tradeMode || "custom",
         isActive: true,
         updatedAt: new Date(),
       })
@@ -187,6 +189,7 @@ export async function updateStrategy(
     updateData.backtestPeriod = data.backtestPeriod;
   if (data.portfolioRebalancing !== undefined)
     updateData.portfolioRebalancing = data.portfolioRebalancing;
+  if (data.tradeMode !== undefined) updateData.tradeMode = data.tradeMode;
 
   const [updatedStrategy] = await db
     .update(strategies)
@@ -315,6 +318,7 @@ export function formatStrategyForFrontend(strategy: any) {
     telegramEnabled: strategy.telegramEnabled,
     backtestPeriod: strategy.backtestPeriod,
     portfolioRebalancing: strategy.portfolioRebalancing,
+    tradeMode: strategy.tradeMode || "custom",
 
     // 플랜 만료 정보
     planExpiryInfo: strategy.planExpiryInfo,

@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Badge } from "./badge";
 import { Button } from "./button";
@@ -84,6 +84,12 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
   pagination,
   isLoading = false,
 }: TradingHistoryTableProps) {
+  const navigate = useNavigate();
+
+  const handlePageChange = (page: number) => {
+    navigate(`?page=${page}`, { preventScrollReset: true });
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -271,8 +277,8 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
 
             {/* 페이지네이션 */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-sm text-muted-foreground">
+              <div className="flex items-center justify-center mt-4">
+                <div className="text-sm text-muted-foreground hidden md:block">
                   총 {pagination.totalCount}개 중{" "}
                   {(pagination.currentPage - 1) * pagination.limit + 1}-
                   {Math.min(
@@ -282,9 +288,9 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                   개 표시
                 </div>
                 <div className="flex items-center gap-2">
-                  <Link
-                    to={`?page=${pagination.currentPage - 1}`}
-                    preventScrollReset={true}
+                  <button
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    disabled={pagination.currentPage <= 1}
                     className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3 gap-2 ${
                       pagination.currentPage <= 1
                         ? "pointer-events-none opacity-50"
@@ -293,7 +299,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                   >
                     <ChevronLeft className="w-4 h-4" />
                     이전
-                  </Link>
+                  </button>
 
                   <div className="flex items-center gap-1">
                     {Array.from(
@@ -320,9 +326,8 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                                 ...
                               </span>
                             )}
-                            <Link
-                              to={`?page=${page}`}
-                              preventScrollReset={true}
+                            <button
+                              onClick={() => handlePageChange(page)}
                               className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-9 px-3 ${
                                 pagination.currentPage === page
                                   ? "bg-primary text-primary-foreground hover:bg-primary/90 text-white"
@@ -330,15 +335,15 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                               }`}
                             >
                               {page}
-                            </Link>
+                            </button>
                           </React.Fragment>
                         );
                       })}
                   </div>
 
-                  <Link
-                    to={`?page=${pagination.currentPage + 1}`}
-                    preventScrollReset={true}
+                  <button
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    disabled={pagination.currentPage >= pagination.totalPages}
                     className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-3 gap-2 ${
                       pagination.currentPage >= pagination.totalPages
                         ? "pointer-events-none opacity-50"
@@ -347,7 +352,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                   >
                     다음
                     <ChevronRight className="w-4 h-4" />
-                  </Link>
+                  </button>
                 </div>
               </div>
             )}

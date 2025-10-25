@@ -1,5 +1,5 @@
 import { database } from "./context";
-import { users, positions, strategies } from "./schema";
+import { users, positions, strategies, plans } from "./schema";
 import { sql, desc, eq, gte, and } from "drizzle-orm";
 
 /**
@@ -161,8 +161,10 @@ export async function getTopTraders() {
         totalProfitRate: users.totalProfitRate,
         totalEntryCount: users.totalEntryCount,
         totalOrderAmount: users.totalOrderAmount,
+        planName: plans.name,
       })
       .from(users)
+      .leftJoin(plans, eq(users.planId, plans.id))
       .orderBy(desc(users.totalProfitRate))
       .limit(10);
 
@@ -207,24 +209,17 @@ export async function getTopTraders() {
           )
           .limit(1);
 
-        const strategyName = activeStrategyResult[0]?.name || "전략 없음";
+        const strategyName = activeStrategyResult[0]?.name || undefined;
 
-        // 티어 계산 (수익률과 거래 횟수 기반)
-        let tier: "diamond" | "platinum" | "gold" | "silver" | "bronze";
-        const profitRate = Number(trader.totalProfitRate) || 0;
-        const entryCount = Number(trader.totalEntryCount) || 0;
-
-        if (profitRate >= 10 && entryCount >= 100) {
-          tier = "diamond";
-        } else if (profitRate >= 7 && entryCount >= 50) {
-          tier = "platinum";
-        } else if (profitRate >= 5 && entryCount >= 20) {
-          tier = "gold";
-        } else if (profitRate >= 3 && entryCount >= 10) {
-          tier = "silver";
-        } else {
-          tier = "bronze";
-        }
+        // 티어 계산: plan_id로 plans 테이블과 조인하여 name을 소문자로 tier에 할당
+        let tier: "premium" | "starter" | "free";
+        const planName = (trader.planName || "free").toLowerCase();
+        tier =
+          planName === "premium" ||
+          planName === "starter" ||
+          planName === "free"
+            ? planName
+            : "free";
 
         // 일평균 수익 계산 (첫 포지션부터 현재까지)
         const firstPositionResult = await db

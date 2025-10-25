@@ -55,6 +55,9 @@ export default function AppLayout() {
     if (path === "/exchanges") return "exchanges";
     if (path === "/autotrading") return "autotrading";
     if (path === "/plans") return "plans";
+    if (path === "/news") return "news";
+    if (path === "/leaderboard") return "leaderboard";
+    if (path === "/community") return "community";
     return "dashboard";
   };
 
@@ -85,7 +88,14 @@ export default function AppLayout() {
       {/* Mobile Header */}
       <div className="lg:hidden sticky top-0 z-40 bg-background border-b border-border">
         <div className="flex items-center justify-between p-4">
-          <h1 className="text-lg font-medium">Karbit</h1>
+          <div className="flex items-center gap-2">
+            <img
+              src="/logo-no-bg.png"
+              alt="Karbit Logo"
+              className="w-10 h-10 object-contain"
+            />
+            <h1 className="text-lg font-medium">Karbit</h1>
+          </div>
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="sm">

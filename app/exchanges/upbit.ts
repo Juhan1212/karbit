@@ -323,6 +323,36 @@ export class UpbitAdapter extends ExchangeAdapter {
     return this.getTickerCandles("USDT", interval, to, count);
   }
 
+  /**
+   * 정적 메서드: 티커 정보 조회 (인증 불필요)
+   */
+  static async getTicker(symbol: string): Promise<TickerResult> {
+    const cacheKey = `upbit:KRW-${symbol}`;
+    const now = Date.now();
+    const cached = await getCache(cacheKey);
+    if (cached && now - cached.timestamp < 1000) {
+      return cached.data;
+    }
+    try {
+      const response = await axios.get(
+        `https://api.upbit.com/v1/ticker?markets=KRW-${symbol}`
+      );
+      if (response.data && response.data.length > 0) {
+        const ticker: TickerResult = {
+          symbol: symbol,
+          price: response.data[0].trade_price,
+          timestamp: now,
+        };
+        await setCache(cacheKey, { data: ticker, timestamp: now });
+        return ticker;
+      }
+      throw new Error(`No ticker data found for ${symbol}`);
+    } catch (error) {
+      console.error(`Error fetching ${symbol} ticker from Upbit:`, error);
+      throw error;
+    }
+  }
+
   async placeOrder(params: OrderRequest): Promise<string> {
     const BASE_URL = "https://api.upbit.com";
 
@@ -431,36 +461,14 @@ export class UpbitAdapter extends ExchangeAdapter {
     }
   }
 
-  async getTicker(symbol: string): Promise<TickerResult> {
-    const cacheKey = `upbit:KRW-${symbol}`;
-    const now = Date.now();
-    const cached = await getCache(cacheKey);
-    if (cached && now - cached.timestamp < 1000) {
-      return cached.data;
-    }
-    try {
-      const response = await axios.get(
-        `https://api.upbit.com/v1/ticker?markets=KRW-${symbol}`
-      );
-      if (response.data && response.data.length > 0) {
-        const ticker: TickerResult = {
-          symbol: symbol,
-          price: response.data[0].trade_price,
-          timestamp: now,
-        };
-        await setCache(cacheKey, { data: ticker, timestamp: now });
-        return ticker;
-      }
-      throw new Error(`No ticker data found for ${symbol}`);
-    } catch (error) {
-      console.error(`Error fetching ${symbol} ticker from Upbit:`, error);
-      throw error;
-    }
-  }
-
   async getLotSize(symbol: string): Promise<number | null> {
     // Upbit는 고정된 최소 주문 단위를 제공하지 않음
     return null;
+  }
+
+  async getTicker(symbol: string): Promise<TickerResult> {
+    // 정적 메서드 호출
+    return UpbitAdapter.getTicker(symbol);
   }
 
   async setLeverage(symbol: string, leverage: string): Promise<any> {

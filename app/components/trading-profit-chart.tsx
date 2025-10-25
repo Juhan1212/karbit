@@ -206,7 +206,7 @@ export function TradingProfitChart({
             </p>
           </div>
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">총 거래 수</p>
+            <p className="text-xs text-muted-foreground">총 포지션 종료횟수</p>
             <p className="text-lg font-bold">{chartData.length}회</p>
           </div>
           <div className="space-y-1">

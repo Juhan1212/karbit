@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import type { Route } from "./+types/home";
-import { useNavigate } from "react-router";
+// import type { Route } from "./+types/home";
+import { LoaderFunctionArgs, useNavigate } from "react-router";
 import { useLoaderData } from "react-router";
 import { Button } from "../components/button";
 import {
@@ -30,7 +30,7 @@ import monitoringSystemImage from "/home_realtime_monitor.png";
 import kimp from "/kimp.png";
 import { getAllPlans } from "../database/plan";
 
-export async function loader({ context }: Route.LoaderArgs) {
+export async function loader({ context }: LoaderFunctionArgs) {
   const plans = await getAllPlans();
 
   return {

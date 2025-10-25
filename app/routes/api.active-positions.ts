@@ -12,12 +12,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const token = getAuthTokenFromRequest(request);
     if (!token) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json(
+        { error: "Unauthorized", redirectTo: "/auth" },
+        { status: 401 }
+      );
     }
 
     const user = await validateSession(token);
     if (!user) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 });
+      return Response.json(
+        { error: "Unauthorized", redirectTo: "/auth" },
+        { status: 401 }
+      );
     }
 
     const url = new URL(request.url);

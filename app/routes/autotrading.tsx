@@ -6,6 +6,8 @@ import {
   redirect,
   useFetcher,
   useSearchParams,
+  useNavigate,
+  Link,
 } from "react-router";
 import "~/assets/styles/chart/index.scss";
 import { validateSession } from "~/database/session";
@@ -48,8 +50,8 @@ import {
 import { Slider } from "../components/slider";
 import { Input } from "../components/input";
 import { Label } from "../components/label";
+import { RadioGroup, RadioGroupItem } from "../components/radio-group";
 import { Checkbox } from "../components/checkbox";
-import { Separator } from "../components/separator";
 import {
   Table,
   TableBody,
@@ -231,6 +233,7 @@ export default function AutoTrading() {
     telegramNotificationEnabled: initialTelegramNotificationEnabled,
   } = useLoaderData<typeof loader>();
   const user = useUser();
+  const navigate = useNavigate();
 
   // rawActivePositions를 올바른 형태로 변환
   const activePositions = useMemo(() => {
@@ -307,6 +310,21 @@ export default function AutoTrading() {
     useState(initialTelegramNotificationEnabled);
   const [currentTelegramChatId, setCurrentTelegramChatId] =
     useState(telegramChatId);
+
+  // 환율 모드 (수동/자동)
+  const [exchangeRateMode, setExchangeRateMode] = useState<"manual" | "auto">(
+    "manual"
+  );
+
+  // 거래 모드 (custom/auto)
+  const [tradeMode, setTradeMode] = useState<"custom" | "auto">(
+    exchangeRateMode === "manual" ? "custom" : "auto"
+  );
+
+  // exchangeRateMode 변경 시 tradeMode 동기화
+  useEffect(() => {
+    setTradeMode(exchangeRateMode === "manual" ? "custom" : "auto");
+  }, [exchangeRateMode]);
 
   // loader 데이터가 변경될 때마다 telegram state 동기화
   useEffect(() => {
@@ -582,8 +600,15 @@ export default function AutoTrading() {
       }
       try {
         const response = await fetch("/api/active-positions");
+        const data = await response.json();
+
+        // 인증 실패 시 리다이렉트 처리
+        if (data.redirectTo) {
+          navigate(data.redirectTo);
+          return;
+        }
+
         if (response.ok) {
-          const data = await response.json();
           // 전체 활성 포지션 데이터를 받아와서 변환
           const transformedPositions = data.activePositions.map(
             (position: any) => ({
@@ -619,7 +644,7 @@ export default function AutoTrading() {
         }
       }
     },
-    [] // dependency array에서 상태값들 제거
+    [navigate] // navigate 추가
   );
 
   // 거래 데이터 폴링 (30초 간격)
@@ -898,6 +923,10 @@ export default function AutoTrading() {
         toast.error("종료 환율을 올바르게 입력하세요.");
         return;
       }
+      if (exchangeRateMode === "auto" && userPlan?.name !== "Premium") {
+        toast.error("자동 환율 설정은 프리미엄 플랜에서만 사용할 수 있습니다.");
+        return;
+      }
       if (!seedDivision || isNaN(seedDivision) || seedDivision < 1) {
         toast.error("시드 분할 횟수를 올바르게 입력하세요.");
         return;
@@ -935,6 +964,8 @@ export default function AutoTrading() {
       formData.append("selectedCoins", JSON.stringify(selectedCoins));
       formData.append("entryRate", entryRate.toString());
       formData.append("exitRate", exitRate.toString());
+      formData.append("exchangeRateMode", exchangeRateMode);
+      formData.append("tradeMode", tradeMode);
       formData.append("seedDivision", seedDivision.toString());
       formData.append("leverage", leverage.toString());
       formData.append("allowAverageDown", allowAverageDown.toString());
@@ -1003,7 +1034,7 @@ export default function AutoTrading() {
                   variant={isEnabled ? "destructive" : "secondary"}
                   className="text-sm px-3 py-1"
                 >
-                  {isEnabled ? "실행 중" : "정지"}
+                  {isEnabled ? "실행 중" : "미실행"}
                 </Badge>
                 {activeStrategy?.planExpiryInfo && (
                   <Badge
@@ -1032,7 +1063,7 @@ export default function AutoTrading() {
                 {isEnabled ? (
                   <>
                     <Pause className="w-4 h-4" />
-                    자동매매 정지
+                    자동매매 미실행
                   </>
                 ) : (
                   <>
@@ -1073,7 +1104,7 @@ export default function AutoTrading() {
         <div className="lg:hidden">
           <div className="flex items-center justify-between">
             <Badge variant={isEnabled ? "default" : "secondary"}>
-              {isEnabled ? "실행 중" : "정지"}
+              {isEnabled ? "실행 중" : "미실행"}
             </Badge>
             <Switch
               checked={isEnabled}
@@ -1100,13 +1131,13 @@ export default function AutoTrading() {
                   className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
                     condition.satisfied
                       ? "border-green-500 bg-green-500"
-                      : "border-muted"
+                      : "border-red-500 bg-red-500"
                   }`}
                 >
                   {condition.satisfied ? (
                     <CheckCircle className="w-3 h-3 text-white" />
                   ) : (
-                    <div className="w-2 h-2 bg-muted rounded-full" />
+                    <X className="w-3 h-3 text-white" />
                   )}
                 </div>
                 <span
@@ -1132,7 +1163,7 @@ export default function AutoTrading() {
           </CardHeader>
           <CardContent>
             <div className="text-xl lg:text-2xl">
-              {isEnabled ? "실행 중" : "정지"}
+              {isEnabled ? "실행 중" : "미실행"}
             </div>
             <div className="text-xs text-muted-foreground">
               {isEnabled
@@ -1328,9 +1359,12 @@ export default function AutoTrading() {
                 {exchangeBalances.length === 0 && (
                   <div className="text-center py-4 text-muted-foreground">
                     <p className="text-sm">연결된 거래소가 없습니다.</p>
-                    <p className="text-xs">
+                    <p className="text-xs mb-3">
                       거래소 연동 페이지에서 거래소를 연결해주세요.
                     </p>
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/exchanges">거래소 연결하기</Link>
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -1450,13 +1484,13 @@ export default function AutoTrading() {
                       onCheckedChange={(checked) => {
                         if (userPlan?.name === "Premium") {
                           setCoinMode(checked ? "auto" : "custom");
+                        } else {
+                          toast.error("프리미엄 플랜 구독이 필요합니다");
                         }
                       }}
-                      disabled={userPlan?.name !== "Premium"}
                     />
                     <Label htmlFor="auto-select" className="text-sm">
-                      자동 선택{" "}
-                      {userPlan?.name !== "Premium" && "(Premium 전용)"}
+                      자동 선택
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -1490,8 +1524,20 @@ export default function AutoTrading() {
                       <Alert className="border-amber-200 bg-amber-50">
                         <AlertCircle className="h-4 w-4 text-amber-600" />
                         <AlertDescription className="text-amber-800">
-                          거래소 연결이 완료되지 않아 선택할 수 없습니다.
-                          거래소를 먼저 연결해주세요.
+                          <div className="space-y-2">
+                            <p>
+                              거래소 연결이 완료되지 않아 선택할 수 없습니다.
+                            </p>
+                            <p>거래소를 먼저 연결해주세요.</p>
+                            <Button
+                              asChild
+                              variant="outline"
+                              size="sm"
+                              className="mt-2"
+                            >
+                              <Link to="/exchanges">거래소 연결하기</Link>
+                            </Button>
+                          </div>
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1664,86 +1710,147 @@ export default function AutoTrading() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Entry Rate */}
-                <div className="space-y-2">
-                  <Label className="text-sm">포지션 진입 환율</Label>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => adjustRate("entry", "decrease")}
-                      className="p-2 h-8 w-8"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </Button>
-                    <div className="flex-1 relative">
-                      <Input
-                        type="number"
-                        value={entryRate.toFixed(2)}
-                        onChange={(e) =>
-                          setEntryRate(parseFloat(e.target.value) || 0)
-                        }
-                        className="text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                        step="0.01"
-                        min="0"
+                {/* Exchange Rate Mode Selection */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">환율 설정 모드</Label>
+                  <RadioGroup
+                    value={exchangeRateMode}
+                    onValueChange={(value: "manual" | "auto") => {
+                      if (value === "auto" && userPlan?.name !== "Premium") {
+                        toast.error("프리미엄 플랜 구독이 필요합니다");
+                        return;
+                      }
+                      setExchangeRateMode(value);
+                      setTradeMode(value === "manual" ? "custom" : "auto");
+                    }}
+                    className="flex flex-row gap-6"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem
+                        value="manual"
+                        id="manual"
+                        className="w-4 h-4 border-2 border-gray-300 hover:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                        원
-                      </span>
+                      <Label
+                        htmlFor="manual"
+                        className="text-sm cursor-pointer"
+                      >
+                        수동 설정
+                      </Label>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => adjustRate("entry", "increase")}
-                      className="p-2 h-8 w-8"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </Button>
-                  </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem
+                        value="auto"
+                        id="auto"
+                        className="w-4 h-4 border-2 border-gray-300 hover:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      />
+                      <Label
+                        htmlFor="auto"
+                        className={`text-sm ${
+                          userPlan?.name !== "Premium"
+                            ? "text-muted-foreground cursor-not-allowed"
+                            : "cursor-pointer"
+                        }`}
+                      >
+                        자동 설정{" "}
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                  {exchangeRateMode === "auto" &&
+                    userPlan?.name === "Premium" && (
+                      <div className="text-xs text-muted-foreground bg-primary/5 p-3 rounded border-l-2 border-primary">
+                        🤖 AI가 실시간 환율 분석을 통해 최적의 진입/종료 시점을
+                        자동으로 결정합니다
+                      </div>
+                    )}
                 </div>
+                <br />
+                {/* Entry Rate */}
+                {exchangeRateMode === "manual" && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">포지션 진입 환율</Label>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => adjustRate("entry", "decrease")}
+                        className="p-2 h-8 w-8"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </Button>
+                      <div className="flex-1 relative">
+                        <Input
+                          type="number"
+                          value={entryRate.toFixed(2)}
+                          onChange={(e) =>
+                            setEntryRate(parseFloat(e.target.value) || 0)
+                          }
+                          className="text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          step="0.01"
+                          min="0"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          원
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => adjustRate("entry", "increase")}
+                        className="p-2 h-8 w-8"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Exit Rate */}
-                <div className="space-y-2">
-                  <Label className="text-sm">포지션 종료 환율</Label>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => adjustRate("exit", "decrease")}
-                      className="p-2 h-8 w-8"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </Button>
-                    <div className="flex-1 relative">
-                      <Input
-                        type="number"
-                        value={exitRate.toFixed(2)}
-                        onChange={(e) =>
-                          setExitRate(parseFloat(e.target.value) || 0)
-                        }
-                        className="text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                        step="0.01"
-                        min="0"
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                        원
-                      </span>
+                {exchangeRateMode === "manual" && (
+                  <div className="space-y-2">
+                    <Label className="text-sm">포지션 종료 환율</Label>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => adjustRate("exit", "decrease")}
+                        className="p-2 h-8 w-8"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </Button>
+                      <div className="flex-1 relative">
+                        <Input
+                          type="number"
+                          value={exitRate.toFixed(2)}
+                          onChange={(e) =>
+                            setExitRate(parseFloat(e.target.value) || 0)
+                          }
+                          className="text-center [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                          step="0.01"
+                          min="0"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          원
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => adjustRate("exit", "increase")}
+                        className="p-2 h-8 w-8"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => adjustRate("exit", "increase")}
-                      className="p-2 h-8 w-8"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </Button>
                   </div>
-                </div>
+                )}
 
-                <div className="text-xs bg-green-50 dark:bg-green-950 p-2 rounded text-green-700 dark:text-green-300">
-                  💡 진입 환율이 종료 환율보다 낮으면 환율 하락 시 매수, 상승 시
-                  매도하는 전략입니다.
-                </div>
+                {exchangeRateMode === "manual" && (
+                  <div className="text-xs bg-green-50 dark:bg-green-950 p-2 rounded text-green-700 dark:text-green-300">
+                    💡 진입 환율이 종료 환율보다 낮으면 환율 하락 시 매수, 상승
+                    시 매도하는 전략입니다.
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -2132,6 +2239,42 @@ export default function AutoTrading() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Fixed Bottom Button */}
+      {allConditionsSatisfied && (
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border p-4 z-50">
+          <div className="max-w-7xl mx-auto flex justify-center">
+            <div className="flex items-center gap-4">
+              {isEnabled ? (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={handleAutoTradingUpdate}
+                  disabled={fetcher.state === "submitting"}
+                  className="gap-2 px-8 py-3 text-lg font-medium hover:bg-primary hover:text-primary-foreground transition-all duration-200 hover:scale-105 shadow-lg"
+                >
+                  <Settings className="w-5 h-5" />
+                  {fetcher.state === "submitting"
+                    ? "설정 변경 중..."
+                    : "자동매매 설정변경"}
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  onClick={() => handleAutoTradingAction("start")}
+                  disabled={fetcher.state === "submitting"}
+                  className="gap-2 px-8 py-3 text-lg font-medium bg-green-600 hover:bg-green-700 text-white transition-all duration-200 hover:scale-105 shadow-lg"
+                >
+                  <Play className="w-5 h-5" />
+                  {fetcher.state === "submitting"
+                    ? "시작 중..."
+                    : "자동매매 시작"}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

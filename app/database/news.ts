@@ -14,6 +14,7 @@ export interface NewsItem {
   publishedAt: Date;
   scrapedAt?: Date;
   contentHash?: string;
+  metadata?: string; // 바이낸스 API 메타데이터 JSON 문자열
 }
 
 /**

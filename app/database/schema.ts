@@ -553,6 +553,9 @@ export const strategies = pgTable(
     // 환율 설정
     entryRate: numeric("entry_rate", { precision: 18, scale: 8 }).notNull(), // 포지션 진입 환율
     exitRate: numeric("exit_rate", { precision: 18, scale: 8 }).notNull(), // 포지션 종료 환율
+    tradeMode: varchar("trade_mode", { length: 10 })
+      .notNull()
+      .default("custom"), // "auto" | "custom"
 
     // 리스크 관리 설정
     seedDivision: integer("seed_division").notNull().default(1), // 시드 분할 횟수
@@ -573,6 +576,7 @@ export const strategies = pgTable(
   (table) => [
     index("idx_strategies_active").on(table.isActive),
     check("coin_mode_check", sql`${table.coinMode} IN ('auto', 'custom')`),
+    check("trade_mode_check", sql`${table.tradeMode} IN ('auto', 'custom')`),
     // ai_mode_check 제거
   ]
 );

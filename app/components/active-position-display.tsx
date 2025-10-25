@@ -15,7 +15,7 @@ export const ActivePositionDisplay = React.memo(function ActivePositionDisplay({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">활성 포지션</CardTitle>
+        <CardTitle className="text-sm font-medium">현재 포지션</CardTitle>
         <BarChart3 className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>

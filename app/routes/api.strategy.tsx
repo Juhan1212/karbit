@@ -86,6 +86,9 @@ export async function action({ request }: ActionFunctionArgs) {
           telegramEnabled: formData.get("telegramEnabled") === "true",
           backtestPeriod: formData.get("backtestPeriod")?.toString() || "3m",
           portfolioRebalancing: formData.get("portfolioRebalancing") === "true",
+          tradeMode: (formData.get("tradeMode")?.toString() || "custom") as
+            | "custom"
+            | "auto",
         };
 
         // 새 전략 생성 및 활성화
@@ -162,6 +165,9 @@ export async function action({ request }: ActionFunctionArgs) {
           telegramEnabled: formData.get("telegramEnabled") === "true",
           backtestPeriod: formData.get("backtestPeriod")?.toString() || "3m",
           portfolioRebalancing: formData.get("portfolioRebalancing") === "true",
+          tradeMode: (formData.get("tradeMode")?.toString() || "custom") as
+            | "custom"
+            | "auto",
         };
 
         const updatedStrategy = await createStrategy(user.id, strategyData);

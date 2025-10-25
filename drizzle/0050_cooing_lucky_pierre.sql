@@ -1,0 +1,2 @@
+ALTER TABLE "strategies" ADD COLUMN "trade_mode" varchar(10) DEFAULT 'custom' NOT NULL;--> statement-breakpoint
+ALTER TABLE "strategies" ADD CONSTRAINT "trade_mode_check" CHECK ("strategies"."trade_mode" IN ('auto', 'custom'));
