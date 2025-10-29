@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import https from "https";
 
 // 텔레그램 봇 설정
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
@@ -36,32 +37,80 @@ export async function sendTelegramMessage(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-      const response = await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: parseMode,
-        }),
-        signal: controller.signal,
+      const postData = JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: parseMode,
       });
 
-      clearTimeout(timeoutId);
-      const data = await response.json();
+      const url = new URL(`${TELEGRAM_API_URL}/sendMessage`);
+      const options = {
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname + url.search,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(postData),
+        },
+        timeout: timeoutMs,
+        family: 4, // IPv4 강제 사용
+      };
 
-      if (data.ok) {
-        console.log(`✅ 텔레그램 메시지 전송 성공 (chat_id: ${chatId})`);
-        return true;
-      } else {
-        console.error(
-          `텔레그램 API 에러 (시도 ${attempt}/${maxRetries}):`,
-          data
-        );
-      }
+      const result = await new Promise<boolean>((resolve, reject) => {
+        const req = https.request(options, (res) => {
+          let data = "";
+
+          res.on("data", (chunk) => {
+            data += chunk;
+          });
+
+          res.on("end", () => {
+            try {
+              const response = JSON.parse(data);
+              if (response.ok) {
+                console.log(
+                  `✅ 텔레그램 메시지 전송 성공 (chat_id: ${chatId})`
+                );
+                resolve(true);
+              } else {
+                console.error(
+                  `텔레그램 API 에러 (시도 ${attempt}/${maxRetries}):`,
+                  response
+                );
+                resolve(false);
+              }
+            } catch (e) {
+              console.error(
+                `JSON 파싱 에러 (시도 ${attempt}/${maxRetries}):`,
+                e
+              );
+              resolve(false);
+            }
+          });
+        });
+
+        req.on("error", (error) => {
+          console.error(
+            `텔레그램 메시지 전송 에러 (시도 ${attempt}/${maxRetries}):`,
+            error
+          );
+          reject(error);
+        });
+
+        req.on("timeout", () => {
+          console.error(
+            `텔레그램 메시지 타임아웃 (시도 ${attempt}/${maxRetries})`
+          );
+          req.destroy();
+          reject(new Error("Request timeout"));
+        });
+
+        req.write(postData);
+        req.end();
+      });
+
+      if (result) return true;
     } catch (error) {
       console.error(
         `텔레그램 메시지 전송 에러 (시도 ${attempt}/${maxRetries}):`,
@@ -170,24 +219,53 @@ export function generateTelegramDeepLink(authToken: string): string {
  */
 export async function setWebhook(webhookUrl: string): Promise<boolean> {
   try {
-    const response = await fetch(`${TELEGRAM_API_URL}/setWebhook`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: webhookUrl,
-        allowed_updates: ["message", "callback_query"],
-      }),
+    const postData = JSON.stringify({
+      url: webhookUrl,
+      allowed_updates: ["message", "callback_query"],
     });
 
-    const data = await response.json();
+    const url = new URL(`${TELEGRAM_API_URL}/setWebhook`);
+    const options = {
+      hostname: url.hostname,
+      port: 443,
+      path: url.pathname + url.search,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(postData),
+      },
+      family: 4,
+    };
 
-    if (!data.ok) {
-      console.error("Webhook 설정 실패:", data);
-      return false;
-    }
+    return await new Promise<boolean>((resolve) => {
+      const req = https.request(options, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const response = JSON.parse(data);
+            if (response.ok) {
+              console.log("✅ Telegram Webhook 설정 성공:", webhookUrl);
+              resolve(true);
+            } else {
+              console.error("Webhook 설정 실패:", response);
+              resolve(false);
+            }
+          } catch (e) {
+            console.error("Webhook 설정 JSON 파싱 에러:", e);
+            resolve(false);
+          }
+        });
+      });
 
-    console.log("✅ Telegram Webhook 설정 성공:", webhookUrl);
-    return true;
+      req.on("error", (error) => {
+        console.error("Webhook 설정 에러:", error);
+        resolve(false);
+      });
+
+      req.write(postData);
+      req.end();
+    });
   } catch (error) {
     console.error("Webhook 설정 에러:", error);
     return false;
@@ -199,19 +277,43 @@ export async function setWebhook(webhookUrl: string): Promise<boolean> {
  */
 export async function deleteWebhook(): Promise<boolean> {
   try {
-    const response = await fetch(`${TELEGRAM_API_URL}/deleteWebhook`, {
+    const url = new URL(`${TELEGRAM_API_URL}/deleteWebhook`);
+    const options = {
+      hostname: url.hostname,
+      port: 443,
+      path: url.pathname + url.search,
       method: "POST",
+      family: 4,
+    };
+
+    return await new Promise<boolean>((resolve) => {
+      const req = https.request(options, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const response = JSON.parse(data);
+            if (response.ok) {
+              console.log("✅ Telegram Webhook 제거 성공");
+              resolve(true);
+            } else {
+              console.error("Webhook 제거 실패:", response);
+              resolve(false);
+            }
+          } catch (e) {
+            console.error("Webhook 제거 JSON 파싱 에러:", e);
+            resolve(false);
+          }
+        });
+      });
+
+      req.on("error", (error) => {
+        console.error("Webhook 제거 에러:", error);
+        resolve(false);
+      });
+
+      req.end();
     });
-
-    const data = await response.json();
-
-    if (!data.ok) {
-      console.error("Webhook 제거 실패:", data);
-      return false;
-    }
-
-    console.log("✅ Telegram Webhook 제거 성공");
-    return true;
   } catch (error) {
     console.error("Webhook 제거 에러:", error);
     return false;
@@ -223,15 +325,42 @@ export async function deleteWebhook(): Promise<boolean> {
  */
 export async function getBotInfo() {
   try {
-    const response = await fetch(`${TELEGRAM_API_URL}/getMe`);
-    const data = await response.json();
+    const url = new URL(`${TELEGRAM_API_URL}/getMe`);
+    const options = {
+      hostname: url.hostname,
+      port: 443,
+      path: url.pathname + url.search,
+      method: "GET",
+      family: 4,
+    };
 
-    if (!data.ok) {
-      console.error("봇 정보 가져오기 실패:", data);
-      return null;
-    }
+    return await new Promise<any>((resolve) => {
+      const req = https.request(options, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const response = JSON.parse(data);
+            if (response.ok) {
+              resolve(response.result);
+            } else {
+              console.error("봇 정보 가져오기 실패:", response);
+              resolve(null);
+            }
+          } catch (e) {
+            console.error("봇 정보 JSON 파싱 에러:", e);
+            resolve(null);
+          }
+        });
+      });
 
-    return data.result;
+      req.on("error", (error) => {
+        console.error("봇 정보 가져오기 에러:", error);
+        resolve(null);
+      });
+
+      req.end();
+    });
   } catch (error) {
     console.error("봇 정보 가져오기 에러:", error);
     return null;
