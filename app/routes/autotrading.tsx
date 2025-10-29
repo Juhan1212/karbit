@@ -19,7 +19,6 @@ import {
   getUserActiveStrategy,
   formatStrategyForFrontend,
 } from "~/database/strategy";
-import CompChart from "~/components/chart/CompChart";
 import { KoreanExchangeType } from "~/types/exchange";
 import {
   getUserActivePositions,
@@ -66,22 +65,17 @@ import {
   CollapsibleTrigger,
 } from "../components/collapsible";
 import { ActivePositionDisplay } from "../components/active-position-display";
-import { ActivePositionManagement } from "../components/active-position-management";
-import { TradingStats } from "../components/trading-stats";
-import { TradingHistoryTable } from "../components/trading-history-table";
 import { AutoComplete, AutoCompleteOption } from "../components/autocomplete";
 import {
   AlertTriangle,
   AlertCircle,
   Play,
   Pause,
-  BarChart3,
   TrendingUp,
   CheckCircle,
   Info,
   Plus,
   Minus,
-  StopCircle,
   Settings,
   ChevronDown,
   ChevronUp,

@@ -30,6 +30,7 @@ import {
   type CandleBarData,
   type PositionData,
   type TickerData,
+  type OrderBookData,
 } from "../../types/marketInfo";
 import { isBarData, isCandleBarData } from "../../helpers/guard";
 import { useMarkerStore } from "../../stores/markerState";
@@ -510,7 +511,7 @@ const CompTradingviewChart = memo(
 
     // 거래소1 메시지 핸들러
     const handleExchange1Message = useCallback(
-      (data: CandleBarData | TickerData | PositionData) => {
+      (data: CandleBarData | TickerData | PositionData | OrderBookData) => {
         if (!datafeedRef.current) return;
         if (!isCandleBarData(data)) return;
 
@@ -585,7 +586,7 @@ const CompTradingviewChart = memo(
 
     // 거래소2 메시지 핸들러
     const handleExchange2Message = useCallback(
-      (data: CandleBarData | TickerData | PositionData) => {
+      (data: CandleBarData | TickerData | PositionData | OrderBookData) => {
         if (!datafeedRef.current) return;
         if (!isCandleBarData(data)) return;
 

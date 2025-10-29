@@ -6,7 +6,7 @@ import { preciseAdd, safeNumeric, CRYPTO_DECIMALS } from "~/utils/decimal";
 export interface CreateStrategyData {
   name: string;
   seedAmount: number;
-  coinMode: "manual" | "popular" | "all";
+  coinMode: "custom" | "auto";
   selectedCoins?: string[];
   entryRate: number;
   exitRate: number;
@@ -15,10 +15,6 @@ export interface CreateStrategyData {
   allowAverageDown: boolean;
   allowAverageUp: boolean;
   aiMode: boolean;
-  webhookEnabled?: boolean;
-  telegramEnabled?: boolean;
-  backtestPeriod: string;
-  portfolioRebalancing?: boolean;
   tradeMode?: "custom" | "auto";
 }
 
@@ -49,10 +45,6 @@ export async function createStrategy(userId: number, data: CreateStrategyData) {
         allowAverageDown: data.allowAverageDown,
         allowAverageUp: data.allowAverageUp,
         aiMode: data.aiMode,
-        webhookEnabled: data.webhookEnabled || false,
-        telegramEnabled: data.telegramEnabled || false,
-        backtestPeriod: data.backtestPeriod,
-        portfolioRebalancing: data.portfolioRebalancing || false,
         tradeMode: data.tradeMode || "custom",
         isActive: true,
         updatedAt: new Date(),
@@ -181,14 +173,6 @@ export async function updateStrategy(
   if (data.allowAverageUp !== undefined)
     updateData.allowAverageUp = data.allowAverageUp;
   if (data.aiMode !== undefined) updateData.aiMode = data.aiMode;
-  if (data.webhookEnabled !== undefined)
-    updateData.webhookEnabled = data.webhookEnabled;
-  if (data.telegramEnabled !== undefined)
-    updateData.telegramEnabled = data.telegramEnabled;
-  if (data.backtestPeriod !== undefined)
-    updateData.backtestPeriod = data.backtestPeriod;
-  if (data.portfolioRebalancing !== undefined)
-    updateData.portfolioRebalancing = data.portfolioRebalancing;
   if (data.tradeMode !== undefined) updateData.tradeMode = data.tradeMode;
 
   const [updatedStrategy] = await db
@@ -314,10 +298,6 @@ export function formatStrategyForFrontend(strategy: any) {
 
     // 고급 설정
     aiMode: strategy.aiMode,
-    webhookEnabled: strategy.webhookEnabled,
-    telegramEnabled: strategy.telegramEnabled,
-    backtestPeriod: strategy.backtestPeriod,
-    portfolioRebalancing: strategy.portfolioRebalancing,
     tradeMode: strategy.tradeMode || "custom",
 
     // 플랜 만료 정보

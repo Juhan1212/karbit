@@ -81,3 +81,15 @@ export const ContractSize = {
   SOL_USDT: 1,
 } as const;
 export type ContractSize = (typeof ContractSize)[keyof typeof ContractSize];
+
+export interface OrderBookEntry {
+  price: number;
+  amount: number;
+  total: number;
+}
+
+export interface OrderBookData {
+  bids: OrderBookEntry[];
+  asks: OrderBookEntry[];
+  timestamp: number;
+}

@@ -479,8 +479,11 @@ const PremiumTicker = React.memo(
               </div>
             </div>
             <CardDescription>
-              <span className="text-xs text-muted-foreground/80 block">
-                ※ karbit에서 제공하는 실시간 환율과 오차가 있을 수 있습니다.
+              <span className="text-sm text-muted-foreground/80 block">
+                💡 karbit에서 제공하는 실시간 환율과 오차가 있을 수 있습니다.
+              </span>
+              <span className="text-sm text-muted-foreground/80 block">
+                💡 리스트를 클릭하면, 호가창 반영 실시간 환율주문이 가능합니다
               </span>
             </CardDescription>
           </CardHeader>
@@ -507,137 +510,6 @@ const PremiumTicker = React.memo(
                 <span>1억원</span>
               </div>
             </div>
-
-            {/* 김프 주문가능금액 표시 블록 - 모든 (한국거래소, 해외거래소) 조합 */}
-            {Array.isArray(exchangeBalances) &&
-              exchangeBalances.length > 1 &&
-              (() => {
-                // 거래소 분류를 currency 기준으로 처리
-                const krExchanges = exchangeBalances.filter(
-                  (e) => e.currency === "KRW"
-                );
-                const frExchanges = exchangeBalances.filter(
-                  (e) => e.currency !== "KRW"
-                );
-                // 모든 조합 생성
-                const pairs: Array<{
-                  kr: (typeof krExchanges)[0];
-                  fr: (typeof frExchanges)[0];
-                }> = [];
-                krExchanges.forEach((kr) => {
-                  frExchanges.forEach((fr) => {
-                    pairs.push({ kr, fr });
-                  });
-                });
-                if (pairs.length === 0) return null;
-                return (
-                  <div className="mt-4 mb-2 p-3 rounded-lg border-2 border-primary bg-primary/5">
-                    <div className="text-lg font-semibold text-primary mb-2">
-                      김프매매 주문금액 설정 <br />
-                      <span className="text-xs text-muted-foreground/80 block">
-                        ※ 최대주문금액은 연동된 거래소의 잔고 기준으로 자동
-                        계산됩니다. <br />※ 최대주문금액과 주문금액은 10000원
-                        단위입니다.
-                      </span>
-                    </div>
-                    <div className="text-base font-bold text-primary block mt-1">
-                      <div className="flex justify-between items-center w-full mt-2">
-                        <span className="text-sm font-extrabold text-green-600">
-                          한국거래소 : 매수(long)
-                        </span>
-                        <span className="text-sm font-extrabold text-red-500">
-                          해외거래소 : 매도(short)
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      {pairs.map(({ kr, fr }, idx) => {
-                        if (kr.krwBalance != null && fr.krwBalance != null) {
-                          const minBalance = Math.min(
-                            kr.krwBalance,
-                            fr.krwBalance
-                          );
-                          const leverage = orderData[idx]?.leverage || 1;
-                          const maxBalance = Math.min(
-                            kr.krwBalance,
-                            fr.krwBalance * leverage
-                          );
-                          const orderAmount = Math.min(
-                            orderData[idx]?.orderAmount || maxBalance,
-                            maxBalance
-                          );
-                          return (
-                            <div
-                              key={kr.name + fr.name}
-                              className="flex flex-col p-2 rounded-md border-2 border-primary"
-                            >
-                              <div className="flex items-center gap-2 text-sm font-semibold">
-                                <span className="font-medium text-primary">
-                                  [{kr.name}, {fr.name}]
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-xs text-muted-foreground">
-                                  {fr.name} 레버리지
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => decreaseLeverage(idx)}
-                                    disabled={leverage <= 1}
-                                  >
-                                    -
-                                  </Button>
-                                  <span className="text-base font-bold text-primary min-w-[2rem] text-center">
-                                    {leverage}
-                                  </span>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => increaseLeverage(idx)}
-                                  >
-                                    +
-                                  </Button>
-                                </div>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <label className="text-sm font-medium">
-                                  주문금액
-                                </label>
-                                <span className="text-sm text-muted-foreground">
-                                  {formatKRW(orderAmount)}
-                                </span>
-                              </div>
-                              <Slider
-                                value={[orderAmount]}
-                                onValueChange={([v]) => {
-                                  setOrderData((prev) => {
-                                    const newData = [...prev];
-                                    if (newData[idx]) {
-                                      newData[idx].orderAmount = v;
-                                    }
-                                    return newData;
-                                  });
-                                }}
-                                min={10000}
-                                max={maxBalance}
-                                step={10000}
-                                className="w-full mt-2 [&_[data-orientation=horizontal]_[data-orientation=horizontal]]:bg-gray-500/20"
-                              />
-                              <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                                <span>0원</span>
-                                <span>최대: {formatKRW(maxBalance)}</span>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
 
             {/* 티커 검색 기능 */}
             <div className="mt-6 mb-4">
@@ -812,55 +684,70 @@ const PremiumTicker = React.memo(
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedItems.map((it) => (
-                    <TableRow
-                      key={it.symbol + "|" + it.korean_ex + "|" + it.foreign_ex}
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => setSelectedItem(it)}
-                    >
-                      <TableCell className="px-1 pr-3 text-center">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300 mx-auto"
-                          onClick={(e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            openConfirmDialog(
-                              it.symbol,
-                              it.korean_ex,
-                              it.foreign_ex
-                            );
-                          }}
-                          disabled={isButtonLoading(it.symbol)}
-                        >
-                          {isButtonLoading(it.symbol) ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              <span className="hidden sm:inline">
-                                포지션진입
-                              </span>
-                              <span className="sm:hidden">진입</span>
-                            </>
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="px-2 pl-3 font-medium text-xs text-center">
-                        {it.symbol}
-                      </TableCell>
-                      <TableCell className="px-2 text-xs text-center">
-                        {it._rate !== null && it._rate !== undefined
-                          ? it._rate
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="px-2 text-xs text-muted-foreground text-center">
-                        {it.korean_ex || "-"}
-                      </TableCell>
-                      <TableCell className="px-2 text-xs text-muted-foreground text-center">
-                        {it.foreign_ex || "-"}
+                  {sortedItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8">
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            데이터를 불러오는 중...
+                          </span>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    sortedItems.map((it) => (
+                      <TableRow
+                        key={
+                          it.symbol + "|" + it.korean_ex + "|" + it.foreign_ex
+                        }
+                        className="cursor-pointer hover:bg-muted/50 transition-colors"
+                        onClick={() => setSelectedItem(it)}
+                      >
+                        <TableCell className="px-1 pr-3 text-center">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300 mx-auto"
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              openConfirmDialog(
+                                it.symbol,
+                                it.korean_ex,
+                                it.foreign_ex
+                              );
+                            }}
+                            disabled={isButtonLoading(it.symbol)}
+                          >
+                            {isButtonLoading(it.symbol) ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <>
+                                <span className="hidden sm:inline">
+                                  포지션진입
+                                </span>
+                                <span className="sm:hidden">진입</span>
+                              </>
+                            )}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="px-2 pl-3 font-medium text-xs text-center">
+                          {it.symbol}
+                        </TableCell>
+                        <TableCell className="px-2 text-xs text-center">
+                          {it._rate !== null && it._rate !== undefined
+                            ? it._rate
+                            : "-"}
+                        </TableCell>
+                        <TableCell className="px-2 text-xs text-muted-foreground text-center">
+                          {it.korean_ex || "-"}
+                        </TableCell>
+                        <TableCell className="px-2 text-xs text-muted-foreground text-center">
+                          {it.foreign_ex || "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

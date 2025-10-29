@@ -22,7 +22,13 @@ import {
   CardTitle,
 } from "../components/card";
 import { Button } from "../components/button";
-import { RefreshCw, TrendingUp, TrendingDown, Crown } from "lucide-react";
+import {
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Crown,
+  Minus,
+} from "lucide-react";
 import PremiumTicker from "../components/premium-ticker";
 import { getUserCurrentPlan } from "~/database/plan";
 import { ActivePositionManagement } from "~/components/active-position-management";
@@ -32,6 +38,13 @@ import { TradingProfitChart } from "~/components/trading-profit-chart";
 import CompChart from "~/components/chart/CompChart";
 import "~/assets/styles/chart/index.scss";
 import { Badge } from "~/components/badge";
+import KimchiOrderSettings from "~/components/kimchi-order-settings";
+import { createWebSocketStore } from "~/stores/chartState";
+import {
+  ExchangeTypeConverter,
+  KoreanExchangeType,
+  LowercaseExchangeType,
+} from "~/types/exchange";
 
 export function meta() {
   return [
@@ -203,6 +216,15 @@ export default function Dashboard() {
     null
   );
 
+  // 법정화폐 환율 상태 (USD/KRW)
+  const [legalExchangeRate, setLegalExchangeRate] = useState<{
+    currency: string;
+    rate: number | null;
+    changeText: string;
+    timestamp: number;
+    cached: boolean;
+  } | null>(null);
+
   // TradingStats를 위한 상태 변수들
   const [tradingStats, setTradingStats] = useState(initialTradingStats);
   const [isLoadingTradingData, setIsLoadingTradingData] = useState(false);
@@ -223,25 +245,25 @@ export default function Dashboard() {
   // 차트 새로고침을 위한 키
   const [chartRefreshKey, setChartRefreshKey] = useState<number>(0);
 
-  // 평균 환율과 테더 가격 비교 계산
-  const tetherComparisonData = useMemo(() => {
-    if (!currentExchangeRate || !averageRate) {
+  // 김치 프리미엄 계산 (테더 가격 vs 법정화폐 환율)
+  const kimchiPremiumData = useMemo(() => {
+    if (!currentExchangeRate || !legalExchangeRate?.rate) {
       return {
         percentage: 0,
         isHigher: true,
-        description: "호가창 반영 실시간 평균환율대비",
+        description: "법정화폐 환율대비",
       };
     }
 
-    const diff = currentExchangeRate - averageRate;
-    const percentage = (diff / averageRate) * 100;
+    const diff = currentExchangeRate - legalExchangeRate.rate;
+    const percentage = (diff / legalExchangeRate.rate) * 100;
 
     return {
       percentage: Math.abs(percentage),
       isHigher: diff > 0,
-      description: "호가창 반영 실시간 평균환율대비",
+      description: "법정화폐 환율대비",
     };
-  }, [currentExchangeRate, averageRate]);
+  }, [currentExchangeRate, legalExchangeRate?.rate]);
 
   // 금액 포맷팅 함수 (간단한 버전)
   const formatCurrency = (amount: number, currency: string) => {
@@ -268,6 +290,7 @@ export default function Dashboard() {
   // Interval ID들을 관리하기 위한 ref
   const exchangeRateIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const activePositionsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const legalExchangeRateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // rawActivePositions를 올바른 형태로 변환
   const activePositions = useMemo(() => {
@@ -314,6 +337,42 @@ export default function Dashboard() {
       }
     }
   }, [polledActivePositions, selectedTicker]);
+
+  // WebSocket 스토어 생성 (공통으로 사용)
+  const koreanWebSocketStore = useMemo(() => {
+    if (!selectedTickerItem) return null;
+    return createWebSocketStore({
+      exchange: selectedTickerItem.korean_ex || "UPBIT",
+      symbol: selectedTickerItem.symbol,
+      interval: "1m",
+    });
+  }, [selectedTickerItem?.korean_ex, selectedTickerItem?.symbol]);
+
+  const foreignWebSocketStore = useMemo(() => {
+    if (!selectedTickerItem) return null;
+    return createWebSocketStore({
+      exchange: selectedTickerItem.foreign_ex || "BYBIT",
+      symbol: selectedTickerItem.symbol,
+      interval: "1m",
+    });
+  }, [selectedTickerItem?.foreign_ex, selectedTickerItem?.symbol]);
+
+  // WebSocket 연결 관리 (상위 컴포넌트에서 중앙화)
+  useEffect(() => {
+    if (koreanWebSocketStore && foreignWebSocketStore) {
+      console.log("Dashboard: Connecting WebSocket stores");
+      koreanWebSocketStore.getState().connectWebSocket();
+      foreignWebSocketStore.getState().connectWebSocket();
+    }
+
+    return () => {
+      if (koreanWebSocketStore && foreignWebSocketStore) {
+        console.log("Dashboard: Disconnecting WebSocket stores");
+        koreanWebSocketStore.getState().disconnectWebSocket();
+        foreignWebSocketStore.getState().disconnectWebSocket();
+      }
+    };
+  }, [koreanWebSocketStore, foreignWebSocketStore]);
 
   // 활성 포지션 및 트레이딩 통계 폴링 함수
   const pollActivePositions = useCallback(
@@ -471,22 +530,61 @@ export default function Dashboard() {
     }
   }, []);
 
+  // 법정화폐 환율 폴링 함수들
+  const startLegalExchangeRatePolling = useCallback(() => {
+    if (legalExchangeRateIntervalRef.current) return; // 이미 실행 중이면 중복 실행 방지
+
+    const fetchLegalExchangeRate = async () => {
+      try {
+        const response = await fetch("/api/exchange-rate");
+        if (response.ok) {
+          const data = await response.json();
+          setLegalExchangeRate(data);
+        } else {
+          console.error("Failed to fetch legal exchange rate");
+        }
+      } catch (error) {
+        console.error("Legal exchange rate polling error:", error);
+      }
+    };
+
+    // 초기 데이터 로드
+    fetchLegalExchangeRate();
+
+    // 10초 간격으로 폴링 시작
+    legalExchangeRateIntervalRef.current = setInterval(
+      fetchLegalExchangeRate,
+      10000
+    );
+  }, []);
+
+  const stopLegalExchangeRatePolling = useCallback(() => {
+    if (legalExchangeRateIntervalRef.current) {
+      clearInterval(legalExchangeRateIntervalRef.current);
+      legalExchangeRateIntervalRef.current = null;
+    }
+  }, []);
+
   // visibilityChange 이벤트 핸들러
   const handleVisibilityChange = useCallback(() => {
     if (document.visibilityState === "visible") {
       // 페이지가 다시 보이게 되었을 때 폴링 재시작
       startExchangeRatePolling();
       startActivePositionsPolling();
+      startLegalExchangeRatePolling();
     } else {
       // 페이지가 숨겨졌을 때 폴링 중지
       stopExchangeRatePolling();
       stopActivePositionsPolling();
+      stopLegalExchangeRatePolling();
     }
   }, [
     startExchangeRatePolling,
     stopExchangeRatePolling,
     startActivePositionsPolling,
     stopActivePositionsPolling,
+    startLegalExchangeRatePolling,
+    stopLegalExchangeRatePolling,
   ]);
 
   // 환율 가져오기 및 visibilityChange 이벤트 설정
@@ -524,6 +622,25 @@ export default function Dashboard() {
   }, [
     startActivePositionsPolling,
     stopActivePositionsPolling,
+    handleVisibilityChange,
+  ]);
+
+  // 법정화폐 환율 폴링 시작 및 visibilityChange 이벤트 설정
+  useEffect(() => {
+    // 초기 폴링 시작
+    startLegalExchangeRatePolling();
+
+    // visibilityChange 이벤트 리스너 등록
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      // cleanup: 이벤트 리스너 제거 및 interval 중지
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      stopLegalExchangeRatePolling();
+    };
+  }, [
+    startLegalExchangeRatePolling,
+    stopLegalExchangeRatePolling,
     handleVisibilityChange,
   ]);
 
@@ -605,11 +722,13 @@ export default function Dashboard() {
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
         <Card>
           <CardHeader className="pb-2">
             <div className="relative flex items-center justify-between mb-2">
-              <CardTitle className="text-lg font-semibold">테더 가격</CardTitle>
+              <CardTitle className="text-lg font-semibold">
+                테더 가격 (USDT/KRW)
+              </CardTitle>
               <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
                 <Badge
                   variant="secondary"
@@ -626,18 +745,57 @@ export default function Dashboard() {
             </div> */}
             <div className="text-xl lg:text-2xl">₩{currentExchangeRate}</div>
             <div
-              className={`flex items-center gap-1 text-xs ${tetherComparisonData.isHigher ? "text-green-600" : "text-red-600"}`}
+              className={`flex items-center gap-1 text-xs ${kimchiPremiumData.isHigher ? "text-green-600" : "text-red-600"}`}
             >
-              {tetherComparisonData.isHigher ? (
+              {kimchiPremiumData.isHigher ? (
                 <TrendingUp className="w-3 h-3" />
               ) : (
                 <TrendingDown className="w-3 h-3" />
               )}
-              {tetherComparisonData.isHigher ? "+" : "-"}
-              {tetherComparisonData.percentage.toFixed(1)}%
+              {kimchiPremiumData.isHigher ? "+" : "-"}
+              {kimchiPremiumData.percentage.toFixed(1)}%
             </div>
             <div className="text-xs text-muted-foreground mt-1">
-              {tetherComparisonData.description}
+              {kimchiPremiumData.description}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="relative flex items-center justify-between mb-2">
+              <CardTitle className="text-lg font-semibold">
+                법정화폐 환율 (USD/KRW)
+              </CardTitle>
+              <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+                <Badge
+                  variant="secondary"
+                  className="text-xs bg-blue-900 text-blue-300"
+                >
+                  실시간
+                </Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl lg:text-2xl">
+              {legalExchangeRate
+                ? `$${legalExchangeRate.rate?.toFixed(2)}`
+                : "-"}
+            </div>
+            <div
+              className={`flex items-center gap-1 text-xs ${
+                legalExchangeRate?.changeText?.includes("▲")
+                  ? "text-green-600"
+                  : legalExchangeRate?.changeText?.includes("▼")
+                    ? "text-red-600"
+                    : "text-muted-foreground"
+              }`}
+            >
+              {legalExchangeRate?.changeText || ""}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {legalExchangeRate ? "네이버 금융" : "데이터 로딩 중"}
             </div>
           </CardContent>
         </Card>
@@ -706,11 +864,11 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="col-span-2 lg:col-span-1">
           <CardHeader className="pb-2">
             <div className="relative flex items-center justify-between mb-2">
               <CardTitle className="text-lg font-semibold">
-                연동거래소 자산
+                연동거래소 주문가능금액
               </CardTitle>
               {/* <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
                 <Badge
@@ -733,7 +891,7 @@ export default function Dashboard() {
                 {exchangeBalances.map((exchange: any) => (
                   <div
                     key={exchange.exchangeName}
-                    className="flex items-start justify-between text-xs gap-2"
+                    className="flex items-start justify-between text-base gap-2"
                   >
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <span>{exchange.icon}</span>
@@ -784,90 +942,181 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Live Kimchi Premium Ticker */}
-      <PremiumTicker
-        onAverageRateChange={(avgRate: number | null, seed: number | null) => {
-          setAverageRate(avgRate);
-        }}
-        onItemSelected={(item: object | null) => {
-          setSelectedTickerItem(item);
-        }}
-        exchangeBalances={(exchangeBalances || []).map((exchange: any) => {
-          const isKorean = exchange.currency === "KRW";
-          let krwBalance = 0;
-          if (isKorean) {
-            krwBalance =
-              typeof exchange.availableBalance === "number"
-                ? exchange.availableBalance
-                : 0;
-          } else {
-            krwBalance =
-              typeof exchange.availableBalance === "number" &&
-              typeof currentExchangeRate === "number"
-                ? Math.floor(exchange.availableBalance * currentExchangeRate)
-                : 0;
-          }
-          // 10000원 단위로 절삭
-          const truncatedBalance = Math.floor(krwBalance / 10000) * 10000;
-          krwBalance = truncatedBalance;
-          return {
-            name: exchange.exchangeName,
-            krwBalance,
-            currency: exchange.currency,
-          };
-        })}
-      />
+      {/* Premium Ticker and Selected Chart - PC에서는 병렬 배치 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Live Kimchi Premium Ticker */}
+        <PremiumTicker
+          onAverageRateChange={(
+            avgRate: number | null,
+            seed: number | null
+          ) => {
+            setAverageRate(avgRate);
+          }}
+          onItemSelected={(item: object | null) => {
+            setSelectedTickerItem(item);
+          }}
+          exchangeBalances={(exchangeBalances || []).map((exchange: any) => {
+            const isKorean = exchange.currency === "KRW";
+            let krwBalance = 0;
+            if (isKorean) {
+              krwBalance =
+                typeof exchange.availableBalance === "number"
+                  ? exchange.availableBalance
+                  : 0;
+            } else {
+              krwBalance =
+                typeof exchange.availableBalance === "number" &&
+                typeof currentExchangeRate === "number"
+                  ? Math.floor(exchange.availableBalance * currentExchangeRate)
+                  : 0;
+            }
+            // 10000원 단위로 절삭
+            const truncatedBalance = Math.floor(krwBalance / 10000) * 10000;
+            krwBalance = truncatedBalance;
+            return {
+              name: exchange.exchangeName,
+              krwBalance,
+              currency: exchange.currency,
+            };
+          })}
+        />
 
-      {/* Selected Ticker Chart - Only show when a ticker is selected */}
-      {selectedTickerItem && (
-        <Card className="chart-card-container">
-          <CardHeader>
-            <div className="relative flex items-center justify-between">
-              <div>
+        {/* Selected Ticker Chart - Only show when a ticker is selected */}
+        {selectedTickerItem ? (
+          <Card className="chart-card-container">
+            <CardHeader>
+              <div className="relative flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg font-semibold">
                   <TrendingUp className="w-5 h-5" />
                   실시간 {selectedTickerItem.symbol} 환율 차트
                 </CardTitle>
+                <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setChartRefreshKey((prev) => prev + 1)}
+                  >
+                    <RefreshCw />
+                  </Button>
+                </div>
+              </div>
+              {selectedTickerItem?.korean_ex === "bithumb" && (
                 <CardDescription>
-                  선택한 티커의 실시간 환율을 확인하세요
                   <span className="text-xs text-muted-foreground/80 mt-1 block">
-                    ※ 빗썸 거래소 측에서 현재 캔들 데이터를 제공하지 않고 있으나
-                    개발단계에 있습니다. 거래소 업데이트가 되는대로 반영할
-                    예정입니다.
-                    <br />※ 차트가 정상적으로 표시되지 않으면, 우측의 '차트
-                    새로고침' 버튼을 클릭해보세요.
+                    빗썸은 현재 실시간 캔들 데이터가 지원되지 않습니다
                   </span>
                 </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className="chart-card-content" noPadding={true}>
+              <div className="w-full h-full rounded-b-xl overflow-hidden">
+                <CompChart
+                  key={chartRefreshKey}
+                  koreanEx={selectedTickerItem?.korean_ex || "upbit"}
+                  foreignEx={selectedTickerItem?.foreign_ex || "bybit"}
+                  symbol={selectedTickerItem.symbol}
+                  interval="1m"
+                  activePositions={[
+                    {
+                      coinSymbol: selectedTickerItem.symbol,
+                      krExchange: selectedTickerItem.korean_ex,
+                      frExchange: selectedTickerItem.foreign_ex,
+                    },
+                  ]}
+                  koreanWebSocketStore={koreanWebSocketStore}
+                  foreignWebSocketStore={foreignWebSocketStore}
+                />
               </div>
-              <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setChartRefreshKey((prev) => prev + 1)}
-                >
-                  <RefreshCw />
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="chart-card-content" noPadding={true}>
-            <CompChart
-              key={chartRefreshKey}
-              koreanEx={selectedTickerItem?.korean_ex || "UPBIT"}
-              foreignEx={selectedTickerItem?.foreign_ex || "BYBIT"}
-              symbol={selectedTickerItem.symbol}
-              interval="1m"
-              activePositions={[
-                {
-                  coinSymbol: selectedTickerItem.symbol,
-                  krExchange: selectedTickerItem.korean_ex,
-                  frExchange: selectedTickerItem.foreign_ex,
-                },
-              ]}
-            />
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        ) : (
+          /* Placeholder when no ticker is selected - PC에서 공간 유지 */
+          <div className="hidden lg:block">
+            <Card className="h-full flex items-center justify-center border-dashed">
+              <CardContent className="text-center py-12">
+                <div className="w-16 h-16 mb-4 rounded-full bg-muted flex items-center justify-center mx-auto">
+                  <TrendingUp className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium mb-2 text-muted-foreground">
+                  티커를 선택하세요
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  프리미엄 티커에서 코인을 선택하거나 검색시에 차트가
+                  표시됩니다.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Kimchi Order Settings - PC에서 그리드 레이아웃으로 표시 */}
+      <KimchiOrderSettings
+        exchangeBalances={(exchangeBalances || [])
+          .filter((exchange: any) => {
+            if (
+              !selectedTickerItem?.korean_ex &&
+              !selectedTickerItem?.foreign_ex
+            )
+              return true; // 선택된 티커가 없으면 모두 표시
+            try {
+              // selectedTickerItem.korean_ex (소문자)를 대문자로 변환
+              const koreanUpper = selectedTickerItem?.korean_ex
+                ? ExchangeTypeConverter.fromLowercaseToUppercase(
+                    selectedTickerItem.korean_ex as LowercaseExchangeType
+                  )
+                : null;
+
+              // selectedTickerItem.foreign_ex (소문자)를 대문자로 변환
+              const foreignUpper = selectedTickerItem?.foreign_ex
+                ? ExchangeTypeConverter.fromLowercaseToUppercase(
+                    selectedTickerItem.foreign_ex as LowercaseExchangeType
+                  )
+                : null;
+
+              // exchange.exchangeName (한글)을 대문자로 변환
+              const exchangeUpper = ExchangeTypeConverter.fromKoreanToUppercase(
+                exchange.exchangeName as KoreanExchangeType
+              );
+
+              // 한국 거래소 또는 해외 거래소 중 하나에 해당하면 표시
+              return (
+                exchangeUpper === koreanUpper || exchangeUpper === foreignUpper
+              );
+            } catch {
+              return true; // 변환 실패시 표시
+            }
+          })
+          .map((exchange: any) => {
+            const isKorean = exchange.currency === "KRW";
+            let krwBalance = 0;
+            if (isKorean) {
+              krwBalance =
+                typeof exchange.availableBalance === "number"
+                  ? exchange.availableBalance
+                  : 0;
+            } else {
+              krwBalance =
+                typeof exchange.availableBalance === "number" &&
+                typeof currentExchangeRate === "number"
+                  ? Math.floor(exchange.availableBalance * currentExchangeRate)
+                  : 0;
+            }
+            // 10000원 단위로 절삭
+            const truncatedBalance = Math.floor(krwBalance / 10000) * 10000;
+            krwBalance = truncatedBalance;
+            return {
+              name: exchange.exchangeName,
+              krwBalance,
+              currency: exchange.currency,
+            };
+          })}
+        selectedItem={selectedTickerItem}
+        koreanWebSocketStore={koreanWebSocketStore}
+        foreignWebSocketStore={foreignWebSocketStore}
+        tetherPrice={currentExchangeRate}
+        legalExchangeRate={legalExchangeRate?.rate}
+      />
 
       {/* Active Position Management - Full width section */}
       <ActivePositionManagement
@@ -894,14 +1143,6 @@ export default function Dashboard() {
                   <TrendingUp className="w-5 h-5" />
                   실시간 현재 포지션 환율 차트
                 </CardTitle>
-                <CardDescription>
-                  <br />
-                  <span className="text-xs text-muted-foreground/80 mt-1 block">
-                    ※ 빗썸 거래소는 현재 실시간 캔들 데이터 미제공
-                    <br />※ 차트가 정상적으로 표시되지 않으면, 우측의 '차트
-                    새로고침' 버튼을 클릭해보세요.
-                  </span>
-                </CardDescription>
               </div>
               <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
                 <Button
@@ -913,6 +1154,13 @@ export default function Dashboard() {
                 </Button>
               </div>
             </div>
+            {selectedTickerItem?.korean_ex === "bithumb" && (
+              <CardDescription>
+                <span className="text-xs text-muted-foreground/80 mt-1 block">
+                  빗썸은 현재 실시간 캔들 데이터가 지원되지 않습니다
+                </span>
+              </CardDescription>
+            )}
           </CardHeader>
           <CardContent className="chart-card-content" noPadding={true}>
             <CompChart
@@ -923,6 +1171,8 @@ export default function Dashboard() {
               interval="1m"
               activePositions={polledActivePositions}
               onSymbolChange={setSelectedTicker}
+              koreanWebSocketStore={koreanWebSocketStore}
+              foreignWebSocketStore={foreignWebSocketStore}
             />
           </CardContent>
         </Card>

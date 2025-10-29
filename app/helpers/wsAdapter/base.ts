@@ -2,17 +2,19 @@ import type {
   CandleBarData,
   TickerData,
   PositionData,
+  OrderBookData,
 } from "../../types/marketInfo";
 import { UppercaseExchangeType } from "../../types/exchange";
 import { BybitWebSocketAdapter } from "./bybit";
 import { GateioAdapter } from "./gateio";
 import { UpbitWebSocketAdapter } from "./upbit";
 import { BithumbWebSocketAdapter } from "./bithumb";
+import { BinanceWebSocketAdapter } from "./binance";
 
 export interface WebSocketAdapter {
   getResponseMessage(
     message: object
-  ): TickerData | CandleBarData | PositionData | null;
+  ): TickerData | CandleBarData | PositionData | OrderBookData | null;
   getRequestMessage(type: string, params: WebSocketParams): object | undefined;
 }
 
@@ -32,6 +34,8 @@ export class WebSocketAdapterFactory {
         return new BybitWebSocketAdapter();
       case UppercaseExchangeType.BITHUMB:
         return new BithumbWebSocketAdapter();
+      case UppercaseExchangeType.BINANCE:
+        return new BinanceWebSocketAdapter();
       default:
         throw new Error(`No adapter found for exchange: ${exchange}`);
     }

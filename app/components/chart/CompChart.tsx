@@ -4,6 +4,8 @@ import TickerInfoBar from "./TickerInfoBar";
 import CompTradingviewChart from "./CompTradingviewChart";
 import TimeSelector from "./TimeSelectorBox";
 import { useStore } from "zustand/react";
+import type { StoreApi } from "zustand";
+import type { WebSocketState } from "../../stores/chartState";
 
 interface CompChartProps {
   koreanEx: string;
@@ -16,6 +18,8 @@ interface CompChartProps {
     frExchange: string;
   }>;
   onSymbolChange?: (newSymbol: string) => void;
+  koreanWebSocketStore?: StoreApi<WebSocketState> | null;
+  foreignWebSocketStore?: StoreApi<WebSocketState> | null;
 }
 
 export const CompChart = ({
@@ -25,35 +29,33 @@ export const CompChart = ({
   interval,
   activePositions,
   onSymbolChange,
+  koreanWebSocketStore,
+  foreignWebSocketStore,
 }: CompChartProps) => {
-  const store1 = useMemo(
-    () =>
-      createWebSocketStore({
-        exchange: koreanEx,
-        symbol,
-        interval,
-      }),
-    [koreanEx, symbol, interval]
-  );
-  const store2 = useMemo(
-    () =>
-      createWebSocketStore({
-        exchange: foreignEx,
-        symbol,
-        interval,
-      }),
-    [foreignEx, symbol, interval]
-  );
+  const store1 =
+    koreanWebSocketStore ||
+    useMemo(
+      () =>
+        createWebSocketStore({
+          exchange: koreanEx,
+          symbol,
+          interval,
+        }),
+      [koreanEx, symbol, interval]
+    );
+  const store2 =
+    foreignWebSocketStore ||
+    useMemo(
+      () =>
+        createWebSocketStore({
+          exchange: foreignEx,
+          symbol,
+          interval,
+        }),
+      [foreignEx, symbol, interval]
+    );
 
-  useEffect(() => {
-    store1.getState().connectWebSocket();
-    store2.getState().connectWebSocket();
-    return () => {
-      console.log("CompChart unmounting, disconnecting websockets");
-      store1.getState().disconnectWebSocket();
-      store2.getState().disconnectWebSocket();
-    };
-  }, [store1, store2]);
+  // WebSocket 연결 관리는 상위 컴포넌트(dashboard)에서 처리하므로 제거
 
   // 아래와 같이 스토어로부터 동기화를 시켜야 CompTradingviewChart에 매개변수로 전달해줘서 티커, 봉이 바뀔 때에 CompTradingviewChart가 리렌더링될 수 있다.
   const storeSymbol = useStore(store1, (state) => state.symbol);

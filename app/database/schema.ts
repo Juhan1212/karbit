@@ -566,9 +566,6 @@ export const strategies = pgTable(
 
     // 고급 설정 (Premium 전용)
     aiMode: boolean("ai_mode").default(false), // boolean으로 변경
-    webhookEnabled: boolean("webhook_enabled").default(false),
-    telegramEnabled: boolean("telegram_enabled").default(false),
-    portfolioRebalancing: boolean("portfolio_rebalancing").default(false),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),

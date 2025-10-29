@@ -1,5 +1,5 @@
 import type { WebSocketAdapter, WebSocketParams } from "./base";
-import type { CandleBarData } from "../../types/marketInfo";
+import type { CandleBarData, OrderBookData } from "../../types/marketInfo";
 import { toUppercaseKRWSymbol } from "../common";
 
 export class BithumbWebSocketAdapter implements WebSocketAdapter {
@@ -19,7 +19,7 @@ export class BithumbWebSocketAdapter implements WebSocketAdapter {
         return [
           { ticket: "test" },
           {
-            type: `candle.${interval}`,
+            type: "orderbook",
             codes: symbols.map((symbol) => toUppercaseKRWSymbol(symbol)),
           },
           { format: "JSON_LIST" },
@@ -30,7 +30,7 @@ export class BithumbWebSocketAdapter implements WebSocketAdapter {
     }
   }
 
-  getResponseMessage(message: any) {
+  getResponseMessage(message: any): CandleBarData | OrderBookData | null {
     try {
       // 배열인지 확인하고, 첫 번째 요소가 존재하는지 확인
       if (
@@ -48,6 +48,31 @@ export class BithumbWebSocketAdapter implements WebSocketAdapter {
           close: Number(message[0].trade_price),
           volume: Number(message[0].candle_acc_trade_volume),
         } as CandleBarData;
+      } else if (message.type === "orderbook") {
+        const orderbookUnits = message.orderbook_units || [];
+        const bids: { price: number; amount: number; total: number }[] = [];
+        const asks: { price: number; amount: number; total: number }[] = [];
+
+        orderbookUnits.forEach((unit: any) => {
+          if (unit.bid_price && unit.bid_size) {
+            const price = Number(unit.bid_price);
+            const amount = Number(unit.bid_size);
+            bids.push({ price, amount, total: price * amount });
+          }
+          if (unit.ask_price && unit.ask_size) {
+            const price = Number(unit.ask_price);
+            const amount = Number(unit.ask_size);
+            asks.push({ price, amount, total: price * amount });
+          }
+        });
+
+        return {
+          channel: "orderbook",
+          symbol: message.code.replace("KRW-", ""),
+          bids,
+          asks,
+          timestamp: Date.now(),
+        } as OrderBookData;
       }
     } catch (error) {
       console.log("Bithumb adapter error - received message:", message);

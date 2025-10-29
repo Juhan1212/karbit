@@ -41,6 +41,7 @@ export default [
     "/api/user/telegram-notification",
     "routes/api.user.telegram-notification.ts"
   ),
+  route("/api/exchange-rate", "routes/api.exchange-rate.ts"),
   route("/terms-service", "routes/terms-service.tsx"),
   route("/privacy-policy", "routes/privacy-policy.tsx"),
   route("/community/posts/:postId", "routes/community.posts.$postId.tsx"),

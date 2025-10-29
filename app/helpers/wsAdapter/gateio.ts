@@ -1,5 +1,9 @@
 import type { WebSocketAdapter, WebSocketParams } from "./base";
-import type { CandleBarData, TickerData } from "../../types/marketInfo";
+import type {
+  CandleBarData,
+  TickerData,
+  OrderBookData,
+} from "../../types/marketInfo";
 
 interface GateioTickerData {
   contract: string;
@@ -60,6 +64,8 @@ export class GateioAdapter implements WebSocketAdapter {
           event: "subscribe",
           payload: [toFutureSymbol(params.symbol)],
         };
+      case "orderbook":
+        throw new Error("GATEIO does not support orderbook subscription");
       default:
         throw new Error(`Unknown request type: ${type}`);
     }

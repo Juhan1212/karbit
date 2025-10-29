@@ -184,6 +184,7 @@ export async function action({ request }: ActionFunctionArgs) {
     if (!frSellOrderResult) {
       throw new Error("해외 거래소 주문 정보를 조회할 수 없습니다.");
     }
+    console.log("해외 거래소 매도 주문 결과:", frSellOrderResult);
 
     // 결과 정리
     const krBuyOrder = krBuyOrderResult;

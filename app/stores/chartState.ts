@@ -8,6 +8,7 @@ import type {
   ExchangeType,
   PositionData,
   TickerData,
+  OrderBookData,
 } from "../types/marketInfo";
 import { UppercaseExchangeType, ExchangeInfoMap } from "../types/exchange";
 
@@ -15,7 +16,9 @@ interface WebSocketState {
   exchange: string;
   symbol: string;
   interval: string;
-  listeners: ((data: TickerData | CandleBarData | PositionData) => void)[];
+  listeners: ((
+    data: TickerData | CandleBarData | PositionData | OrderBookData
+  ) => void)[];
   pendingOperations: { type: string; params: WebSocketParams }[];
   socket: WebSocket | null;
   reconnectTimeout: NodeJS.Timeout | null;
@@ -26,10 +29,14 @@ interface WebSocketState {
   setSymbol: (symbol: string) => void;
   setInterval: (interval: string) => void;
   addMessageListener: (
-    listener: (data: TickerData | CandleBarData | PositionData) => void
+    listener: (
+      data: TickerData | CandleBarData | PositionData | OrderBookData
+    ) => void
   ) => void;
   removeMessageListener: (
-    listener: (data: TickerData | CandleBarData | PositionData) => void
+    listener: (
+      data: TickerData | CandleBarData | PositionData | OrderBookData
+    ) => void
   ) => void;
   sendMessage: (type: string, message: WebSocketParams) => void;
   connectWebSocket: () => void;
@@ -38,7 +45,11 @@ interface WebSocketState {
   unsubscribeFromTicker: (symbol: string) => void;
   subscribeToCandleBars: () => void;
   unsubscribeFromCandleBars: (symbol: string, interval: string) => void;
+  subscribeToOrderBook: (symbol: string) => void;
+  unsubscribeFromOrderBook: (symbol: string) => void;
 }
+
+export type { WebSocketState };
 
 const socketMap: Record<string, string> = {
   GATEIO: "wss://fx-ws.gateio.ws/v4/ws/usdt",
@@ -149,9 +160,16 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
 
         // 연결되면 kline 구독
         get().subscribeToCandleBars();
-        // 연결되면 ticker 구독 (해외 거래소만)
+        // 연결되면 orderbook 구독 (upbit, bithumb 제외 - kline과 함께 구독됨)
         const uppercaseExchange =
           exchange.toUpperCase() as UppercaseExchangeType;
+        if (
+          uppercaseExchange !== UppercaseExchangeType.UPBIT &&
+          uppercaseExchange !== UppercaseExchangeType.BITHUMB
+        ) {
+          get().subscribeToOrderBook(get().symbol);
+        }
+        // 연결되면 ticker 구독 (해외 거래소만)
         if (ExchangeInfoMap[uppercaseExchange]?.isForeign) {
           get().subscribeToTicker(get().symbol);
         }
@@ -254,6 +272,36 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
       //   action: "unsubscribe",
       //   channel: "futures.candlesticks",
       //   params: { symbol, interval },
+      // });
+    },
+
+    subscribeToOrderBook: (symbol) => {
+      if (!symbol) return;
+      const { exchange, sendMessage } = get();
+
+      // upbit, bithumb는 kline 구독 시 이미 orderbook도 함께 구독하므로 별도 구독 불필요
+      const uppercaseExchange = exchange.toUpperCase() as UppercaseExchangeType;
+      if (
+        uppercaseExchange === UppercaseExchangeType.UPBIT ||
+        uppercaseExchange === UppercaseExchangeType.BITHUMB
+      ) {
+        return;
+      }
+
+      sendMessage("orderbook", {
+        symbol,
+      });
+    },
+
+    // 구독 해제 지원하는 거래소만 가능
+    unsubscribeFromOrderBook: (symbol) => {
+      if (!symbol) return;
+      // const { sendMessage } = get();
+
+      // sendMessage({
+      //   action: "unsubscribe",
+      //   channel: "orderbook",
+      //   params: { symbol },
       // });
     },
   }));

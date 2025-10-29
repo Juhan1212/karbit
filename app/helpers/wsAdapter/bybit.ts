@@ -1,5 +1,9 @@
 import type { WebSocketAdapter, WebSocketParams } from "./base";
-import type { CandleBarData, TickerData } from "../../types/marketInfo";
+import type {
+  CandleBarData,
+  TickerData,
+  OrderBookData,
+} from "../../types/marketInfo";
 
 interface BybitKlineData {
   symbol: string;
@@ -21,9 +25,20 @@ interface BybitTickerData {
   [key: string]: unknown;
 }
 
+interface BybitOrderBookData {
+  s: string; // symbol
+  b: [string, string][]; // bids: [[price, amount], ...]
+  a: [string, string][]; // asks: [[price, amount], ...]
+  u: number; // update id
+  seq?: number; // sequence number
+}
+
 type BybitWebSocketMessage = {
   topic: string;
-  data: BybitKlineData | BybitTickerData;
+  data: BybitKlineData | BybitTickerData | BybitOrderBookData;
+  type?: "snapshot" | "delta"; // orderbook 메시지 타입
+  ts?: number; // timestamp
+  cts?: number; // client timestamp
   [key: string]: unknown;
 };
 
@@ -41,6 +56,8 @@ const interval_map = {
 };
 
 export class BybitWebSocketAdapter implements WebSocketAdapter {
+  // symbol별 orderbook 상태 관리
+  private orderBookStates: Map<string, OrderBookData> = new Map();
   getRequestMessage(type: string, params: WebSocketParams) {
     if (!params.symbol) {
       throw new Error("티커를 지정해야 합니다.");
@@ -63,6 +80,12 @@ export class BybitWebSocketAdapter implements WebSocketAdapter {
           args: [`tickers.${params.symbol}USDT`],
         };
       }
+      case "orderbook": {
+        return {
+          op: "subscribe",
+          args: [`orderbook.50.${params.symbol}USDT`],
+        };
+      }
       default:
         throw new Error(`Unknown request type: ${type}`);
     }
@@ -70,7 +93,7 @@ export class BybitWebSocketAdapter implements WebSocketAdapter {
 
   getResponseMessage(
     message: BybitWebSocketMessage
-  ): CandleBarData | TickerData | null {
+  ): CandleBarData | TickerData | OrderBookData | null {
     if (message.topic && message.data) {
       if (message.topic.startsWith("kline.")) {
         let d = message.data as BybitKlineData | BybitKlineData[];
@@ -97,6 +120,121 @@ export class BybitWebSocketAdapter implements WebSocketAdapter {
           mark_price: d.markPrice ?? d.lastPrice,
           index_price: d.indexPrice,
         } as TickerData;
+      } else if (message.topic.startsWith("orderbook.")) {
+        const d = message.data as BybitOrderBookData;
+        const symbol = d.s.replace(/USDT$/, ""); // data.s에서 심볼 가져와서 USDT 제거
+        const messageType = message.type || "snapshot"; // message.type에서 타입 가져오기
+
+        // 현재 저장된 orderbook 상태 가져오기
+        let currentOrderBook = this.orderBookStates.get(symbol);
+
+        if (messageType === "snapshot") {
+          // snapshot: 전체 orderbook 교체
+          const bids = d.b.map(([price, amount]) => ({
+            price: Number(price),
+            amount: Number(amount),
+            total: Number(price) * Number(amount),
+          }));
+
+          const asks = d.a.map(([price, amount]) => ({
+            price: Number(price),
+            amount: Number(amount),
+            total: Number(price) * Number(amount),
+          }));
+
+          currentOrderBook = {
+            channel: "orderbook",
+            symbol,
+            bids,
+            asks,
+            timestamp: Date.now(),
+          } as OrderBookData;
+        } else if (messageType === "delta" && currentOrderBook) {
+          // delta: 기존 상태 업데이트
+          const updatedBids = [...currentOrderBook.bids];
+          const updatedAsks = [...currentOrderBook.asks];
+
+          // bids 업데이트
+          d.b.forEach(([priceStr, amountStr]) => {
+            const price = Number(priceStr);
+            const amount = Number(amountStr);
+
+            if (amount === 0) {
+              // amount가 0이면 삭제
+              const index = updatedBids.findIndex((bid) => bid.price === price);
+              if (index !== -1) {
+                updatedBids.splice(index, 1);
+              }
+            } else {
+              // amount가 0이 아니면 업데이트 또는 추가
+              const existingIndex = updatedBids.findIndex(
+                (bid) => bid.price === price
+              );
+              const newBid = {
+                price,
+                amount,
+                total: price * amount,
+              };
+
+              if (existingIndex !== -1) {
+                updatedBids[existingIndex] = newBid;
+              } else {
+                updatedBids.push(newBid);
+              }
+            }
+          });
+
+          // asks 업데이트
+          d.a.forEach(([priceStr, amountStr]) => {
+            const price = Number(priceStr);
+            const amount = Number(amountStr);
+
+            if (amount === 0) {
+              // amount가 0이면 삭제
+              const index = updatedAsks.findIndex((ask) => ask.price === price);
+              if (index !== -1) {
+                updatedAsks.splice(index, 1);
+              }
+            } else {
+              // amount가 0이 아니면 업데이트 또는 추가
+              const existingIndex = updatedAsks.findIndex(
+                (ask) => ask.price === price
+              );
+              const newAsk = {
+                price,
+                amount,
+                total: price * amount,
+              };
+
+              if (existingIndex !== -1) {
+                updatedAsks[existingIndex] = newAsk;
+              } else {
+                updatedAsks.push(newAsk);
+              }
+            }
+          });
+
+          // 정렬 유지 (bids: 가격 내림차순, asks: 가격 오름차순)
+          updatedBids.sort((a, b) => b.price - a.price);
+          updatedAsks.sort((a, b) => a.price - b.price);
+
+          currentOrderBook = {
+            ...currentOrderBook,
+            bids: updatedBids,
+            asks: updatedAsks,
+            timestamp: Date.now(),
+          };
+        } else if (messageType === "delta" && !currentOrderBook) {
+          // delta인데 기존 상태가 없으면 무시 (snapshot부터 시작해야 함)
+          return null;
+        }
+
+        // 상태 저장
+        if (currentOrderBook) {
+          this.orderBookStates.set(symbol, currentOrderBook);
+        }
+
+        return currentOrderBook || null;
       }
     }
     return null;

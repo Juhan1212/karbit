@@ -5,6 +5,7 @@ import type {
   CandleBarData,
   PositionData,
   TickerData,
+  OrderBookData,
 } from "../../types/marketInfo";
 import type { CryptoOption } from "../../stores/cryptoOptionState";
 import { useCryptoOptionsStore } from "../../stores/cryptoOptionState";
@@ -60,8 +61,9 @@ const TickerInfoBar = memo(
     };
 
     const handleMessage = useCallback(
-      (data: TickerData | CandleBarData | PositionData) => {
-        if (data.channel === "futures.tickers") {
+      (data: TickerData | CandleBarData | PositionData | OrderBookData) => {
+        // OrderBookData는 무시
+        if ("channel" in data && data.channel === "futures.tickers") {
           const t = data as TickerData;
           settickerData((prev) => ({
             ...prev,

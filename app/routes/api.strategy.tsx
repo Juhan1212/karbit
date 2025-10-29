@@ -66,10 +66,9 @@ export async function action({ request }: ActionFunctionArgs) {
         const strategyData: CreateStrategyData = {
           name: `자동매매 전략 ${new Date().toLocaleString("ko-KR")}`,
           seedAmount: parseFloat(formData.get("seedAmount")?.toString() || "0"),
-          coinMode: (formData.get("coinMode")?.toString() || "manual") as
-            | "manual"
-            | "popular"
-            | "all",
+          coinMode: (formData.get("coinMode")?.toString() === "auto"
+            ? "auto"
+            : "custom") as "custom" | "auto",
           selectedCoins: JSON.parse(
             formData.get("selectedCoins")?.toString() || "[]"
           ),
@@ -82,10 +81,6 @@ export async function action({ request }: ActionFunctionArgs) {
           allowAverageDown: formData.get("allowAverageDown") === "true",
           allowAverageUp: formData.get("allowAverageUp") === "true",
           aiMode: formData.get("aiMode") === "true",
-          webhookEnabled: formData.get("webhookEnabled") === "true",
-          telegramEnabled: formData.get("telegramEnabled") === "true",
-          backtestPeriod: formData.get("backtestPeriod")?.toString() || "3m",
-          portfolioRebalancing: formData.get("portfolioRebalancing") === "true",
           tradeMode: (formData.get("tradeMode")?.toString() || "custom") as
             | "custom"
             | "auto",
@@ -145,10 +140,9 @@ export async function action({ request }: ActionFunctionArgs) {
         const strategyData: CreateStrategyData = {
           name: `자동매매 전략 ${new Date().toLocaleString("ko-KR")} (수정됨)`,
           seedAmount: parseFloat(formData.get("seedAmount")?.toString() || "0"),
-          coinMode: (formData.get("coinMode")?.toString() || "manual") as
-            | "manual"
-            | "popular"
-            | "all",
+          coinMode: (formData.get("coinMode")?.toString() === "auto"
+            ? "auto"
+            : "custom") as "custom" | "auto",
           selectedCoins: JSON.parse(
             formData.get("selectedCoins")?.toString() || "[]"
           ),
@@ -161,10 +155,6 @@ export async function action({ request }: ActionFunctionArgs) {
           allowAverageDown: formData.get("allowAverageDown") === "true",
           allowAverageUp: formData.get("allowAverageUp") === "true",
           aiMode: formData.get("aiMode") === "true",
-          webhookEnabled: formData.get("webhookEnabled") === "true",
-          telegramEnabled: formData.get("telegramEnabled") === "true",
-          backtestPeriod: formData.get("backtestPeriod")?.toString() || "3m",
-          portfolioRebalancing: formData.get("portfolioRebalancing") === "true",
           tradeMode: (formData.get("tradeMode")?.toString() || "custom") as
             | "custom"
             | "auto",
