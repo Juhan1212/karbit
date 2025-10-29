@@ -31,30 +31,51 @@ export async function sendTelegramMessage(
   message: string,
   parseMode: "Markdown" | "HTML" = "HTML"
 ): Promise<boolean> {
-  try {
-    const response = await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: message,
-        parse_mode: parseMode,
-      }),
-    });
+  const maxRetries = 3;
+  const timeoutMs = 10000;
 
-    const data = await response.json();
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!data.ok) {
-      console.error("텔레그램 메시지 전송 실패:", data);
-      return false;
+      const response = await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: parseMode,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      const data = await response.json();
+
+      if (data.ok) {
+        console.log(`✅ 텔레그램 메시지 전송 성공 (chat_id: ${chatId})`);
+        return true;
+      } else {
+        console.error(
+          `텔레그램 API 에러 (시도 ${attempt}/${maxRetries}):`,
+          data
+        );
+      }
+    } catch (error) {
+      console.error(
+        `텔레그램 메시지 전송 에러 (시도 ${attempt}/${maxRetries}):`,
+        error
+      );
     }
 
-    console.log(`✅ 텔레그램 메시지 전송 성공 (chat_id: ${chatId})`);
-    return true;
-  } catch (error) {
-    console.error("텔레그램 메시지 전송 에러:", error);
-    return false;
+    // 재시도 전 대기
+    if (attempt < maxRetries) {
+      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+    }
   }
+
+  return false;
 }
 
 /**
