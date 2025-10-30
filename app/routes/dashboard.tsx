@@ -28,6 +28,7 @@ import {
   TrendingDown,
   Crown,
   Minus,
+  ExternalLink,
 } from "lucide-react";
 import PremiumTicker from "../components/premium-ticker";
 import { getUserCurrentPlan } from "~/database/plan";
@@ -45,6 +46,7 @@ import {
   KoreanExchangeType,
   LowercaseExchangeType,
 } from "~/types/exchange";
+import { useDashboardStore } from "~/stores/dashboard-store";
 
 export function meta() {
   return [
@@ -188,6 +190,12 @@ export default function Dashboard() {
   const user = useUser();
   const isLoading = useIsLoading();
   const loaderData = useLoaderData<typeof loader>();
+  const {
+    setCurrentExchangeRate,
+    setLegalExchangeRate,
+    setActivePositionCount,
+    setKimchiPremiumData,
+  } = useDashboardStore();
 
   const {
     activePositions: rawActivePositions,
@@ -212,12 +220,12 @@ export default function Dashboard() {
   // ActivePositionManagement를 위한 상태 변수들
   const [polledActivePositions, setPolledActivePositions] = useState<any[]>([]);
   const [isLoadingPositions, setIsLoadingPositions] = useState(false);
-  const [currentExchangeRate, setCurrentExchangeRate] = useState<number | null>(
-    null
-  );
+  const [currentExchangeRate, setCurrentExchangeRateLocal] = useState<
+    number | null
+  >(null);
 
   // 법정화폐 환율 상태 (USD/KRW)
-  const [legalExchangeRate, setLegalExchangeRate] = useState<{
+  const [legalExchangeRate, setLegalExchangeRateLocal] = useState<{
     currency: string;
     rate: number | null;
     changeText: string;
@@ -309,7 +317,7 @@ export default function Dashboard() {
     }));
   }, [rawActivePositions]);
 
-  const [activePositionCount, setActivePositionCount] = useState(
+  const [activePositionCount, setActivePositionCountLocal] = useState(
     initialActivePositionCount
   );
 
@@ -426,7 +434,7 @@ export default function Dashboard() {
           // 변경된 경우에만 상태 업데이트
           if (positionsChanged) {
             setPolledActivePositions(transformedPositions);
-            setActivePositionCount(data.activePositionCount);
+            setActivePositionCountLocal(data.activePositionCount);
             polledActivePositionsRef.current = transformedPositions;
             activePositionCountRef.current = data.activePositionCount;
           }
@@ -479,7 +487,7 @@ export default function Dashboard() {
     const updateExchangeRate = async () => {
       try {
         const rate = await fetchUpbitRate();
-        setCurrentExchangeRate(rate);
+        setCurrentExchangeRateLocal(rate);
         retryCount = 0; // 성공 시 재시도 카운터 초기화
       } catch (error) {
         console.error("환율 업데이트 오류:", error);
@@ -497,7 +505,7 @@ export default function Dashboard() {
     };
 
     // 초기 환율 조회
-    fetchUpbitRate().then(setCurrentExchangeRate).catch(console.error);
+    fetchUpbitRate().then(setCurrentExchangeRateLocal).catch(console.error);
 
     // 1초 간격으로 폴링 시작
     exchangeRateIntervalRef.current = setInterval(updateExchangeRate, 1000);
@@ -539,7 +547,7 @@ export default function Dashboard() {
         const response = await fetch("/api/exchange-rate");
         if (response.ok) {
           const data = await response.json();
-          setLegalExchangeRate(data);
+          setLegalExchangeRateLocal(data);
         } else {
           console.error("Failed to fetch legal exchange rate");
         }
@@ -672,6 +680,23 @@ export default function Dashboard() {
     }
   }, [user, isLoading, navigate]);
 
+  // 데이터 변경 시 store에 저장
+  useEffect(() => {
+    setCurrentExchangeRate(currentExchangeRate);
+  }, [currentExchangeRate, setCurrentExchangeRate]);
+
+  useEffect(() => {
+    setLegalExchangeRate(legalExchangeRate);
+  }, [legalExchangeRate, setLegalExchangeRate]);
+
+  useEffect(() => {
+    setActivePositionCount(activePositionCount);
+  }, [activePositionCount, setActivePositionCount]);
+
+  useEffect(() => {
+    setKimchiPremiumData(kimchiPremiumData);
+  }, [kimchiPremiumData, setKimchiPremiumData]);
+
   // 로딩 중일 때
   if (isLoading) {
     return (
@@ -696,13 +721,13 @@ export default function Dashboard() {
         <div>
           <h1>김치 프리미엄 대시보드</h1>
           <p className="text-muted-foreground">
-            {user.name ? `${user.name}님, ` : ""}실시간 환율 모니터링 및
-            자동매매 현황
+            {user.name ? `${user.name}님, ` : ""} 반갑습니다!
           </p>
         </div>
         <Button
           variant="outline"
           size="sm"
+          className="hidden lg:inline-flex"
           onClick={() => {
             window.location.reload();
           }}
@@ -712,17 +737,127 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Live Status Indicator */}
-      <div className="flex items-center gap-2 text-sm">
-        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-        <span className="text-muted-foreground">실시간 데이터 업데이트 중</span>
-        <span className="text-xs text-muted-foreground">
-          • 마지막 업데이트: 방금 전
-        </span>
+      {/* Key Metrics */}
+      {/* Mobile: Featured Profit Cards - 나란히 배치 */}
+      <div className="grid grid-cols-2 gap-4 lg:hidden">
+        {/* Mobile: Featured Daily Profit Card */}
+        <Card className="bg-gradient-to-br from-yellow-900/20 to-yellow-800/10 border-yellow-800/30">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-yellow-900/50 rounded-lg flex items-center justify-center">
+                  {dailyProfit >= 0 ? (
+                    <TrendingUp className="w-4 h-4 text-yellow-300" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-yellow-300" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">일일 수익</div>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs text-yellow-300 bg-yellow-900/50 mt-1"
+                  >
+                    오늘
+                  </Badge>
+                </div>
+              </div>
+            </div>
+            <div
+              className={`text-2xl font-bold mb-1 ${dailyProfit >= 0 ? "text-green-400" : "text-red-400"}`}
+            >
+              {dailyProfit >= 0 ? "+" : ""}₩{dailyProfit.toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              오늘 종료된 거래
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Mobile: Featured Total Profit Card */}
+        <Card className="bg-gradient-to-br from-blue-900/20 to-blue-800/10 border-blue-800/30">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-900/50 rounded-lg flex items-center justify-center">
+                  {(tradingStats?.totalProfit || 0) >= 0 ? (
+                    <TrendingUp className="w-4 h-4 text-blue-300" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-blue-300" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">누적 수익</div>
+                  <Badge
+                    variant="secondary"
+                    className="text-xs text-blue-300 bg-blue-900/50 mt-1"
+                  >
+                    전체
+                  </Badge>
+                </div>
+              </div>
+            </div>
+            <div
+              className={`text-2xl font-bold mb-1 ${(tradingStats?.totalProfit || 0) >= 0 ? "text-green-400" : "text-red-400"}`}
+            >
+              {(tradingStats?.totalProfit || 0) >= 0 ? "+" : ""}₩
+              {(tradingStats?.totalProfit || 0).toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground">전체 거래 수익</div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Key Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 lg:gap-4">
+      {/* Mobile: Exchange Balances Card */}
+      <Card className="lg:hidden">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Crown className="w-4 h-4 text-purple-400" />
+            연동거래소 주문가능금액
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {exchangeBalances && exchangeBalances.length > 0 ? (
+            <div className="space-y-3">
+              {exchangeBalances.map((exchange: any) => (
+                <div
+                  key={exchange.exchangeName}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{exchange.icon}</span>
+                    <span className="font-medium">{exchange.exchangeName}</span>
+                  </div>
+                  <div className="text-right">
+                    {exchange.error ? (
+                      <span className="text-red-500 text-xs leading-tight">
+                        연결 오류
+                      </span>
+                    ) : (
+                      <div className="font-bold text-lg">
+                        {formatCurrency(
+                          exchange.availableBalance,
+                          exchange.currency
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
+                <Crown className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <div className="text-sm text-muted-foreground">연동 후 확인</div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Desktop: Original Grid Layout */}
+      <div className="hidden lg:grid lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <div className="relative flex items-center justify-between mb-2">
@@ -740,9 +875,6 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* <div className="w-10 h-10 bg-green-900 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-green-300" />
-            </div> */}
             <div className="text-xl lg:text-2xl">₩{currentExchangeRate}</div>
             <div
               className={`flex items-center gap-1 text-xs ${kimchiPremiumData.isHigher ? "text-green-600" : "text-red-600"}`}
@@ -765,7 +897,7 @@ export default function Dashboard() {
           <CardHeader className="pb-2">
             <div className="relative flex items-center justify-between mb-2">
               <CardTitle className="text-lg font-semibold">
-                법정화폐 환율 (USD/KRW)
+                네이버 환율 (USD/KRW)
               </CardTitle>
               <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
                 <Badge
@@ -817,11 +949,6 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              {/* <div className="w-10 h-10 bg-blue-900 rounded-lg flex items-center justify-center">
-                <RefreshCw className="w-5 h-5 text-blue-300" />
-              </div> */}
-            </div>
             <div className="text-xl lg:text-2xl">{activePositionCount}</div>
             <div className="text-xs text-muted-foreground">
               {activePositionCount > 0 ? "진행중" : "없음"}
@@ -844,15 +971,6 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              {/* <div className="w-10 h-10 bg-yellow-900 rounded-lg flex items-center justify-center">
-                {dailyProfit >= 0 ? (
-                  <TrendingUp className="w-5 h-5 text-yellow-300" />
-                ) : (
-                  <TrendingDown className="w-5 h-5 text-yellow-300" />
-                )}
-              </div> */}
-            </div>
             <div className="text-xl lg:text-2xl">
               {dailyProfit >= 0 ? "+" : ""}₩{dailyProfit.toLocaleString()}
             </div>
@@ -864,28 +982,15 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-2 lg:col-span-1">
+        <Card>
           <CardHeader className="pb-2">
             <div className="relative flex items-center justify-between mb-2">
               <CardTitle className="text-lg font-semibold">
                 연동거래소 주문가능금액
               </CardTitle>
-              {/* <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
-                <Badge
-                  variant="outline"
-                  className="text-xs text-purple-300 bg-purple-900"
-                >
-                  전체
-                </Badge>
-              </div> */}
             </div>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              {/* <div className="w-10 h-10 bg-purple-900 rounded-lg flex items-center justify-center">
-                <Crown className="w-5 h-5 text-purple-300" />
-              </div> */}
-            </div>
             {exchangeBalances && exchangeBalances.length > 0 ? (
               <div className="space-y-2">
                 {exchangeBalances.map((exchange: any) => (
@@ -928,8 +1033,28 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Active Position Management - Full width section */}
+      <ActivePositionManagement
+        positions={polledActivePositions}
+        isLoading={isLoadingPositions}
+        currentExchangeRate={currentExchangeRate || 1300}
+        onPositionClose={(coinSymbol) => {
+          // 포지션 종료 후 새로고침 (로딩 표시)
+          pollActivePositions(true);
+        }}
+        onTickerSelect={(coinSymbol: string) => {
+          // 티커 선택 시 차트 업데이트
+          setSelectedTicker(coinSymbol);
+        }}
+      />
+
       {/* TradingView Widget - Upbit USDTKRW 5분봉 */}
       <div className="my-6">
+        {/* Live Status Indicator */}
+        <div className="flex items-center gap-2 text-sm">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span className="text-muted-foreground">테더 실시간 차트</span>
+        </div>
         <div className="rounded-xl border-2 border-border bg-card p-0 overflow-hidden">
           <iframe
             src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_1&symbol=UPBIT:USDTKRW&interval=5&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=f1f3f6&studies=[]&theme=dark&style=1&timezone=Asia/Seoul&withdateranges=1&hidevolume=0&hidelegend=0&showpopupbutton=1&popupwidth=1000&popupheight=650"
@@ -1118,30 +1243,15 @@ export default function Dashboard() {
         legalExchangeRate={legalExchangeRate?.rate}
       />
 
-      {/* Active Position Management - Full width section */}
-      <ActivePositionManagement
-        positions={polledActivePositions}
-        isLoading={isLoadingPositions}
-        currentExchangeRate={currentExchangeRate || 1300}
-        onPositionClose={(coinSymbol) => {
-          // 포지션 종료 후 새로고침 (로딩 표시)
-          pollActivePositions(true);
-        }}
-        onTickerSelect={(coinSymbol: string) => {
-          // 티커 선택 시 차트 업데이트
-          setSelectedTicker(coinSymbol);
-        }}
-      />
-
       {/* Exchange Rate Chart - Only show when there are active positions */}
-      {activePositionCount > 0 && (
+      {/* {activePositionCount > 0 && (
         <Card>
           <CardHeader>
             <div className="relative flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2 text-lg font-semibold">
                   <TrendingUp className="w-5 h-5" />
-                  실시간 현재 포지션 환율 차트
+                  현재 포지션 실시간 환율 차트
                 </CardTitle>
               </div>
               <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
@@ -1176,15 +1286,15 @@ export default function Dashboard() {
             />
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* No Active Positions Message */}
-      {activePositionCount === 0 && (
+      {/* {activePositionCount === 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg font-semibold">
               <TrendingUp className="w-5 h-5" />
-              실시간 현재 포지션 환율 차트
+              현재 포지션 실시간 환율 차트
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -1192,16 +1302,18 @@ export default function Dashboard() {
               <div className="w-16 h-16 mb-4 rounded-full bg-muted flex items-center justify-center">
                 <TrendingUp className="w-8 h-8 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-medium mb-2">
-                현재 활성화된 포지션이 없습니다
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                *자동매매 페이지에서 설정을 완료한 후 자동매매를 활성화해보세요.
+              <h3 className="text-lg font-medium mb-2">포지션이 없습니다</h3>
+              <p
+                className="text-sm text-blue-500 hover:text-blue-600 cursor-pointer hover:underline underline-offset-2 transition-all duration-200 flex items-center gap-1"
+                onClick={() => navigate("/autotrading")}
+              >
+                <ExternalLink className="w-3 h-3" />
+                자동매매를 실행해보세요.
               </p>
             </div>
           </CardContent>
         </Card>
-      )}
+      )} */}
 
       {/* Trading Statistics */}
       <TradingStats

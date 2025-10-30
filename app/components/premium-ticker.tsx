@@ -480,10 +480,10 @@ const PremiumTicker = React.memo(
             </div>
             <CardDescription>
               <span className="text-sm text-muted-foreground/80 block">
-                💡 karbit에서 제공하는 실시간 환율과 오차가 있을 수 있습니다.
+                💡 실시간 환율과 오차가 있을 수 있습니다.
               </span>
               <span className="text-sm text-muted-foreground/80 block">
-                💡 리스트를 클릭하면, 호가창 반영 실시간 환율주문이 가능합니다
+                💡 리스트를 클릭하면, 실시간 환율주문이 가능합니다
               </span>
             </CardDescription>
           </CardHeader>

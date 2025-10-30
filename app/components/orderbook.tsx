@@ -19,9 +19,18 @@ interface OrderBookEntry {
 const calculateAveragePrice = (
   entries: OrderBookEntry[],
   orderAmount: number,
-  type: "ask" | "bid"
+  type: "ask" | "bid",
+  isKoreanExchange: boolean,
+  tetherPrice?: number | null
 ): number => {
   if (!entries.length || !orderAmount) return 0;
+
+  // 해외거래소의 경우 orderAmount를 USDT로 변환 (KRW 기준 orderAmount를 tetherPrice로 나누어 USDT 금액 계산)
+  const effectiveOrderAmount = isKoreanExchange
+    ? orderAmount
+    : tetherPrice
+      ? orderAmount / tetherPrice
+      : orderAmount;
 
   // 정렬: ask는 가격 오름차순 (최저가부터), bid는 가격 내림차순 (최고가부터)
   const sortedEntries = [...entries].sort((a, b) => {
@@ -30,12 +39,12 @@ const calculateAveragePrice = (
 
   let totalValue = 0;
   let totalAmount = 0;
-  let remainingAmount = orderAmount;
+  let remainingAmount = effectiveOrderAmount;
 
   for (const entry of sortedEntries) {
     if (remainingAmount <= 0) break;
 
-    const useAmount = Math.min(remainingAmount, entry.amount);
+    const useAmount = Math.min(remainingAmount, entry.total);
     totalValue += entry.price * useAmount;
     totalAmount += useAmount;
     remainingAmount -= useAmount;
@@ -51,8 +60,9 @@ const OrderBookRow = memo<{
   entry: OrderBookEntry;
   maxTotal: number;
   type: "bid" | "ask";
+  exchange: string;
   onSelect: (entry: OrderBookEntry) => void;
-}>(({ entry, maxTotal, type, onSelect }) => {
+}>(({ entry, maxTotal, type, exchange, onSelect }) => {
   const percentage = (entry.total / maxTotal) * 100;
   const isAsk = type === "ask";
 
@@ -76,7 +86,10 @@ const OrderBookRow = memo<{
         <div
           className={`font-mono ${isAsk ? "text-red-400" : "text-green-400"}`}
         >
-          {entry.price.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}
+          {entry.price.toLocaleString("ko-KR", {
+            maximumFractionDigits: 10,
+            minimumFractionDigits: 0,
+          })}
         </div>
         <div className="text-white font-mono text-right">
           {entry.amount.toFixed(4)}
@@ -101,6 +114,7 @@ interface RealtimeOrderBookProps {
   title?: string;
   orderAmount?: number; // 주문금액
   onAveragePriceUpdate?: (averagePrice: number) => void; // 평균 가격 업데이트 콜백
+  tetherPrice?: number | null; // 테더 가격 (USDT/KRW 환율)
 }
 
 export default function RealtimeOrderBook({
@@ -110,6 +124,7 @@ export default function RealtimeOrderBook({
   title = "실시간 오더북",
   orderAmount,
   onAveragePriceUpdate,
+  tetherPrice,
 }: RealtimeOrderBookProps) {
   const [orderBook, setOrderBook] = useState<OrderBookData>({
     bids: [],
@@ -156,7 +171,7 @@ export default function RealtimeOrderBook({
           // 평균 가격 계산 및 콜백 호출
           if (orderAmount && onAveragePriceUpdate) {
             const isKoreanExchange =
-              exchange === "bithumb" || exchange === "upbit";
+              exchange === "빗썸" || exchange === "업비트";
             const type = isKoreanExchange ? "ask" : "bid";
             const entries = isKoreanExchange
               ? pendingUpdateRef.current.asks
@@ -164,7 +179,9 @@ export default function RealtimeOrderBook({
             const averagePrice = calculateAveragePrice(
               entries,
               orderAmount,
-              type
+              type,
+              isKoreanExchange,
+              tetherPrice
             );
             onAveragePriceUpdate(averagePrice);
           }
@@ -246,7 +263,10 @@ export default function RealtimeOrderBook({
               <div className="text-slate-400 text-xs mb-1">최고 매수가</div>
               <div className="text-green-400 font-bold text-sm">
                 {orderBook.bids[0]
-                  ? orderBook.bids[0].price.toLocaleString()
+                  ? orderBook.bids[0].price.toLocaleString("ko-KR", {
+                      maximumFractionDigits: 10,
+                      minimumFractionDigits: 0,
+                    })
                   : "-"}
               </div>
             </div>
@@ -254,7 +274,11 @@ export default function RealtimeOrderBook({
             <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
               <div className="text-slate-400 text-xs mb-1">스프레드</div>
               <div className="text-yellow-400 font-bold text-sm">
-                {spread.toLocaleString()} ({spreadPercent.toFixed(3)}%)
+                {spread.toLocaleString("ko-KR", {
+                  maximumFractionDigits: 10,
+                  minimumFractionDigits: 0,
+                })}{" "}
+                ({spreadPercent.toFixed(3)}%)
               </div>
             </div>
 
@@ -262,7 +286,10 @@ export default function RealtimeOrderBook({
               <div className="text-slate-400 text-xs mb-1">최저 매도가</div>
               <div className="text-red-400 font-bold text-sm">
                 {orderBook.asks[0]
-                  ? orderBook.asks[0].price.toLocaleString()
+                  ? orderBook.asks[0].price.toLocaleString("ko-KR", {
+                      maximumFractionDigits: 10,
+                      minimumFractionDigits: 0,
+                    })
                   : "-"}
               </div>
             </div>
@@ -273,7 +300,10 @@ export default function RealtimeOrderBook({
         <div className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
           {/* 테이블 헤더 */}
           <div className="grid grid-cols-3 gap-2 px-4 py-2 bg-slate-900/50 border-b border-slate-700 text-xs font-medium text-slate-400">
-            <div>가격(KRW)</div>
+            <div>
+              가격(
+              {exchange === "빗썸" || exchange === "업비트" ? "KRW" : "USDT"})
+            </div>
             <div className="text-right">수량</div>
             <div className="text-right">총액</div>
           </div>
@@ -283,34 +313,16 @@ export default function RealtimeOrderBook({
             {orderBook.asks
               .slice(0, 10)
               .reverse()
-              .map((ask, index) => {
-                const percentage = (ask.total / maxTotal) * 100;
-                return (
-                  <div
-                    key={`ask-${index}`}
-                    className="relative cursor-pointer hover:bg-red-500/5 transition-colors"
-                    onClick={() => setSelectedEntry(ask)}
-                  >
-                    <div
-                      className="absolute right-0 top-0 h-full bg-red-500/10 transition-all duration-300"
-                      style={{ width: `${percentage}%` }}
-                    />
-                    <div className="relative grid grid-cols-3 gap-2 px-4 py-1.5 text-sm">
-                      <div className="text-red-400 font-mono">
-                        {ask.price.toLocaleString()}
-                      </div>
-                      <div className="text-white font-mono text-right">
-                        {ask.amount.toFixed(4)}
-                      </div>
-                      <div className="text-slate-400 font-mono text-right text-xs">
-                        {ask.total.toLocaleString("ko-KR", {
-                          maximumFractionDigits: 0,
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              .map((ask, index) => (
+                <OrderBookRow
+                  key={`ask-${index}`}
+                  entry={ask}
+                  maxTotal={maxTotal}
+                  type="ask"
+                  exchange={exchange}
+                  onSelect={setSelectedEntry}
+                />
+              ))}
           </div>
 
           {/* 현재가 구분선 */}
@@ -321,41 +333,26 @@ export default function RealtimeOrderBook({
             </div>
             <div className="text-white font-bold text-lg font-mono">
               {orderBook.bids[0]
-                ? orderBook.bids[0].price.toLocaleString()
+                ? orderBook.bids[0].price.toLocaleString("ko-KR", {
+                    maximumFractionDigits: 10,
+                    minimumFractionDigits: 0,
+                  })
                 : "-"}
             </div>
           </div>
 
           {/* 매수 호가 (Bids) */}
           <div className="space-y-0.5 py-2">
-            {orderBook.bids.slice(0, 10).map((bid, index) => {
-              const percentage = (bid.total / maxTotal) * 100;
-              return (
-                <div
-                  key={`bid-${index}`}
-                  className="relative cursor-pointer hover:bg-green-500/5 transition-colors"
-                  onClick={() => setSelectedEntry(bid)}
-                >
-                  <div
-                    className="absolute right-0 top-0 h-full bg-green-500/10 transition-all duration-300"
-                    style={{ width: `${percentage}%` }}
-                  />
-                  <div className="relative grid grid-cols-3 gap-2 px-4 py-1.5 text-sm">
-                    <div className="text-green-400 font-mono">
-                      {bid.price.toLocaleString()}
-                    </div>
-                    <div className="text-white font-mono text-right">
-                      {bid.amount.toFixed(4)}
-                    </div>
-                    <div className="text-slate-400 font-mono text-xs text-right">
-                      {bid.total.toLocaleString("ko-KR", {
-                        maximumFractionDigits: 0,
-                      })}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {orderBook.bids.slice(0, 10).map((bid, index) => (
+              <OrderBookRow
+                key={`bid-${index}`}
+                entry={bid}
+                maxTotal={maxTotal}
+                type="bid"
+                exchange={exchange}
+                onSelect={setSelectedEntry}
+              />
+            ))}
           </div>
         </div>
 
@@ -366,7 +363,13 @@ export default function RealtimeOrderBook({
               <div>
                 <div className="text-slate-400 text-xs mb-1">선택된 호가</div>
                 <div className="text-white font-bold text-lg">
-                  {selectedEntry.price.toLocaleString()} KRW
+                  {selectedEntry.price.toLocaleString("ko-KR", {
+                    maximumFractionDigits: 10,
+                    minimumFractionDigits: 0,
+                  })}{" "}
+                  {exchange === "빗썸" || exchange === "업비트"
+                    ? "KRW"
+                    : "USDT"}
                 </div>
               </div>
               <div>
@@ -382,7 +385,13 @@ export default function RealtimeOrderBook({
                   총액
                 </div>
                 <div className="text-slate-300 font-bold text-lg">
-                  {selectedEntry.total.toLocaleString()} KRW
+                  {selectedEntry.total.toLocaleString("ko-KR", {
+                    maximumFractionDigits: 10,
+                    minimumFractionDigits: 0,
+                  })}{" "}
+                  {exchange === "빗썸" || exchange === "업비트"
+                    ? "KRW"
+                    : "USDT"}
                 </div>
               </div>
               <button

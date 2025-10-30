@@ -247,9 +247,7 @@ export const ActivePositionManagement = React.memo(
         </CardHeader>
         <CardContent>
           {positions.length === 0 ? (
-            <div className="text-center py-4">
-              현재 활성화된 포지션이 없습니다.
-            </div>
+            <div className="text-center py-4">포지션이 없습니다.</div>
           ) : (
             <>
               {/* 전체 요약 테이블 */}

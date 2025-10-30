@@ -4,8 +4,11 @@ import { AppSidebar } from "../components/app-sidebar";
 import { Toaster } from "../components/sonner";
 import { Button } from "../components/button";
 import { Sheet, SheetContent, SheetTrigger } from "../components/sheet";
-import { Menu } from "lucide-react";
+import { Card } from "../components/card";
+import { Badge } from "../components/badge";
+import { Menu, TrendingUp, TrendingDown } from "lucide-react";
 import { useUser, useIsLoading, useAuthActions } from "~/stores";
+import { useDashboardStore } from "../stores/dashboard-store";
 
 export function meta() {
   return [
@@ -31,6 +34,14 @@ export default function AppLayout() {
   const user = useUser();
   const isLoading = useIsLoading();
   const { checkAuth } = useAuthActions();
+
+  // Dashboard store에서 데이터 가져오기
+  const {
+    currentExchangeRate,
+    legalExchangeRate,
+    activePositionCount,
+    kimchiPremiumData,
+  } = useDashboardStore();
 
   // 페이지 로드 시 사용자 인증 상태 확인 (한 번만 실행)
   useEffect(() => {
@@ -90,13 +101,57 @@ export default function AppLayout() {
       {/* Mobile Header */}
       <div className="lg:hidden sticky top-0 z-40 bg-background border-b border-border">
         <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2 cursor-pointer"
+            onClick={() => navigate("/dashboard")}
+          >
             <img
               src="/logo-no-bg.png"
               alt="Karbit Logo"
               className="w-10 h-10 object-contain"
             />
             <h1 className="text-lg font-medium">Karbit</h1>
+          </div>
+          {/* Mobile Key Metrics in Header */}
+          <div className="grid grid-cols-4 gap-1 text-xs">
+            {/* 헤더 행 */}
+            <div className="text-muted-foreground text-center">테더</div>
+            <div className="text-muted-foreground text-center">환율</div>
+            <div className="text-muted-foreground text-center">김프</div>
+            <div className="text-muted-foreground text-center">포지션</div>
+
+            {/* 값 행 */}
+            <div className="font-medium text-center">
+              {currentExchangeRate
+                ? `${currentExchangeRate.toFixed(0)}`
+                : "..."}
+            </div>
+            <div className="font-medium text-center">
+              {legalExchangeRate?.rate
+                ? `${legalExchangeRate.rate.toFixed(0)}`
+                : "..."}
+            </div>
+            <div className="flex items-center justify-center gap-1">
+              <span
+                className={`font-medium ${kimchiPremiumData?.isHigher ? "text-green-600" : "text-red-600"}`}
+              >
+                {kimchiPremiumData?.percentage
+                  ? `${kimchiPremiumData.percentage.toFixed(1)}%`
+                  : "..."}
+              </span>
+              {kimchiPremiumData?.isHigher && (
+                <TrendingUp className="w-3 h-3 text-green-600" />
+              )}
+              {!kimchiPremiumData?.isHigher &&
+                kimchiPremiumData?.percentage !== 0 && (
+                  <TrendingDown className="w-3 h-3 text-red-600" />
+                )}
+            </div>
+            <div className="font-medium text-center">
+              {activePositionCount !== undefined
+                ? `${activePositionCount}`
+                : "..."}
+            </div>
           </div>
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>

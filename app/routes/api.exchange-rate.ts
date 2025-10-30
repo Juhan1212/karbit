@@ -28,10 +28,9 @@ const crawlExchangeRate = async () => {
 
     // 환율 정보 추출
     const rateText = $(".no_today").text().trim();
-    const changeText = $(".no_exday").text().replace("전일대비", "").trim();
 
-    // 환율 변동 아이콘 확인
-    const changeIcon = $(".ico");
+    // 환율 변동 아이콘 확인 - no_exday 안의 ico 요소만 찾기
+    const changeIcon = $(".no_exday .ico");
     let changeSign = "";
     if (changeIcon.length > 0) {
       const iconClass = changeIcon.attr("class") || "";
@@ -42,15 +41,25 @@ const crawlExchangeRate = async () => {
       }
     }
 
-    // changeText에서 숫자와 퍼센트만 추출
-    const changeMatch = changeText.match(
-      /([\d,]+\.\d+)\s*\(\s*([+-]?\d+\.\d+)%\s*\)/
-    );
-    let cleanChangeText = changeText;
-    if (changeMatch) {
-      const changeValue = changeMatch[1];
-      const changePercent = changeMatch[2];
-      cleanChangeText = `${changeValue} (${changePercent}%)`;
+    // 변동값과 퍼센트 개별 추출
+    const changeValueElement = $(".no_exday em.no_up").first();
+    const changePercentElement = $(".no_exday em.no_up").last();
+
+    let changeValue = "";
+    let changePercent = "";
+
+    if (changeValueElement.length > 0) {
+      changeValue = changeValueElement.text().trim();
+    }
+
+    if (changePercentElement.length > 0) {
+      changePercent = changePercentElement.text().trim();
+    }
+
+    // cleanChangeText 조합
+    let cleanChangeText = "";
+    if (changeValue && changePercent) {
+      cleanChangeText = `${changeValue} ${changePercent}`;
     }
 
     // 숫자만 추출 (쉼표 제거)
