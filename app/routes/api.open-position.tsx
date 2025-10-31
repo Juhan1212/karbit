@@ -6,16 +6,19 @@ import { getAuthTokenFromRequest } from "~/utils/cookies";
 import { getUserExchangeCredentials } from "~/database/exchange";
 import {
   canUserEnterPosition,
-  incrementDailyEntryCount,
+  updateUserStatsAfterPosition,
 } from "~/database/user";
 import { createExchangeAdapter } from "~/exchanges";
 import { ExchangeTypeConverter, UppercaseExchangeType } from "~/types/exchange";
-import { roundVolumeToLotSize } from "~/utils/decimal";
+import {
+  CRYPTO_DECIMALS,
+  preciseAdd,
+  preciseMultiply,
+  roundVolumeToLotSize,
+  safeNumeric,
+} from "~/utils/decimal";
 import { getCache } from "../core/redisCache";
 import axios from "axios";
-import { database } from "~/database/context";
-import { users } from "~/database/schema";
-import { eq, sql } from "drizzle-orm";
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
@@ -224,6 +227,18 @@ export async function action({ request }: ActionFunctionArgs) {
       usdtPrice = undefined;
     }
 
+    const krBuyAmount = safeNumeric(krBuyOrder.filled, 0);
+    const frSellAmountInKrw = preciseMultiply(
+      safeNumeric(frSellOrder.filled, 0),
+      usdtPrice ?? 0,
+      CRYPTO_DECIMALS.FUNDS
+    );
+    const totalClosed = preciseAdd(
+      krBuyAmount,
+      frSellAmountInKrw,
+      CRYPTO_DECIMALS.FUNDS
+    );
+
     await insertOpenPosition({
       userId: user.id,
       strategyId: activeStrategy.id,
@@ -249,28 +264,7 @@ export async function action({ request }: ActionFunctionArgs) {
       frSlippage: frSellOrder.slippage,
     });
 
-    // 사용자 수동매매 카운트 증가
-    const db = database();
-    try {
-      await db
-        .update(users)
-        .set({
-          totalSelfEntryCount: sql`${users.totalSelfEntryCount} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id));
-      console.log(`사용자 ${user.id} 수동매매 진입 카운트 증가`);
-    } catch (error) {
-      console.error("수동매매 카운트 증가 실패:", error);
-    }
-
-    // ⭐ 일일 진입 카운트 증가 (Free 플랜 제한용)
-    try {
-      await incrementDailyEntryCount(user.id);
-      console.log(`사용자 ${user.id} 일일 진입 카운트 증가`);
-    } catch (error) {
-      console.error("일일 진입 카운트 증가 실패:", error);
-    }
+    await updateUserStatsAfterPosition(user.id, totalClosed);
 
     // 6. 결과 반환
     return Response.json({

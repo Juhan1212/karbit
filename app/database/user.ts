@@ -274,7 +274,7 @@ export async function getUsers(
 /**
  * 포지션 종료 후 사용자 누적 통계 업데이트
  */
-export async function updateUserStatsAfterPositionClose(
+export async function updateUserStatsAfterPosition(
   userId: number,
   orderAmount: number
 ): Promise<void> {

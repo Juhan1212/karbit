@@ -9,7 +9,7 @@ import {
   getCoinActivePositionDetails,
 } from "~/database/position";
 import { getUserExchangeCredentials } from "~/database/exchange";
-import { updateUserStatsAfterPositionClose } from "~/database/user";
+import { updateUserStatsAfterPosition } from "~/database/user";
 import { updateStrategyStatsAfterPositionClose } from "~/database/strategy";
 import { createExchangeAdapter } from "~/exchanges";
 import { ExchangeTypeConverter, UppercaseExchangeType } from "~/types/exchange";
@@ -347,7 +347,7 @@ export async function action({ request }: ActionFunctionArgs) {
       });
 
       // 사용자 통계 업데이트
-      await updateUserStatsAfterPositionClose(user.id, profit);
+      await updateUserStatsAfterPosition(user.id, totalClosed);
 
       // 전략 성과 업데이트
       await updateStrategyStatsAfterPositionClose(
