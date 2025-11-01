@@ -73,6 +73,7 @@ export async function getUserActivePositions(userId: number) {
            sum(p.fr_volume) as total_fr_volume,
            sum(p.kr_funds) as total_kr_funds,
            sum(p.fr_funds) as total_fr_funds,
+           sum(p.kr_funds) / sum(p.fr_funds) as avg_entry_rate,
            COUNT(*) as position_count,
            MAX(p.entry_time) as latest_entry_time
     FROM positions p

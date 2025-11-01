@@ -54,6 +54,49 @@ const calculateAveragePrice = (
 };
 
 // ============================================
+// 코인 수량 기반 평균 가격 계산 함수 (종료 시 사용)
+// ============================================
+const calculateAveragePriceByVolume = (
+  entries: OrderBookEntry[],
+  coinVolume: number,
+  type: "ask" | "bid",
+  isKoreanExchange: boolean,
+  tetherPrice?: number | null
+): number => {
+  if (!entries.length || !coinVolume) return 0;
+
+  // 정렬: ask는 가격 오름차순 (최저가부터), bid는 가격 내림차순 (최고가부터)
+  const sortedEntries = [...entries].sort((a, b) => {
+    return type === "ask" ? a.price - b.price : b.price - a.price;
+  });
+
+  let totalValue = 0; // 총 금액 (KRW 또는 USDT)
+  let totalVolume = 0; // 총 코인 수량
+  let remainingVolume = coinVolume;
+
+  for (const entry of sortedEntries) {
+    if (remainingVolume <= 0) break;
+
+    // entry.amount는 해당 호가의 코인 수량
+    const useVolume = Math.min(remainingVolume, entry.amount);
+    totalValue += entry.price * useVolume;
+    totalVolume += useVolume;
+    remainingVolume -= useVolume;
+  }
+
+  if (totalVolume === 0) return 0;
+
+  const averagePriceInLocalCurrency = totalValue / totalVolume;
+
+  // // 해외 거래소의 경우 USDT 가격을 KRW로 환산
+  // if (!isKoreanExchange && tetherPrice) {
+  //   return averagePriceInLocalCurrency * tetherPrice;
+  // }
+
+  return averagePriceInLocalCurrency;
+};
+
+// ============================================
 // 최적화된 개별 Row 컴포넌트 (memo로 불필요한 리렌더 방지)
 // ============================================
 const OrderBookRow = memo<{
@@ -115,6 +158,8 @@ interface RealtimeOrderBookProps {
   orderAmount?: number; // 주문금액
   onAveragePriceUpdate?: (averagePrice: number) => void; // 평균 가격 업데이트 콜백
   tetherPrice?: number | null; // 테더 가격 (USDT/KRW 환율)
+  currentPosition?: any; // 현재 포지션 정보
+  onExitAveragePriceUpdate?: (exitAveragePrice: number) => void; // 종료 시 평균 가격 업데이트 콜백
 }
 
 export default function RealtimeOrderBook({
@@ -125,6 +170,8 @@ export default function RealtimeOrderBook({
   orderAmount,
   onAveragePriceUpdate,
   tetherPrice,
+  currentPosition,
+  onExitAveragePriceUpdate,
 }: RealtimeOrderBookProps) {
   const [orderBook, setOrderBook] = useState<OrderBookData>({
     bids: [],
@@ -168,22 +215,51 @@ export default function RealtimeOrderBook({
         if (pendingUpdateRef.current) {
           setOrderBook(pendingUpdateRef.current);
 
-          // 평균 가격 계산 및 콜백 호출
+          const isKoreanExchange =
+            exchange === "빗썸" ||
+            exchange === "업비트" ||
+            exchange === "upbit" ||
+            exchange === "bithumb";
+
+          // 1. 진입 시 평균 가격 계산 (기존 로직)
           if (orderAmount && onAveragePriceUpdate) {
-            const isKoreanExchange =
-              exchange === "빗썸" || exchange === "업비트";
-            const type = isKoreanExchange ? "ask" : "bid";
-            const entries = isKoreanExchange
+            const entryType = isKoreanExchange ? "ask" : "bid";
+            const entryEntries = isKoreanExchange
               ? pendingUpdateRef.current.asks
               : pendingUpdateRef.current.bids;
-            const averagePrice = calculateAveragePrice(
-              entries,
+            const entryAveragePrice = calculateAveragePrice(
+              entryEntries,
               orderAmount,
-              type,
+              entryType,
               isKoreanExchange,
               tetherPrice
             );
-            onAveragePriceUpdate(averagePrice);
+            onAveragePriceUpdate(entryAveragePrice);
+          }
+
+          // 2. 종료 시 평균 가격 계산 (포지션이 있을 때)
+          if (currentPosition && onExitAveragePriceUpdate) {
+            // 종료 시: 한국 거래소는 매도(bid), 해외 거래소는 매수(ask)
+            const exitType = isKoreanExchange ? "bid" : "ask";
+            const exitEntries = isKoreanExchange
+              ? pendingUpdateRef.current.bids
+              : pendingUpdateRef.current.asks;
+
+            // 포지션의 코인 수량 사용
+            // 한국 거래소: totalKrVolume (코인 수량)
+            // 해외 거래소: totalFrVolume (코인 수량)
+            const positionVolume = isKoreanExchange
+              ? currentPosition.totalKrVolume || 0
+              : currentPosition.totalFrVolume || 0;
+
+            const exitAveragePrice = calculateAveragePriceByVolume(
+              exitEntries,
+              positionVolume,
+              exitType,
+              isKoreanExchange,
+              tetherPrice
+            );
+            onExitAveragePriceUpdate(exitAveragePrice);
           }
 
           pendingUpdateRef.current = null;
@@ -222,8 +298,10 @@ export default function RealtimeOrderBook({
           <div className="flex items-center justify-between mb-2">
             <div className="flex-1"></div>
             <div className="text-center flex-1">
-              <h2 className="text-xl font-bold text-white mb-1">{title}</h2>
-              <p className="text-slate-400 text-xs">
+              <h2 className="text-xl font-bold text-white mb-1 whitespace-nowrap">
+                {title}
+              </h2>
+              <p className="text-slate-400 text-xs whitespace-nowrap">
                 {exchange.toUpperCase()} · {symbol}
               </p>
             </div>
@@ -248,12 +326,12 @@ export default function RealtimeOrderBook({
                 )}
               </div>
 
-              <button
+              {/* <button
                 className="p-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition-colors"
                 disabled
               >
                 <RefreshCw className="w-4 h-4" />
-              </button>
+              </button> */}
             </div>
           </div>
 

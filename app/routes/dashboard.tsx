@@ -406,12 +406,13 @@ export default function Dashboard() {
               coinSymbol: position.coin_symbol,
               krExchange: position.kr_exchange,
               frExchange: position.fr_exchange,
-              totalKrVolume: position.total_kr_volume,
-              totalFrVolume: position.total_fr_volume,
-              totalKrFunds: position.total_kr_funds,
-              totalFrFunds: position.total_fr_funds,
-              positionCount: position.position_count,
+              totalKrVolume: parseFloat(position.total_kr_volume) || 0,
+              totalFrVolume: parseFloat(position.total_fr_volume) || 0,
+              totalKrFunds: parseFloat(position.total_kr_funds) || 0,
+              totalFrFunds: parseFloat(position.total_fr_funds) || 0,
+              positionCount: parseInt(position.position_count) || 0,
               latestEntryTime: position.latest_entry_time,
+              entryRate: parseFloat(position.avg_entry_rate) || 0,
             })
           );
 
@@ -1241,6 +1242,7 @@ export default function Dashboard() {
         foreignWebSocketStore={foreignWebSocketStore}
         tetherPrice={currentExchangeRate}
         legalExchangeRate={legalExchangeRate?.rate}
+        activePositions={polledActivePositions}
       />
 
       {/* Exchange Rate Chart - Only show when there are active positions */}

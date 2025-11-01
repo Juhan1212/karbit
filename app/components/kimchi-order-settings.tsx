@@ -55,6 +55,7 @@ interface KimchiOrderSettingsProps {
   foreignWebSocketStore?: StoreApi<WebSocketState> | null;
   tetherPrice?: number | null;
   legalExchangeRate?: number | null;
+  activePositions?: any[];
 }
 
 export default function KimchiOrderSettings({
@@ -64,13 +65,23 @@ export default function KimchiOrderSettings({
   foreignWebSocketStore,
   tetherPrice,
   legalExchangeRate,
+  activePositions,
 }: KimchiOrderSettingsProps) {
   const [orderData, setOrderData] = useState<OrderData[]>([]);
   const [currentPairIndex, setCurrentPairIndex] = useState(0);
   const [krAveragePrice, setKrAveragePrice] = useState<number | null>(null);
   const [frAveragePrice, setFrAveragePrice] = useState<number | null>(null);
+  const [krExitAveragePrice, setKrExitAveragePrice] = useState<number | null>(
+    null
+  );
+  const [frExitAveragePrice, setFrExitAveragePrice] = useState<number | null>(
+    null
+  );
   const [currentTime, setCurrentTime] = useState(new Date());
   const [loadingButtons, setLoadingButtons] = useState<Set<string>>(new Set());
+  const [closingPositions, setClosingPositions] = useState<Set<string>>(
+    new Set()
+  );
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     symbol: string;
@@ -200,6 +211,20 @@ export default function KimchiOrderSettings({
       legalPremium,
     };
   }, [krAveragePrice, frAveragePrice, tetherPrice, legalExchangeRate]);
+
+  // 현재 선택된 티커에 해당하는 포지션 찾기
+  const currentPosition = useMemo(() => {
+    if (!selectedItem || !activePositions || activePositions.length === 0) {
+      return null;
+    }
+    const position = activePositions.find(
+      (p: any) =>
+        p.coinSymbol === selectedItem.symbol &&
+        p.krExchange?.toLowerCase() === selectedItem.korean_ex?.toLowerCase() &&
+        p.frExchange?.toLowerCase() === selectedItem.foreign_ex?.toLowerCase()
+    );
+    return position || null;
+  }, [selectedItem, activePositions]);
 
   if (pairs.length === 0) return null;
   if (!currentPair || !currentOrder) return null;
@@ -348,6 +373,48 @@ export default function KimchiOrderSettings({
       toast.error(`포지션진입 실패: ${error}`);
     } finally {
       setButtonLoading(symbol, false);
+    }
+  };
+
+  // 포지션 종료 핸들러
+  const handleForceClose = async (
+    coinSymbol: string,
+    krExchange?: string,
+    frExchange?: string
+  ) => {
+    try {
+      if (!krExchange || !frExchange) {
+        toast.error("거래소 정보가 누락되었습니다.");
+        return;
+      }
+      setClosingPositions((prev) => new Set(prev).add(coinSymbol));
+
+      const res = await fetch("/api/close-position", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          coinSymbol,
+          krExchange: krExchange.toUpperCase(),
+          frExchange: frExchange.toUpperCase(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(`${coinSymbol} 포지션이 성공적으로 종료되었습니다.`);
+      } else {
+        toast.error(data.message || `${coinSymbol} 포지션 종료 실패`);
+      }
+    } catch (error: any) {
+      console.error(`포지션 강제 종료 실패 (${coinSymbol}):`, error);
+      toast.error(`포지션 강제 종료 실패 (${coinSymbol}): ${error.message}`);
+    } finally {
+      setClosingPositions((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(coinSymbol);
+        return newSet;
+      });
     }
   };
 
@@ -674,11 +741,14 @@ export default function KimchiOrderSettings({
                     orderAmount={currentOrder?.orderAmount}
                     onAveragePriceUpdate={setKrAveragePrice}
                     tetherPrice={tetherPrice}
+                    currentPosition={currentPosition}
+                    onExitAveragePriceUpdate={setKrExitAveragePrice}
                   />
                 </div>
 
                 {/* Center Exchange Rate Display */}
-                <div className="flex items-center justify-center">
+                <div className="flex flex-col items-center justify-center gap-6">
+                  {/* Entry Exchange Rate Card */}
                   <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 p-6 w-full max-w-sm">
                     <div className="text-center space-y-4">
                       <div className="flex items-center justify-center gap-2">
@@ -767,6 +837,121 @@ export default function KimchiOrderSettings({
                       </div>
                     </div>
                   </div>
+
+                  {/* Exit Exchange Rate Card - 현재 포지션이 있을 때만 표시 */}
+                  {currentPosition && (
+                    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-orange-500/30 p-6 w-full max-w-sm">
+                      <div className="text-center space-y-4">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
+                            <TrendingDown className="w-6 h-6 text-orange-500" />
+                          </div>
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-white mb-2">
+                            {selectedItem.symbol} <br />
+                            현재 포지션 시장가 종료시 <br />
+                            실시간 환율
+                          </h3>
+                          <div className="space-y-3">
+                            <div className="text-3xl font-bold text-orange-400">
+                              ₩
+                              {krExitAveragePrice && frExitAveragePrice
+                                ? (
+                                    krExitAveragePrice / frExitAveragePrice
+                                  ).toFixed(4)
+                                : "계산중..."}
+                            </div>
+                            <div className="text-sm text-slate-400">
+                              KR: ₩
+                              {krExitAveragePrice?.toLocaleString("ko-KR", {
+                                maximumFractionDigits: 10,
+                                minimumFractionDigits: 0,
+                              }) || "N/A"}{" "}
+                              | FR: ₩
+                              {frExitAveragePrice?.toLocaleString("ko-KR", {
+                                maximumFractionDigits: 10,
+                                minimumFractionDigits: 0,
+                              }) || "N/A"}
+                            </div>
+                            <div className="text-sm text-slate-300 border-t border-slate-700 pt-3">
+                              <p className="font-semibold mb-2">
+                                현재 포지션 정보
+                              </p>
+                              <div className="space-y-1 text-xs">
+                                <p>
+                                  진입 환율: ₩
+                                  {currentPosition.entryRate?.toFixed(4)}
+                                </p>
+                                <p>
+                                  주문량:{" "}
+                                  {currentPosition.totalKrVolume?.toFixed(4)}{" "}
+                                  {selectedItem.symbol}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex justify-center mt-3">
+                              <button
+                                onClick={async () => {
+                                  await handleForceClose(
+                                    selectedItem.symbol,
+                                    currentPosition.krExchange,
+                                    currentPosition.frExchange
+                                  );
+                                }}
+                                disabled={closingPositions.has(
+                                  selectedItem.symbol
+                                )}
+                                className="px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                              >
+                                {closingPositions.has(selectedItem.symbol) ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    종료 중...
+                                  </>
+                                ) : (
+                                  "포지션 종료"
+                                )}
+                              </button>
+                            </div>
+                            {krExitAveragePrice &&
+                              frExitAveragePrice &&
+                              currentPosition.entryRate && (
+                                <div className="space-y-2">
+                                  <div
+                                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                                      krExitAveragePrice / frExitAveragePrice >
+                                      currentPosition.entryRate
+                                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                        : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                    }`}
+                                  >
+                                    <span>진입 대비</span>
+                                    <span>
+                                      {krExitAveragePrice / frExitAveragePrice >
+                                      currentPosition.entryRate
+                                        ? "+"
+                                        : ""}
+                                      {(
+                                        ((krExitAveragePrice /
+                                          frExitAveragePrice -
+                                          currentPosition.entryRate) /
+                                          currentPosition.entryRate) *
+                                        100
+                                      ).toFixed(2)}
+                                      %
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                        <div className="text-xs text-slate-500 border-t border-slate-700 pt-3">
+                          {currentTime.toLocaleString("ko-KR")}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Foreign Exchange Orderbook */}
@@ -779,6 +964,8 @@ export default function KimchiOrderSettings({
                     orderAmount={currentOrder?.orderAmount}
                     onAveragePriceUpdate={setFrAveragePrice}
                     tetherPrice={tetherPrice}
+                    currentPosition={currentPosition}
+                    onExitAveragePriceUpdate={setFrExitAveragePrice}
                   />
                 </div>
               </div>
