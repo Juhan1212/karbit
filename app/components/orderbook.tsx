@@ -221,20 +221,28 @@ export default function RealtimeOrderBook({
             exchange === "upbit" ||
             exchange === "bithumb";
 
-          // 1. 진입 시 평균 가격 계산 (기존 로직)
-          if (orderAmount && onAveragePriceUpdate) {
+          // 1. 진입 시 평균 가격 계산 (orderAmount가 있을 때만)
+          if (orderAmount && orderAmount > 0 && onAveragePriceUpdate) {
             const entryType = isKoreanExchange ? "ask" : "bid";
             const entryEntries = isKoreanExchange
               ? pendingUpdateRef.current.asks
               : pendingUpdateRef.current.bids;
-            const entryAveragePrice = calculateAveragePrice(
-              entryEntries,
-              orderAmount,
-              entryType,
-              isKoreanExchange,
-              tetherPrice
-            );
-            onAveragePriceUpdate(entryAveragePrice);
+
+            // 오더북 데이터가 실제로 있는지 확인
+            if (entryEntries && entryEntries.length > 0) {
+              const entryAveragePrice = calculateAveragePrice(
+                entryEntries,
+                orderAmount,
+                entryType,
+                isKoreanExchange,
+                tetherPrice
+              );
+
+              // 유효한 값일 때만 업데이트
+              if (entryAveragePrice > 0) {
+                onAveragePriceUpdate(entryAveragePrice);
+              }
+            }
           }
 
           // 2. 종료 시 평균 가격 계산 (포지션이 있을 때)
@@ -246,20 +254,25 @@ export default function RealtimeOrderBook({
               : pendingUpdateRef.current.asks;
 
             // 포지션의 코인 수량 사용
-            // 한국 거래소: totalKrVolume (코인 수량)
-            // 해외 거래소: totalFrVolume (코인 수량)
             const positionVolume = isKoreanExchange
               ? currentPosition.totalKrVolume || 0
               : currentPosition.totalFrVolume || 0;
 
-            const exitAveragePrice = calculateAveragePriceByVolume(
-              exitEntries,
-              positionVolume,
-              exitType,
-              isKoreanExchange,
-              tetherPrice
-            );
-            onExitAveragePriceUpdate(exitAveragePrice);
+            // 오더북 데이터와 포지션 볼륨이 유효한지 확인
+            if (exitEntries && exitEntries.length > 0 && positionVolume > 0) {
+              const exitAveragePrice = calculateAveragePriceByVolume(
+                exitEntries,
+                positionVolume,
+                exitType,
+                isKoreanExchange,
+                tetherPrice
+              );
+
+              // 유효한 값일 때만 업데이트
+              if (exitAveragePrice > 0) {
+                onExitAveragePriceUpdate(exitAveragePrice);
+              }
+            }
           }
 
           pendingUpdateRef.current = null;
@@ -268,6 +281,39 @@ export default function RealtimeOrderBook({
       });
     }
   };
+
+  // ==================== orderAmount 변경 시 재계산 ====================
+  useEffect(() => {
+    // orderAmount가 변경되면 현재 오더북 데이터로 평균 가격 재계산
+    if (!orderBook.bids.length && !orderBook.asks.length) return;
+    if (!orderAmount || orderAmount <= 0) return;
+
+    const isKoreanExchange =
+      exchange === "빗썸" ||
+      exchange === "업비트" ||
+      exchange === "upbit" ||
+      exchange === "bithumb";
+
+    // 진입 시 평균 가격 재계산
+    if (onAveragePriceUpdate) {
+      const entryType = isKoreanExchange ? "ask" : "bid";
+      const entryEntries = isKoreanExchange ? orderBook.asks : orderBook.bids;
+
+      if (entryEntries && entryEntries.length > 0) {
+        const entryAveragePrice = calculateAveragePrice(
+          entryEntries,
+          orderAmount,
+          entryType,
+          isKoreanExchange,
+          tetherPrice
+        );
+
+        if (entryAveragePrice > 0) {
+          onAveragePriceUpdate(entryAveragePrice);
+        }
+      }
+    }
+  }, [orderAmount, orderBook, exchange, tetherPrice, onAveragePriceUpdate]);
 
   // ==================== WebSocket Store 연결 ====================
   useEffect(() => {
@@ -279,17 +325,25 @@ export default function RealtimeOrderBook({
     };
 
     store.getState().addMessageListener(handleMessage);
-    // connectWebSocket은 CompChart에서 이미 호출하므로 여기서는 제거
+
+    // 초기 데이터 요청 - store가 준비되면 즉시 연결 상태 확인
+    const checkConnection = () => {
+      const state = store.getState();
+      if (!state.isConnected) {
+        // WebSocket이 연결되지 않은 경우 재연결 시도
+        // (주의: 이 로직은 상위 컴포넌트에서 이미 연결 관리를 하고 있다면 제거 가능)
+      }
+    };
+
+    checkConnection();
 
     return () => {
       store.getState().removeMessageListener(handleMessage);
-      // disconnectWebSocket도 CompChart에서 관리하므로 여기서는 제거
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
       }
     };
   }, [store, symbol]);
-
   return (
     <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 h-full py-10 px-4">
       <div className="max-w-full mx-auto h-full">

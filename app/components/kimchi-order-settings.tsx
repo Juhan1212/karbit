@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import RealtimeOrderBook from "./orderbook";
 import { createWebSocketStore } from "../stores/chartState";
 import { motion } from "framer-motion";
@@ -86,6 +86,7 @@ export default function KimchiOrderSettings({
   const [closingPositions, setClosingPositions] = useState<Set<string>>(
     new Set()
   );
+  const leverageUpdateTimestampRef = useRef<number>(0);
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     symbol: string;
@@ -126,25 +127,44 @@ export default function KimchiOrderSettings({
 
     const krExchanges = exchangeBalances.filter((e) => e.currency === "KRW");
     const frExchanges = exchangeBalances.filter((e) => e.currency !== "KRW");
-    const newOrderData: OrderData[] = [];
 
-    krExchanges.forEach((kr) => {
-      frExchanges.forEach((fr) => {
-        if (kr.krwBalance != null && fr.krwBalance != null) {
-          const minBalance = Math.min(kr.krwBalance, fr.krwBalance);
-          const truncatedBalance = Math.floor(minBalance / 10000) * 10000;
-          newOrderData.push({
-            krExchange: exchangeNameMap[kr.name] || kr.name,
-            frExchange: exchangeNameMap[fr.name] || fr.name,
-            orderAmount: truncatedBalance,
-            leverage: 1,
-            krBalance: kr.krwBalance,
-            frBalance: fr.krwBalance,
-          });
-        }
+    setOrderData((prevOrderData) => {
+      const newOrderData: OrderData[] = [];
+
+      krExchanges.forEach((kr) => {
+        frExchanges.forEach((fr) => {
+          if (kr.krwBalance != null && fr.krwBalance != null) {
+            const krExchangeName = exchangeNameMap[kr.name] || kr.name;
+            const frExchangeName = exchangeNameMap[fr.name] || fr.name;
+
+            // 기존 orderData에서 같은 거래소 쌍을 찾아서 leverage 값 유지
+            const existingOrder = prevOrderData.find(
+              (order) =>
+                order.krExchange === krExchangeName &&
+                order.frExchange === frExchangeName
+            );
+
+            const leverage = existingOrder?.leverage || 1;
+            const minBalance = Math.min(
+              kr.krwBalance,
+              fr.krwBalance * leverage
+            );
+            const truncatedBalance = Math.floor(minBalance / 10000) * 10000;
+
+            newOrderData.push({
+              krExchange: krExchangeName,
+              frExchange: frExchangeName,
+              orderAmount: truncatedBalance,
+              leverage: leverage,
+              krBalance: kr.krwBalance,
+              frBalance: fr.krwBalance,
+            });
+          }
+        });
       });
+
+      return newOrderData;
     });
-    setOrderData(newOrderData);
   }, [exchangeBalancesStr]);
 
   const krExchanges = exchangeBalances.filter((e) => e.currency === "KRW");
@@ -170,6 +190,23 @@ export default function KimchiOrderSettings({
       ? orderData[Math.min(currentPairIndex, orderData.length - 1)]
       : null;
 
+  // 데이터 준비 상태 확인
+  const isDataReady = useMemo(() => {
+    return (
+      selectedItem !== undefined &&
+      currentPair !== null &&
+      currentOrder !== null &&
+      orderData.length > 0 &&
+      exchangeBalances.length >= 2
+    );
+  }, [
+    selectedItem,
+    currentPair,
+    currentOrder,
+    orderData.length,
+    exchangeBalances.length,
+  ]);
+
   // WebSocket 스토어 생성 (항상 useMemo 호출하여 Hook 순서 유지)
   const krStore = useMemo(() => {
     if (!selectedItem || !currentPair) return null;
@@ -193,7 +230,12 @@ export default function KimchiOrderSettings({
 
   // 프리미엄 계산 (항상 최상위 레벨에서 호출)
   const premiums = useMemo(() => {
-    if (!krAveragePrice || !frAveragePrice) {
+    if (
+      !krAveragePrice ||
+      !frAveragePrice ||
+      krAveragePrice <= 0 ||
+      frAveragePrice <= 0
+    ) {
       return {
         tetherPremium: null,
         legalPremium: null,
@@ -202,13 +244,15 @@ export default function KimchiOrderSettings({
 
     const exchangeRate = krAveragePrice / frAveragePrice;
 
-    const tetherPremium = tetherPrice
-      ? ((exchangeRate - tetherPrice) / tetherPrice) * 100
-      : null;
+    const tetherPremium =
+      tetherPrice && tetherPrice > 0
+        ? ((exchangeRate - tetherPrice) / tetherPrice) * 100
+        : null;
 
-    const legalPremium = legalExchangeRate
-      ? ((exchangeRate - legalExchangeRate) / legalExchangeRate) * 100
-      : null;
+    const legalPremium =
+      legalExchangeRate && legalExchangeRate > 0
+        ? ((exchangeRate - legalExchangeRate) / legalExchangeRate) * 100
+        : null;
 
     return {
       tetherPremium,
@@ -238,45 +282,75 @@ export default function KimchiOrderSettings({
   );
 
   const increaseLeverage = () => {
+    const now = Date.now();
+    // 50ms 이내의 중복 클릭 방지
+    if (now - leverageUpdateTimestampRef.current < 50) {
+      return;
+    }
+    leverageUpdateTimestampRef.current = now;
+
     setOrderData((prev) => {
-      const newData = [...prev];
-      if (newData[currentPairIndex]) {
-        newData[currentPairIndex].leverage++;
-        const newMax = Math.min(
-          newData[currentPairIndex].krBalance,
-          newData[currentPairIndex].frBalance *
-            newData[currentPairIndex].leverage
-        );
-        newData[currentPairIndex].orderAmount =
-          Math.floor(newMax / 10000) * 10000;
-      }
+      // 깊은 복사: 배열과 각 객체를 모두 복사
+      const newData = prev.map((item, index) => {
+        if (index === currentPairIndex) {
+          // 해당 인덱스의 객체만 새로 생성하여 leverage 증가
+          const currentLeverage = item.leverage;
+          const newLeverage = currentLeverage + 1;
+          const newMax = Math.min(item.krBalance, item.frBalance * newLeverage);
+          return {
+            ...item,
+            leverage: newLeverage,
+            orderAmount: Math.floor(newMax / 10000) * 10000,
+          };
+        }
+        return item;
+      });
+
       return newData;
     });
   };
 
   const decreaseLeverage = () => {
+    const now = Date.now();
+    // 50ms 이내의 중복 클릭 방지
+    if (now - leverageUpdateTimestampRef.current < 50) {
+      return;
+    }
+    leverageUpdateTimestampRef.current = now;
+
     setOrderData((prev) => {
-      const newData = [...prev];
-      if (newData[currentPairIndex] && newData[currentPairIndex].leverage > 1) {
-        newData[currentPairIndex].leverage--;
-        const newMax = Math.min(
-          newData[currentPairIndex].krBalance,
-          newData[currentPairIndex].frBalance *
-            newData[currentPairIndex].leverage
-        );
-        newData[currentPairIndex].orderAmount =
-          Math.floor(newMax / 10000) * 10000;
-      }
+      // 깊은 복사: 배열과 각 객체를 모두 복사
+      const newData = prev.map((item, index) => {
+        if (index === currentPairIndex && item.leverage > 1) {
+          // 해당 인덱스의 객체만 새로 생성하여 leverage 감소
+          const currentLeverage = item.leverage;
+          const newLeverage = Math.max(1, currentLeverage - 1);
+          const newMax = Math.min(item.krBalance, item.frBalance * newLeverage);
+          return {
+            ...item,
+            leverage: newLeverage,
+            orderAmount: Math.floor(newMax / 10000) * 10000,
+          };
+        }
+        return item;
+      });
+
       return newData;
     });
   };
 
   const updateOrderAmount = (value: number) => {
     setOrderData((prev) => {
-      const newData = [...prev];
-      if (newData[currentPairIndex]) {
-        newData[currentPairIndex].orderAmount = value;
-      }
+      // 깊은 복사: 배열과 각 객체를 모두 복사
+      const newData = prev.map((item, index) => {
+        if (index === currentPairIndex) {
+          return {
+            ...item,
+            orderAmount: value,
+          };
+        }
+        return item;
+      });
       return newData;
     });
   };
@@ -732,222 +806,118 @@ export default function KimchiOrderSettings({
             </div>
           </div>
           {/* Orderbook Section */}
-          {selectedItem && (
-            <div className="mt-8">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Korean Exchange Orderbook */}
-                <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 overflow-hidden">
-                  <RealtimeOrderBook
-                    exchange={currentPair.kr.name.toLowerCase()}
-                    symbol={`${selectedItem.symbol}`}
-                    store={krStore!}
-                    title={`${currentPair.kr.name} 오더북`}
-                    orderAmount={currentOrder?.orderAmount}
-                    onAveragePriceUpdate={setKrAveragePrice}
-                    tetherPrice={tetherPrice}
-                    currentPosition={currentPosition}
-                    onExitAveragePriceUpdate={setKrExitAveragePrice}
-                  />
-                </div>
-
-                {/* Center Exchange Rate Display */}
-                <div className="flex flex-col items-center justify-center gap-6">
-                  {/* Entry Exchange Rate Card */}
-                  <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 p-6 w-full max-w-sm">
-                    <div className="text-center space-y-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-                          <TrendingUp className="w-6 h-6 text-blue-500" />
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-white mb-2">
-                          {selectedItem.symbol} <br />
-                          주문금액 시장가 진입시 <br />
-                          실시간 환율
-                        </h3>
-                        <div className="space-y-3">
-                          <div className="text-3xl font-bold text-blue-400">
-                            ₩
-                            {krAveragePrice && frAveragePrice
-                              ? (krAveragePrice / frAveragePrice).toFixed(4)
-                              : "계산중..."}
-                          </div>
-                          <div className="text-sm text-slate-400">
-                            KR: ₩
-                            {krAveragePrice?.toLocaleString("ko-KR", {
-                              maximumFractionDigits: 10,
-                              minimumFractionDigits: 0,
-                            }) || "N/A"}{" "}
-                            | FR: ₩
-                            {frAveragePrice?.toLocaleString("ko-KR", {
-                              maximumFractionDigits: 10,
-                              minimumFractionDigits: 0,
-                            }) || "N/A"}
-                          </div>
-                          <div className="flex justify-center">
-                            <button
-                              onClick={() =>
-                                openConfirmDialog(
-                                  selectedItem.symbol,
-                                  currentOrder.krExchange,
-                                  currentOrder.frExchange
-                                )
-                              }
-                              disabled={isButtonLoading(selectedItem.symbol)}
-                              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
-                            >
-                              {isButtonLoading(selectedItem.symbol)
-                                ? "진입중..."
-                                : "포지션 진입"}
-                            </button>
-                          </div>
-                          <div className="space-y-2">
-                            {premiums.tetherPremium !== null && (
-                              <div
-                                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
-                                  premiums.tetherPremium > 0
-                                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                                    : "bg-red-500/20 text-red-400 border border-red-500/30"
-                                }`}
-                              >
-                                <span>테더대비 프리미엄</span>
-                                <span>
-                                  {premiums.tetherPremium > 0 ? "+" : ""}
-                                  {premiums.tetherPremium.toFixed(2)}%
-                                </span>
-                              </div>
-                            )}
-                            {premiums.legalPremium !== null && (
-                              <div
-                                className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
-                                  premiums.legalPremium > 0
-                                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                                    : "bg-orange-500/20 text-orange-400 border border-orange-500/30"
-                                }`}
-                              >
-                                <span>네이버환율대비 프리미엄</span>
-                                <span>
-                                  {premiums.legalPremium > 0 ? "+" : ""}
-                                  {premiums.legalPremium.toFixed(2)}%
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-xs text-slate-500 border-t border-slate-700 pt-3">
-                        {currentTime.toLocaleString("ko-KR")}
-                      </div>
-                    </div>
+          {selectedItem &&
+            isDataReady &&
+            krStore &&
+            frStore &&
+            currentOrder && (
+              <div className="mt-8">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Korean Exchange Orderbook */}
+                  <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 overflow-hidden">
+                    <RealtimeOrderBook
+                      exchange={currentPair.kr.name.toLowerCase()}
+                      symbol={`${selectedItem.symbol}`}
+                      store={krStore}
+                      title={`${currentPair.kr.name} 오더북`}
+                      orderAmount={currentOrder.orderAmount || 10000}
+                      onAveragePriceUpdate={setKrAveragePrice}
+                      tetherPrice={tetherPrice}
+                      currentPosition={currentPosition}
+                      onExitAveragePriceUpdate={setKrExitAveragePrice}
+                    />
                   </div>
 
-                  {/* Exit Exchange Rate Card - 현재 포지션이 있을 때만 표시 */}
-                  {currentPosition && (
-                    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-orange-500/30 p-6 w-full max-w-sm">
+                  {/* Center Exchange Rate Display */}
+                  <div className="flex flex-col items-center justify-center gap-6">
+                    {/* Entry Exchange Rate Card */}
+                    <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 p-6 w-full max-w-sm">
                       <div className="text-center space-y-4">
                         <div className="flex items-center justify-center gap-2">
-                          <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
-                            <TrendingDown className="w-6 h-6 text-orange-500" />
+                          <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                            <TrendingUp className="w-6 h-6 text-blue-500" />
                           </div>
                         </div>
                         <div>
                           <h3 className="text-lg font-bold text-white mb-2">
                             {selectedItem.symbol} <br />
-                            현재 포지션 시장가 종료시 <br />
+                            주문금액 시장가 진입시 <br />
                             실시간 환율
                           </h3>
                           <div className="space-y-3">
-                            <div className="text-3xl font-bold text-orange-400">
-                              ₩
-                              {krExitAveragePrice && frExitAveragePrice
-                                ? (
-                                    krExitAveragePrice / frExitAveragePrice
-                                  ).toFixed(4)
+                            <div className="text-3xl font-bold text-blue-400">
+                              {krAveragePrice &&
+                              frAveragePrice &&
+                              krAveragePrice > 0 &&
+                              frAveragePrice > 0
+                                ? `₩${(krAveragePrice / frAveragePrice).toFixed(4)}`
                                 : "계산중..."}
                             </div>
                             <div className="text-sm text-slate-400">
-                              KR: ₩
-                              {krExitAveragePrice?.toLocaleString("ko-KR", {
-                                maximumFractionDigits: 10,
-                                minimumFractionDigits: 0,
-                              }) || "N/A"}{" "}
-                              | FR: ₩
-                              {frExitAveragePrice?.toLocaleString("ko-KR", {
-                                maximumFractionDigits: 10,
-                                minimumFractionDigits: 0,
-                              }) || "N/A"}
+                              KR:{" "}
+                              {krAveragePrice && krAveragePrice > 0
+                                ? `₩${krAveragePrice.toLocaleString("ko-KR", {
+                                    maximumFractionDigits: 10,
+                                    minimumFractionDigits: 0,
+                                  })}`
+                                : "₩N/A"}{" "}
+                              | FR:{" "}
+                              {frAveragePrice && frAveragePrice > 0
+                                ? `₩${frAveragePrice.toLocaleString("ko-KR", {
+                                    maximumFractionDigits: 10,
+                                    minimumFractionDigits: 0,
+                                  })}`
+                                : "₩N/A"}
                             </div>
-                            <div className="text-sm text-slate-300 border-t border-slate-700 pt-3">
-                              <p className="font-semibold mb-2">
-                                현재 포지션 정보
-                              </p>
-                              <div className="space-y-1 text-xs">
-                                <p>
-                                  진입 환율: ₩
-                                  {currentPosition.entryRate?.toFixed(4)}
-                                </p>
-                                <p>
-                                  주문량:{" "}
-                                  {currentPosition.totalKrVolume?.toFixed(4)}{" "}
-                                  {selectedItem.symbol}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex justify-center mt-3">
+                            <div className="flex justify-center">
                               <button
-                                onClick={async () => {
-                                  await handleForceClose(
+                                onClick={() =>
+                                  openConfirmDialog(
                                     selectedItem.symbol,
-                                    currentPosition.krExchange,
-                                    currentPosition.frExchange
-                                  );
-                                }}
-                                disabled={closingPositions.has(
-                                  selectedItem.symbol
-                                )}
-                                className="px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                                    currentOrder.krExchange,
+                                    currentOrder.frExchange
+                                  )
+                                }
+                                disabled={isButtonLoading(selectedItem.symbol)}
+                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
                               >
-                                {closingPositions.has(selectedItem.symbol) ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    종료 중...
-                                  </>
-                                ) : (
-                                  "포지션 종료"
-                                )}
+                                {isButtonLoading(selectedItem.symbol)
+                                  ? "진입중..."
+                                  : "포지션 진입"}
                               </button>
                             </div>
-                            {krExitAveragePrice &&
-                              frExitAveragePrice &&
-                              currentPosition.entryRate && (
-                                <div className="space-y-2">
-                                  <div
-                                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
-                                      krExitAveragePrice / frExitAveragePrice >
-                                      currentPosition.entryRate
-                                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                                        : "bg-red-500/20 text-red-400 border border-red-500/30"
-                                    }`}
-                                  >
-                                    <span>진입 대비</span>
-                                    <span>
-                                      {krExitAveragePrice / frExitAveragePrice >
-                                      currentPosition.entryRate
-                                        ? "+"
-                                        : ""}
-                                      {(
-                                        ((krExitAveragePrice /
-                                          frExitAveragePrice -
-                                          currentPosition.entryRate) /
-                                          currentPosition.entryRate) *
-                                        100
-                                      ).toFixed(2)}
-                                      %
-                                    </span>
-                                  </div>
+                            <div className="space-y-2">
+                              {premiums.tetherPremium !== null && (
+                                <div
+                                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                                    premiums.tetherPremium > 0
+                                      ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                      : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                  }`}
+                                >
+                                  <span>테더대비 프리미엄</span>
+                                  <span>
+                                    {premiums.tetherPremium > 0 ? "+" : ""}
+                                    {premiums.tetherPremium.toFixed(2)}%
+                                  </span>
                                 </div>
                               )}
+                              {premiums.legalPremium !== null && (
+                                <div
+                                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                                    premiums.legalPremium > 0
+                                      ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                      : "bg-orange-500/20 text-orange-400 border border-orange-500/30"
+                                  }`}
+                                >
+                                  <span>네이버환율대비 프리미엄</span>
+                                  <span>
+                                    {premiums.legalPremium > 0 ? "+" : ""}
+                                    {premiums.legalPremium.toFixed(2)}%
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <div className="text-xs text-slate-500 border-t border-slate-700 pt-3">
@@ -955,22 +925,165 @@ export default function KimchiOrderSettings({
                         </div>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                {/* Foreign Exchange Orderbook */}
-                <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 overflow-hidden">
-                  <RealtimeOrderBook
-                    exchange={currentPair.fr.name.toLowerCase()}
-                    symbol={`${selectedItem.symbol}`}
-                    store={frStore!}
-                    title={`${currentPair.fr.name} 오더북`}
-                    orderAmount={currentOrder?.orderAmount}
-                    onAveragePriceUpdate={setFrAveragePrice}
-                    tetherPrice={tetherPrice}
-                    currentPosition={currentPosition}
-                    onExitAveragePriceUpdate={setFrExitAveragePrice}
-                  />
+                    {/* Exit Exchange Rate Card - 현재 포지션이 있을 때만 표시 */}
+                    {currentPosition && (
+                      <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-orange-500/30 p-6 w-full max-w-sm">
+                        <div className="text-center space-y-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
+                              <TrendingDown className="w-6 h-6 text-orange-500" />
+                            </div>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-white mb-2">
+                              {selectedItem.symbol} <br />
+                              현재 포지션 시장가 종료시 <br />
+                              실시간 환율
+                            </h3>
+                            <div className="space-y-3">
+                              <div className="text-3xl font-bold text-orange-400">
+                                {krExitAveragePrice &&
+                                frExitAveragePrice &&
+                                krExitAveragePrice > 0 &&
+                                frExitAveragePrice > 0
+                                  ? `₩${(krExitAveragePrice / frExitAveragePrice).toFixed(4)}`
+                                  : "계산중..."}
+                              </div>
+                              <div className="text-sm text-slate-400">
+                                KR:{" "}
+                                {krExitAveragePrice && krExitAveragePrice > 0
+                                  ? `₩${krExitAveragePrice.toLocaleString(
+                                      "ko-KR",
+                                      {
+                                        maximumFractionDigits: 10,
+                                        minimumFractionDigits: 0,
+                                      }
+                                    )}`
+                                  : "₩N/A"}{" "}
+                                | FR:{" "}
+                                {frExitAveragePrice && frExitAveragePrice > 0
+                                  ? `₩${frExitAveragePrice.toLocaleString(
+                                      "ko-KR",
+                                      {
+                                        maximumFractionDigits: 10,
+                                        minimumFractionDigits: 0,
+                                      }
+                                    )}`
+                                  : "₩N/A"}
+                              </div>
+                              <div className="text-sm text-slate-300 border-t border-slate-700 pt-3">
+                                <p className="font-semibold mb-2">
+                                  현재 포지션 정보
+                                </p>
+                                <div className="space-y-1 text-xs">
+                                  <p>
+                                    진입 환율: ₩
+                                    {currentPosition.entryRate?.toFixed(4)}
+                                  </p>
+                                  <p>
+                                    주문량:{" "}
+                                    {currentPosition.totalKrVolume?.toFixed(4)}{" "}
+                                    {selectedItem.symbol}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex justify-center mt-3">
+                                <button
+                                  onClick={async () => {
+                                    await handleForceClose(
+                                      selectedItem.symbol,
+                                      currentPosition.krExchange,
+                                      currentPosition.frExchange
+                                    );
+                                  }}
+                                  disabled={closingPositions.has(
+                                    selectedItem.symbol
+                                  )}
+                                  className="px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                  {closingPositions.has(selectedItem.symbol) ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                      종료 중...
+                                    </>
+                                  ) : (
+                                    "포지션 종료"
+                                  )}
+                                </button>
+                              </div>
+                              {krExitAveragePrice &&
+                                frExitAveragePrice &&
+                                currentPosition.entryRate && (
+                                  <div className="space-y-2">
+                                    <div
+                                      className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                                        krExitAveragePrice /
+                                          frExitAveragePrice >
+                                        currentPosition.entryRate
+                                          ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                          : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                      }`}
+                                    >
+                                      <span>진입 대비</span>
+                                      <span>
+                                        {krExitAveragePrice /
+                                          frExitAveragePrice >
+                                        currentPosition.entryRate
+                                          ? "+"
+                                          : ""}
+                                        {(
+                                          ((krExitAveragePrice /
+                                            frExitAveragePrice -
+                                            currentPosition.entryRate) /
+                                            currentPosition.entryRate) *
+                                          100
+                                        ).toFixed(2)}
+                                        %
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-500 border-t border-slate-700 pt-3">
+                            {currentTime.toLocaleString("ko-KR")}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Foreign Exchange Orderbook */}
+                  <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 overflow-hidden">
+                    <RealtimeOrderBook
+                      exchange={currentPair.fr.name.toLowerCase()}
+                      symbol={`${selectedItem.symbol}`}
+                      store={frStore}
+                      title={`${currentPair.fr.name} 오더북`}
+                      orderAmount={currentOrder.orderAmount || 10000}
+                      onAveragePriceUpdate={setFrAveragePrice}
+                      tetherPrice={tetherPrice}
+                      currentPosition={currentPosition}
+                      onExitAveragePriceUpdate={setFrExitAveragePrice}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* 데이터 로딩 중 표시 */}
+          {selectedItem && !isDataReady && (
+            <div className="mt-8 bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-slate-700 p-8">
+              <div className="flex flex-col items-center justify-center gap-4">
+                <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                <div className="text-slate-400 text-center">
+                  <p className="text-lg font-semibold mb-2">
+                    데이터 로딩 중...
+                  </p>
+                  <p className="text-sm">
+                    거래소 연결 및 오더북 데이터를 불러오고 있습니다
+                  </p>
                 </div>
               </div>
             </div>
