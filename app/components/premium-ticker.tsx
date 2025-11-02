@@ -29,7 +29,11 @@ import {
 } from "./table";
 import { formatKRW } from "~/utils/decimal";
 
-type ExRate = { seed: number; ex_rate: number };
+type ExRate = {
+  seed: number;
+  entry_ex_rate: number;
+  exit_ex_rate: number;
+};
 type TickPayload = {
   symbol: string; // e.g., BTC, ETH
   premium?: number; // e.g., 0.025 means +2.5%
@@ -80,13 +84,21 @@ const PremiumTicker = React.memo(
   }) {
     const [items, setItems] = useState<TickPayload[]>([]);
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+    const [sortBy, setSortBy] = useState<"entry" | "exit" | "slippage">(
+      "entry"
+    );
     const [selectedSeed, setSelectedSeed] = useState<number>(1000000);
     const [selectedItem, setSelectedItem] = useState<TickPayload | null>(null);
     const [searchQuery, setSearchQuery] = useState<string>("");
     const [filteredItems, setFilteredItems] = useState<TickPayload[]>([]);
     const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
     const [pinnedItem, setPinnedItem] = useState<
-      (TickPayload & { _rate: number | null }) | null
+      | (TickPayload & {
+          _entryRate: number | null;
+          _exitRate: number | null;
+          _slippage: number | null;
+        })
+      | null
     >(null);
     const [loadingButtons, setLoadingButtons] = useState<Set<string>>(
       new Set()
@@ -152,23 +164,53 @@ const PremiumTicker = React.memo(
     // 표 렌더링 - 항상 환율 기준으로 정렬된 모든 데이터 표시
     const sortedItems = useMemo(() => {
       if (!selectedSeed) return [];
-      // 환율 기준 정렬
+      // 환율 및 슬리피지 계산
       const withRate = items.map((it) => {
-        let rate = null;
+        let entryRate = null;
+        let exitRate = null;
+        let slippage = null;
         if (Array.isArray(it.ex_rates)) {
           const found = it.ex_rates.find((ex) => ex.seed === selectedSeed);
-          if (found) rate = found.ex_rate;
+          if (found) {
+            entryRate = found.entry_ex_rate;
+            exitRate = found.exit_ex_rate;
+            // 슬리피지 계산: |(진입환율 - 종료환율) / 진입환율| * 100 (%)
+            if (entryRate !== null && exitRate !== null && entryRate !== 0) {
+              slippage = Math.abs((entryRate - exitRate) / entryRate) * 100;
+            }
+          }
         }
-        return { ...it, _rate: rate };
+        return {
+          ...it,
+          _entryRate: entryRate,
+          _exitRate: exitRate,
+          _slippage: slippage,
+        };
       });
+
+      // sortBy에 따라 정렬
       withRate.sort((a, b) => {
-        if (a._rate == null && b._rate == null) return 0;
-        if (a._rate == null) return 1;
-        if (b._rate == null) return -1;
-        return sortOrder === "asc" ? a._rate - b._rate : b._rate - a._rate;
+        let aValue: number | null = null;
+        let bValue: number | null = null;
+
+        if (sortBy === "entry") {
+          aValue = a._entryRate;
+          bValue = b._entryRate;
+        } else if (sortBy === "exit") {
+          aValue = a._exitRate;
+          bValue = b._exitRate;
+        } else if (sortBy === "slippage") {
+          aValue = a._slippage;
+          bValue = b._slippage;
+        }
+
+        if (aValue == null && bValue == null) return 0;
+        if (aValue == null) return 1;
+        if (bValue == null) return -1;
+        return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
       });
       return withRate;
-    }, [items, selectedSeed, sortOrder]);
+    }, [items, selectedSeed, sortOrder, sortBy]);
 
     // 고정된 아이템의 실시간 데이터 업데이트
     useEffect(() => {
@@ -187,13 +229,15 @@ const PremiumTicker = React.memo(
       }
     }, [sortedItems, pinnedItem]);
 
-    // 평균 환율 계산
+    // 평균 환율 계산 (진입 환율 기준)
     const averageRate = useMemo(() => {
       if (!sortedItems.length || !selectedSeed) return null;
 
       const validRates = sortedItems
-        .filter((item) => item._rate !== null && item._rate !== undefined)
-        .map((item) => item._rate as number);
+        .filter(
+          (item) => item._entryRate !== null && item._entryRate !== undefined
+        )
+        .map((item) => item._entryRate as number);
 
       if (validRates.length === 0) return null;
 
@@ -469,7 +513,7 @@ const PremiumTicker = React.memo(
           <CardHeader>
             <div className="relative flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <CardTitle className="text-lg font-semibold">
-                호가창 반영 실시간 환율
+                시장가 진입 실시간 환율
               </CardTitle>
               <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
                 <Badge variant="secondary" className="gap-1">
@@ -491,7 +535,7 @@ const PremiumTicker = React.memo(
             {/* ⭐ 모든 플랜에서 실시간 환율 표시 (잠금 UI 제거) */}
             {/* Seed Amount Slider */}
             <div className="flex justify-between items-center">
-              <label className="text-sm font-medium">호가창 누적금액</label>
+              <label className="text-sm font-medium">시장가 주문금액</label>
               <span className="text-sm text-muted-foreground">
                 {formatKRW(selectedSeed)}
               </span>
@@ -584,49 +628,50 @@ const PremiumTicker = React.memo(
                 </div>
                 <Table className="text-xs w-full table-fixed">
                   <colgroup>
-                    <col style={{ width: "12%" }} />
-                    <col style={{ width: "20%" }} />
-                    <col style={{ width: "18%" }} />
-                    <col style={{ width: "25%" }} />
-                    <col style={{ width: "25%" }} />
+                    <col style={{ width: "13%" }} />
+                    <col style={{ width: "13%" }} />
+                    <col style={{ width: "13%" }} />
+                    <col style={{ width: "13%" }} />
+                    <col style={{ width: "19.5%" }} />
+                    <col style={{ width: "19.5%" }} />
                   </colgroup>
                   <TableBody>
                     <TableRow className="bg-primary/10 border-primary/20">
-                      <TableCell className="px-1 pr-4 text-center">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300 mx-auto"
-                          onClick={(e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            openConfirmDialog(
-                              pinnedItem.symbol,
-                              pinnedItem.korean_ex,
-                              pinnedItem.foreign_ex
-                            );
-                          }}
-                          disabled={isButtonLoading(pinnedItem.symbol)}
-                        >
-                          {isButtonLoading(pinnedItem.symbol) ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <>
-                              <span className="hidden sm:inline">
-                                포지션진입
-                              </span>
-                              <span className="sm:hidden">진입</span>
-                            </>
-                          )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="px-2 pl-4 font-medium text-xs text-center">
+                      <TableCell className="px-2 pl-3 font-medium text-xs text-center">
                         {pinnedItem.symbol}
                       </TableCell>
-                      <TableCell className="px-2 text-xs text-center font-semibold text-primary">
-                        {pinnedItem._rate !== null &&
-                        pinnedItem._rate !== undefined
-                          ? pinnedItem._rate
-                          : "-"}
+                      <TableCell className="px-2 text-xs text-center">
+                        <div className="font-semibold text-blue-400">
+                          {pinnedItem._entryRate !== null &&
+                          pinnedItem._entryRate !== undefined
+                            ? pinnedItem._entryRate.toFixed(2)
+                            : "-"}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          진입
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-2 text-xs text-center">
+                        <div className="font-semibold text-orange-400">
+                          {pinnedItem._exitRate !== null &&
+                          pinnedItem._exitRate !== undefined
+                            ? pinnedItem._exitRate.toFixed(2)
+                            : "-"}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          종료
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-2 text-xs text-center">
+                        <div className="font-semibold text-purple-400">
+                          {pinnedItem._slippage !== null &&
+                          pinnedItem._slippage !== undefined
+                            ? `${pinnedItem._slippage.toFixed(2)}%`
+                            : "-"}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          슬리피지
+                        </div>
                       </TableCell>
                       <TableCell className="px-2 text-xs text-muted-foreground text-center">
                         {pinnedItem.korean_ex || "-"}
@@ -646,33 +691,79 @@ const PremiumTicker = React.memo(
             >
               <Table className="text-xs w-full table-fixed">
                 <colgroup>
-                  <col style={{ width: "12%" }} />
-                  <col style={{ width: "20%" }} />
-                  <col style={{ width: "18%" }} />
-                  <col style={{ width: "25%" }} />
-                  <col style={{ width: "25%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "19.5%" }} />
+                  <col style={{ width: "19.5%" }} />
                 </colgroup>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="px-2 text-xs text-center">
-                      {/* 포지션진입 버튼 칸 */}
-                    </TableHead>
                     <TableHead className="px-2 text-xs text-center">
                       티커
                     </TableHead>
                     <TableHead
                       className="px-2 text-xs cursor-pointer select-none text-center"
-                      onClick={() =>
-                        setSortOrder((o) => (o === "asc" ? "desc" : "asc"))
-                      }
+                      onClick={() => {
+                        if (sortBy === "entry") {
+                          setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+                        } else {
+                          setSortBy("entry");
+                          setSortOrder("asc");
+                        }
+                      }}
                     >
                       <span className="inline-flex items-center gap-1 justify-center w-full">
-                        환율
-                        {sortOrder === "asc" ? (
-                          <ChevronUp className="w-3 h-3" />
-                        ) : (
-                          <ChevronDown className="w-3 h-3" />
-                        )}
+                        진입 환율
+                        {sortBy === "entry" &&
+                          (sortOrder === "asc" ? (
+                            <ChevronUp className="w-3 h-3" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3" />
+                          ))}
+                      </span>
+                    </TableHead>
+                    <TableHead
+                      className="px-2 text-xs cursor-pointer select-none text-center"
+                      onClick={() => {
+                        if (sortBy === "exit") {
+                          setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+                        } else {
+                          setSortBy("exit");
+                          setSortOrder("asc");
+                        }
+                      }}
+                    >
+                      <span className="inline-flex items-center gap-1 justify-center w-full">
+                        종료 환율
+                        {sortBy === "exit" &&
+                          (sortOrder === "asc" ? (
+                            <ChevronUp className="w-3 h-3" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3" />
+                          ))}
+                      </span>
+                    </TableHead>
+                    <TableHead
+                      className="px-2 text-xs cursor-pointer select-none text-center"
+                      onClick={() => {
+                        if (sortBy === "slippage") {
+                          setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+                        } else {
+                          setSortBy("slippage");
+                          setSortOrder("asc");
+                        }
+                      }}
+                    >
+                      <span className="inline-flex items-center gap-1 justify-center w-full">
+                        슬리피지
+                        {sortBy === "slippage" &&
+                          (sortOrder === "asc" ? (
+                            <ChevronUp className="w-3 h-3" />
+                          ) : (
+                            <ChevronDown className="w-3 h-3" />
+                          ))}
                       </span>
                     </TableHead>
                     <TableHead className="px-2 text-xs text-center">
@@ -686,7 +777,7 @@ const PremiumTicker = React.memo(
                 <TableBody>
                   {sortedItems.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8">
+                      <TableCell colSpan={7} className="text-center py-8">
                         <div className="flex flex-col items-center gap-2">
                           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">
@@ -704,40 +795,31 @@ const PremiumTicker = React.memo(
                         className="cursor-pointer hover:bg-muted/50 transition-colors"
                         onClick={() => setSelectedItem(it)}
                       >
-                        <TableCell className="px-1 pr-3 text-center">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="hover:bg-green-500 hover:text-white focus:ring-2 focus:ring-green-400 transition-colors duration-150 cursor-pointer shadow-sm border border-green-300 mx-auto"
-                            onClick={(e: React.MouseEvent) => {
-                              e.stopPropagation();
-                              openConfirmDialog(
-                                it.symbol,
-                                it.korean_ex,
-                                it.foreign_ex
-                              );
-                            }}
-                            disabled={isButtonLoading(it.symbol)}
-                          >
-                            {isButtonLoading(it.symbol) ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <>
-                                <span className="hidden sm:inline">
-                                  포지션진입
-                                </span>
-                                <span className="sm:hidden">진입</span>
-                              </>
-                            )}
-                          </Button>
-                        </TableCell>
                         <TableCell className="px-2 pl-3 font-medium text-xs text-center">
                           {it.symbol}
                         </TableCell>
                         <TableCell className="px-2 text-xs text-center">
-                          {it._rate !== null && it._rate !== undefined
-                            ? it._rate
-                            : "-"}
+                          <span className="text-blue-600 dark:text-blue-400">
+                            {it._entryRate !== null &&
+                            it._entryRate !== undefined
+                              ? it._entryRate
+                              : "-"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-2 text-xs text-center">
+                          <span className="text-orange-600 dark:text-orange-400">
+                            {it._exitRate !== null && it._exitRate !== undefined
+                              ? it._exitRate
+                              : "-"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-2 text-xs text-center">
+                          <span className="text-purple-600 dark:text-purple-400 font-semibold">
+                            {it._slippage !== null && it._slippage !== undefined
+                              ? it._slippage.toFixed(2)
+                              : "-"}
+                            %
+                          </span>
                         </TableCell>
                         <TableCell className="px-2 text-xs text-muted-foreground text-center">
                           {it.korean_ex || "-"}

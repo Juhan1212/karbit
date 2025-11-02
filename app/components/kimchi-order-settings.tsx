@@ -41,7 +41,11 @@ type TickPayload = {
   ts?: number;
   korean_ex?: string;
   foreign_ex?: string;
-  ex_rates?: Array<{ seed: number; ex_rate: number }>;
+  ex_rates?: Array<{
+    seed: number;
+    entry_ex_rate: number;
+    exit_ex_rate: number;
+  }>;
 };
 
 interface KimchiOrderSettingsProps {
@@ -568,7 +572,7 @@ export default function KimchiOrderSettings({
                   ) : (
                     <div className="bg-slate-700/30 rounded-lg p-6 text-center">
                       <div className="text-slate-400 text-sm">
-                        프리미엄 티커에서 코인을 선택해주세요
+                        프리미엄 티커에서 코인을 선택(클릭)해주세요
                       </div>
                     </div>
                   )}

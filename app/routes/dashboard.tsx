@@ -249,6 +249,13 @@ export default function Dashboard() {
 
   // 선택된 티커 아이템 상태 (PremiumTicker에서 받아온 값)
   const [selectedTickerItem, setSelectedTickerItem] = useState<any>(null);
+  const selectedTickerItemRef = useRef<any>(null);
+
+  // selectedTickerItem을 설정하면서 ref도 함께 업데이트하는 wrapper 함수
+  const updateSelectedTickerItem = useCallback((item: any) => {
+    selectedTickerItemRef.current = item;
+    setSelectedTickerItem(item);
+  }, []);
 
   // 차트 새로고침을 위한 키
   const [chartRefreshKey, setChartRefreshKey] = useState<number>(0);
@@ -438,6 +445,24 @@ export default function Dashboard() {
             setActivePositionCountLocal(data.activePositionCount);
             polledActivePositionsRef.current = transformedPositions;
             activePositionCountRef.current = data.activePositionCount;
+
+            // activePositions가 1개 이상이고 selectedTickerItem이 없을 때만 첫 번째 포지션으로 설정
+            if (
+              transformedPositions.length >= 1 &&
+              !selectedTickerItemRef.current
+            ) {
+              const firstPosition = transformedPositions[0];
+              updateSelectedTickerItem({
+                symbol: firstPosition.coinSymbol,
+                korean_ex: firstPosition.krExchange.toLowerCase(),
+                foreign_ex: firstPosition.frExchange.toLowerCase(),
+                premium: undefined,
+                krPrice: undefined,
+                globalPrice: undefined,
+                ts: Date.now(),
+                ex_rates: [],
+              });
+            }
           }
 
           if (statsChanged) {
@@ -1079,7 +1104,7 @@ export default function Dashboard() {
             setAverageRate(avgRate);
           }}
           onItemSelected={(item: object | null) => {
-            setSelectedTickerItem(item);
+            updateSelectedTickerItem(item);
           }}
           exchangeBalances={(exchangeBalances || []).map((exchange: any) => {
             const isKorean = exchange.currency === "KRW";
