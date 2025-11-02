@@ -372,6 +372,7 @@ export async function getUserTradingHistoryPaginated(
       closedAt: positions.exitTime,
       createdAt: positions.createdAt, // 생성일시 추가
       usdtPrice: positions.usdtPrice,
+      entryRate: positions.entryRate,
     })
     .from(positions)
     .where(eq(positions.userId, userId))

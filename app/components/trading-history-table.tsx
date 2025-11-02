@@ -33,6 +33,7 @@ interface TradingHistoryTableProps {
     frFee: string;
     frFunds: string;
     exchangeRate: string | null;
+    entryRate: string | null;
     usdtPrice: string | null;
     profit: string | null;
     profitRate: string | null;
@@ -233,8 +234,8 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {trade.exchangeRate
-                          ? `${parseFloat(trade.exchangeRate).toLocaleString()}원`
+                        {trade.entryRate
+                          ? `${parseFloat(trade.entryRate).toLocaleString()}원`
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right">
