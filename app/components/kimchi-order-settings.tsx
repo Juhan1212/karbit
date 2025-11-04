@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from "./card";
 import { formatKRW } from "~/utils/decimal";
+import { useDashboardStore } from "~/stores/dashboard-store";
 
 type OrderData = {
   krExchange: string;
@@ -95,6 +96,12 @@ export default function KimchiOrderSettings({
     orderAmount: number;
     leverage: number;
   } | null>(null);
+
+  // Dashboard Store에서 setter 함수 가져오기
+  const {
+    setKrExitAveragePrice: setStoreKrExitPrice,
+    setFrExitAveragePrice: setStoreFrExitPrice,
+  } = useDashboardStore();
 
   // 실시간 시간 업데이트
   useEffect(() => {
@@ -259,6 +266,17 @@ export default function KimchiOrderSettings({
       legalPremium,
     };
   }, [krAveragePrice, frAveragePrice, tetherPrice, legalExchangeRate]);
+
+  // Exit Average Price를 Dashboard Store에 업데이트
+  useEffect(() => {
+    setStoreKrExitPrice(krExitAveragePrice);
+    setStoreFrExitPrice(frExitAveragePrice);
+  }, [
+    krExitAveragePrice,
+    frExitAveragePrice,
+    setStoreKrExitPrice,
+    setStoreFrExitPrice,
+  ]);
 
   // 현재 선택된 티커에 해당하는 포지션 찾기
   const currentPosition = useMemo(() => {

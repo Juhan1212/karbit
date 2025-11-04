@@ -153,13 +153,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                       한국거래소 주문금액
                     </TableHead>
                     <TableHead className="text-right">
-                      해외거래소 진입시초가
-                    </TableHead>
-                    <TableHead className="text-right">
                       해외거래소 진입평균가
-                    </TableHead>
-                    <TableHead className="text-right">
-                      해외거래소 슬리피지
                     </TableHead>
                     <TableHead className="text-right">
                       해외거래소 주문량
@@ -170,7 +164,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                     <TableHead className="text-right">
                       해외거래소 주문금액
                     </TableHead>
-                    <TableHead className="text-right">환율</TableHead>
+                    <TableHead className="text-right">진입환율</TableHead>
                     <TableHead className="text-right">USDT 가격</TableHead>
                     <TableHead className="text-right">수익률</TableHead>
                     <TableHead className="text-right">수익</TableHead>
@@ -207,17 +201,7 @@ export const TradingHistoryTable = React.memo(function TradingHistoryTable({
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {trade.frOriginalPrice
-                          ? `$${parseFloat(trade.frOriginalPrice).toLocaleString()}`
-                          : "-"}
-                      </TableCell>
-                      <TableCell className="text-right">
                         ${parseFloat(trade.frPrice).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {trade.frSlippage
-                          ? `${parseFloat(trade.frSlippage).toFixed(4)}%`
-                          : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         {parseFloat(trade.frVolume).toLocaleString()}{" "}

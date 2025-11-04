@@ -14,6 +14,8 @@ export interface DashboardMetrics {
     isHigher: boolean;
     description: string;
   };
+  krExitAveragePrice: number | null;
+  frExitAveragePrice: number | null;
 }
 
 interface DashboardStore {
@@ -31,6 +33,8 @@ interface DashboardStore {
     isHigher: boolean;
     description: string;
   };
+  krExitAveragePrice: number | null;
+  frExitAveragePrice: number | null;
 
   // 액션
   setCurrentExchangeRate: (rate: number | null) => void;
@@ -48,6 +52,8 @@ interface DashboardStore {
     isHigher: boolean;
     description: string;
   }) => void;
+  setKrExitAveragePrice: (price: number | null) => void;
+  setFrExitAveragePrice: (price: number | null) => void;
 }
 
 export const useDashboardStore = create<DashboardStore>((set) => ({
@@ -60,10 +66,14 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
     isHigher: true,
     description: "법정화폐 환율대비",
   },
+  krExitAveragePrice: null,
+  frExitAveragePrice: null,
 
   // 액션들
   setCurrentExchangeRate: (rate) => set({ currentExchangeRate: rate }),
   setLegalExchangeRate: (rate) => set({ legalExchangeRate: rate }),
   setActivePositionCount: (count) => set({ activePositionCount: count }),
   setKimchiPremiumData: (data) => set({ kimchiPremiumData: data }),
+  setKrExitAveragePrice: (price) => set({ krExitAveragePrice: price }),
+  setFrExitAveragePrice: (price) => set({ frExitAveragePrice: price }),
 }));

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Button } from "./button";
 import { Badge } from "./badge";
-import { RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2, TrendingUp, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -12,11 +12,19 @@ import {
   TableHeader,
   TableRow,
 } from "./table";
+import { useDashboardStore } from "~/stores/dashboard-store";
 
 // 유틸리티 함수들
 const formatKRW = (amount: number) => {
   const roundedAmount = Math.round(amount); // 1원 단위로 반올림
   return `${roundedAmount.toLocaleString()}원`;
+};
+
+const formatNumber = (num: number, decimals: number = 0) => {
+  return num.toLocaleString(undefined, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
 };
 
 // Hydration 에러 방지: 날짜 포맷 함수 (서버/클라이언트 동일)
@@ -77,35 +85,17 @@ export const ActivePositionManagement = React.memo(
       Map<string, PositionBalance>
     >(new Map());
 
-    // 개별 포지션의 가격 정보 조회 함수 - 서버 API GET 호출
-    const fetchPositionPrice = async (position: ActivePosition) => {
-      try {
-        const params = new URLSearchParams({
-          krExchange: position.krExchange,
-          frExchange: position.frExchange,
-          coinSymbol: position.coinSymbol,
-        });
-        const res = await fetch(
-          `/api/proxy/position/price?${params.toString()}`
-        );
-        if (!res.ok) throw new Error("API 요청 실패");
-        const data = await res.json();
-        return {
-          coinSymbol: position.coinSymbol,
-          krPrice: data.krPrice ?? 0,
-          frPrice: data.frPrice ?? 0,
-          frUnrealizedPnl: data.frUnrealizedPnl ?? 0,
-        };
-      } catch (error) {
-        console.error(`가격 조회 실패 (${position.coinSymbol}):`, error);
-        return null;
-      }
-    };
-
-    // 모든 포지션의 가격 및 수익 정보 업데이트
+    // Dashboard Store에서 Exit Average Price 구독
+    const { krExitAveragePrice, frExitAveragePrice } = useDashboardStore();
+    // 모든 포지션의 가격 및 수익 정보 업데이트 (Store의 Exit Price 사용)
     const updatePositionBalances = useCallback(async () => {
       if (positions.length === 0) {
         setPositionBalances(new Map());
+        return;
+      }
+
+      // Exit Price가 없으면 업데이트 불가
+      if (krExitAveragePrice === null || frExitAveragePrice === null) {
         return;
       }
 
@@ -113,60 +103,68 @@ export const ActivePositionManagement = React.memo(
 
       for (const position of positions) {
         try {
-          const priceData = await fetchPositionPrice(position);
+          // DB에서 받은 실제 보유량과 투자금액
+          const totalKrVolume = position.totalKrVolume || 0;
+          const totalKrFunds = position.totalKrFunds || 0;
+          const totalFrFunds = position.totalFrFunds || 0;
+          const totalFrVolume = position.totalFrVolume || 0;
+          const leverage = position.leverage || 1;
 
-          if (priceData) {
-            // DB에서 받은 실제 보유량과 투자금액
-            const totalKrVolume = position.totalKrVolume || 0;
-            const totalKrFunds = position.totalKrFunds || 0;
-            const totalFrFunds = position.totalFrFunds || 0;
+          // 해외거래소 진입 평균가 계산
+          const frEntryPrice =
+            totalFrVolume > 0 ? totalFrFunds / totalFrVolume : 0;
 
-            // 실시간 잔액 계산 (1원 단위 반올림)
-            const krBalanceKrw = Math.round(totalKrVolume * priceData.krPrice);
-            const frBalanceKrw = Math.round(
-              (Number(totalFrFunds) + Number(priceData.frUnrealizedPnl)) *
-                currentExchangeRate
-            );
+          // frUnrealizedPnl 역산 (선물거래소 Short 포지션 PnL 계산)
+          // Short 포지션: PnL = (Entry Price - Exit Price) × Volume
+          // 진입가 > 종료가 = 수익, 진입가 < 종료가 = 손실
+          const frUnrealizedPnl =
+            (frEntryPrice - frExitAveragePrice) * totalFrVolume;
 
-            // 총 투자금액 계산 - NaN 방지를 위한 안전한 처리
-            const safeKrFunds =
-              isNaN(Number(totalKrFunds)) || totalKrFunds === null
-                ? 0
-                : Number(totalKrFunds);
-            const safeFrFunds =
-              isNaN(Number(totalFrFunds)) || totalFrFunds === null
-                ? 0
-                : Number(totalFrFunds);
-            const safeFrFundsKrw = isNaN(safeFrFunds * currentExchangeRate)
+          // 실시간 잔액 계산 (1원 단위 반올림)
+          const krBalanceKrw = Math.round(totalKrVolume * krExitAveragePrice);
+          const frBalanceKrw = Math.round(
+            (Number(totalFrFunds) + Number(frUnrealizedPnl)) *
+              currentExchangeRate
+          );
+
+          // 총 투자금액 계산 - NaN 방지를 위한 안전한 처리
+          const safeKrFunds =
+            isNaN(Number(totalKrFunds)) || totalKrFunds === null
               ? 0
-              : safeFrFunds * currentExchangeRate;
-
-            const totalInvestment = Math.round(safeKrFunds + safeFrFundsKrw);
-
-            // 현재 총 자산 가치
-            const totalCurrentValue = krBalanceKrw + frBalanceKrw;
-
-            // 수익 계산 - NaN 방지를 위한 안전한 처리
-            const currentProfit = isNaN(totalInvestment)
+              : Number(totalKrFunds);
+          const safeFrFunds =
+            isNaN(Number(totalFrFunds)) || totalFrFunds === null
               ? 0
-              : Math.round(totalCurrentValue - totalInvestment);
-            const profitRate =
-              totalInvestment > 0 && !isNaN(totalInvestment)
-                ? (currentProfit / totalInvestment) * 100
-                : 0;
+              : Number(totalFrFunds);
+          const safeFrFundsKrw = isNaN(safeFrFunds * currentExchangeRate)
+            ? 0
+            : safeFrFunds * currentExchangeRate;
 
-            newBalances.set(position.coinSymbol, {
-              coinSymbol: position.coinSymbol,
-              krPrice: priceData.krPrice,
-              frPrice: priceData.frPrice,
-              krBalanceKrw,
-              frBalanceKrw,
-              totalInvestment,
-              currentProfit,
-              profitRate,
-              lastUpdated: Date.now(),
-            });
-          }
+          const totalInvestment = Math.round(safeKrFunds + safeFrFundsKrw);
+
+          // 현재 총 자산 가치
+          const totalCurrentValue = krBalanceKrw + frBalanceKrw;
+
+          // 수익 계산 - NaN 방지를 위한 안전한 처리
+          const currentProfit = isNaN(totalInvestment)
+            ? 0
+            : Math.round(totalCurrentValue - totalInvestment);
+          const profitRate =
+            totalInvestment > 0 && !isNaN(totalInvestment)
+              ? (currentProfit / totalInvestment) * 100
+              : 0;
+
+          newBalances.set(position.coinSymbol, {
+            coinSymbol: position.coinSymbol,
+            krPrice: krExitAveragePrice,
+            frPrice: frExitAveragePrice,
+            krBalanceKrw,
+            frBalanceKrw,
+            totalInvestment,
+            currentProfit,
+            profitRate,
+            lastUpdated: Date.now(),
+          });
         } catch (error) {
           console.error(
             `포지션 잔액 업데이트 실패 (${position.coinSymbol}):`,
@@ -176,7 +174,12 @@ export const ActivePositionManagement = React.memo(
       }
 
       setPositionBalances(newBalances);
-    }, [positions, currentExchangeRate]);
+    }, [
+      positions,
+      currentExchangeRate,
+      krExitAveragePrice,
+      frExitAveragePrice,
+    ]);
 
     // 포지션 가격 및 수익 정보 초기화
     useEffect(() => {
@@ -231,214 +234,302 @@ export const ActivePositionManagement = React.memo(
     };
 
     return (
-      <Card>
-        <CardHeader>
-          <div className="relative flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-            <CardTitle className="text-lg font-semibold">
-              실시간 포지션 관리
-            </CardTitle>
-            <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
-              <Badge variant="secondary" className="gap-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                5초마다 업데이트
-              </Badge>
+      <Card className="shadow-lg">
+        <CardHeader className="border-b border-blue-500/20 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-500/20 dark:bg-blue-500/30 rounded-lg">
+                <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold">
+                  실시간 포지션 관리
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  현재 포지션 {positions.length}개
+                </p>
+              </div>
             </div>
+            <Badge variant="secondary" className="gap-2 py-2 px-4">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="font-medium">5초마다 자동 업데이트</span>
+            </Badge>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6">
           {positions.length === 0 ? (
-            <div className="text-center py-4">포지션이 없습니다.</div>
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full mb-4">
+                <TrendingDown className="w-8 h-8 text-gray-400" />
+              </div>
+              <p className="text-lg font-medium text-muted-foreground">
+                활성 포지션이 없습니다
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                새로운 포지션을 진입하여 거래를 시작하세요
+              </p>
+            </div>
           ) : (
-            <>
-              {/* 전체 요약 테이블 */}
-              <div className="mb-6 border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-center font-semibold">
-                        총 자산
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
+            <div className="space-y-6">
+              {/* 전체 요약 카드 - 3열 그리드 */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card className="border-2 border-blue-500/30 dark:border-blue-500/50 bg-gradient-to-br from-blue-500/10 to-transparent dark:from-blue-500/20 dark:to-transparent">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        총 포지션금액
+                      </p>
+                      <div className="p-2 bg-blue-500/20 dark:bg-blue-500/30 rounded-lg">
+                        <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold tabular-nums">
+                      {formatKRW(
+                        Array.from(positionBalances.values()).reduce(
+                          (sum, balance) =>
+                            sum + balance.krBalanceKrw + balance.frBalanceKrw,
+                          0
+                        )
+                      )}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-2 border-purple-500/30 dark:border-purple-500/50 bg-gradient-to-br from-purple-500/10 to-transparent dark:from-purple-500/20 dark:to-transparent">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-muted-foreground">
                         총 투자금액
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        현재 예상수익(수수료/슬리피지 제외)
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell className="text-center font-medium">
-                        {formatKRW(
-                          Array.from(positionBalances.values()).reduce(
-                            (sum, balance) =>
-                              sum + balance.krBalanceKrw + balance.frBalanceKrw,
-                            0
-                          )
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center font-medium">
-                        {formatKRW(
-                          Array.from(positionBalances.values()).reduce(
-                            (sum, balance) => sum + balance.totalInvestment,
-                            0
-                          )
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center font-medium">
-                        {formatKRW(
+                      </p>
+                      <div className="p-2 bg-purple-500/20 dark:bg-purple-500/30 rounded-lg">
+                        <TrendingUp className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                      </div>
+                    </div>
+                    <p className="text-2xl font-bold tabular-nums">
+                      {formatKRW(
+                        Array.from(positionBalances.values()).reduce(
+                          (sum, balance) => sum + balance.totalInvestment,
+                          0
+                        )
+                      )}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  className={`border-2 ${
+                    Array.from(positionBalances.values()).reduce(
+                      (sum, balance) => sum + balance.currentProfit,
+                      0
+                    ) >= 0
+                      ? "border-green-500/30 dark:border-green-500/50 bg-gradient-to-br from-green-500/10 to-transparent dark:from-green-500/20 dark:to-transparent"
+                      : "border-red-500/30 dark:border-red-500/50 bg-gradient-to-br from-red-500/10 to-transparent dark:from-red-500/20 dark:to-transparent"
+                  }`}
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        현재 예상수익
+                      </p>
+                      <div
+                        className={`p-2 rounded-lg ${
                           Array.from(positionBalances.values()).reduce(
                             (sum, balance) => sum + balance.currentProfit,
                             0
-                          )
+                          ) >= 0
+                            ? "bg-green-500/20 dark:bg-green-500/30"
+                            : "bg-red-500/20 dark:bg-red-500/30"
+                        }`}
+                      >
+                        {Array.from(positionBalances.values()).reduce(
+                          (sum, balance) => sum + balance.currentProfit,
+                          0
+                        ) >= 0 ? (
+                          <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-red-600 dark:text-red-400" />
                         )}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
+                      </div>
+                    </div>
+                    <p
+                      className={`text-2xl font-bold tabular-nums ${
+                        Array.from(positionBalances.values()).reduce(
+                          (sum, balance) => sum + balance.currentProfit,
+                          0
+                        ) >= 0
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-red-600 dark:text-red-400"
+                      }`}
+                    >
+                      {formatKRW(
+                        Array.from(positionBalances.values()).reduce(
+                          (sum, balance) => sum + balance.currentProfit,
+                          0
+                        )
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      수수료/슬리피지 제외
+                    </p>
+                  </CardContent>
+                </Card>
               </div>
 
               {/* 개별 포지션 테이블 */}
-              <div className="overflow-x-auto border rounded-lg">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-center font-semibold">
-                        포지션
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        코인
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        KR 가격
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        FR 가격
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        KR 자산
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        FR 자산
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        총 투자금액
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        현재 예상수익(수수료/슬리피지 제외)
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        수익률
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        마지막 업데이트
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {positions.map((position) => {
-                      const balance = positionBalances.get(position.coinSymbol);
-                      return (
-                        <TableRow
-                          key={position.coinSymbol}
-                          className="cursor-pointer hover:bg-muted/50 transition-colors"
-                          onClick={() => {
-                            if (onTickerSelect) {
-                              onTickerSelect(position.coinSymbol);
-                            }
-                          }}
-                        >
-                          <TableCell className="text-center">
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              disabled={closingPositions.has(
-                                position.coinSymbol
-                              )}
-                              onClick={async () => {
-                                setClosingPositions((prev) =>
-                                  new Set(prev).add(position.coinSymbol)
-                                );
-                                await handleForceClose(
-                                  position.coinSymbol,
-                                  position.krExchange,
-                                  position.frExchange
-                                );
-                                handlePositionClose(position.coinSymbol);
-                              }}
+              <div className="border border-gray-500/30 rounded-xl overflow-hidden bg-transparent">
+                <div className="overflow-x-auto">
+                  <table className="w-full table-fixed">
+                    <thead className="bg-gradient-to-r from-slate-700/40 to-slate-600/40 dark:from-slate-700/60 dark:to-slate-600/60 border-b border-gray-500/30">
+                      <tr>
+                        <th className="w-24 px-4 py-4 text-center text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          관리
+                        </th>
+                        <th className="w-24 px-4 py-4 text-center text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          코인
+                        </th>
+                        <th className="w-28 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          KR 가격
+                        </th>
+                        <th className="w-28 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          FR 가격
+                        </th>
+                        <th className="w-32 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          KR 자산
+                        </th>
+                        <th className="w-32 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          FR 자산
+                        </th>
+                        <th className="w-32 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          투자금액
+                        </th>
+                        <th className="w-32 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          예상수익
+                        </th>
+                        <th className="w-24 px-4 py-4 text-center text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          수익률
+                        </th>
+                        <th className="w-28 px-4 py-4 text-center text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          업데이트
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-500/20">
+                      {positions.map((position) => {
+                        const balance = positionBalances.get(
+                          position.coinSymbol
+                        );
+                        return (
+                          <tr
+                            key={position.coinSymbol}
+                            className="hover:bg-gray-500/10 dark:hover:bg-gray-500/20 transition-colors cursor-pointer"
+                            onClick={() => {
+                              if (onTickerSelect) {
+                                onTickerSelect(position.coinSymbol);
+                              }
+                            }}
+                          >
+                            <td className="px-4 py-4 text-center">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                disabled={closingPositions.has(
+                                  position.coinSymbol
+                                )}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  setClosingPositions((prev) =>
+                                    new Set(prev).add(position.coinSymbol)
+                                  );
+                                  await handleForceClose(
+                                    position.coinSymbol,
+                                    position.krExchange,
+                                    position.frExchange
+                                  );
+                                  handlePositionClose(position.coinSymbol);
+                                }}
+                                className="w-full"
+                              >
+                                {closingPositions.has(position.coinSymbol) ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                    종료중
+                                  </>
+                                ) : (
+                                  "종료"
+                                )}
+                              </Button>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className="font-bold text-base">
+                                {position.coinSymbol}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-right tabular-nums font-medium">
+                              {balance
+                                ? formatNumber(balance.krPrice, 0) + "원"
+                                : "-"}
+                            </td>
+                            <td className="px-4 py-4 text-right tabular-nums font-medium">
+                              {balance
+                                ? "$" + formatNumber(balance.frPrice, 2)
+                                : "-"}
+                            </td>
+                            <td className="px-4 py-4 text-right tabular-nums font-semibold text-blue-600 dark:text-blue-400">
+                              {balance ? formatKRW(balance.krBalanceKrw) : "-"}
+                            </td>
+                            <td className="px-4 py-4 text-right tabular-nums font-semibold text-purple-600 dark:text-purple-400">
+                              {balance ? formatKRW(balance.frBalanceKrw) : "-"}
+                            </td>
+                            <td className="px-4 py-4 text-right tabular-nums font-semibold">
+                              {balance
+                                ? formatKRW(balance.totalInvestment)
+                                : "-"}
+                            </td>
+                            <td
+                              className={`px-4 py-4 text-right tabular-nums font-bold ${
+                                balance && balance.currentProfit >= 0
+                                  ? "text-green-600 dark:text-green-400"
+                                  : "text-red-600 dark:text-red-400"
+                              }`}
                             >
-                              {closingPositions.has(position.coinSymbol) ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                  종료 중...
-                                </>
+                              {balance ? formatKRW(balance.currentProfit) : "-"}
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              {balance ? (
+                                <Badge
+                                  variant={
+                                    balance.profitRate >= 0
+                                      ? "default"
+                                      : "destructive"
+                                  }
+                                  className={`font-bold tabular-nums ${
+                                    balance.profitRate >= 0
+                                      ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                                      : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+                                  }`}
+                                >
+                                  {balance.profitRate >= 0 ? "+" : ""}
+                                  {balance.profitRate.toFixed(2)}%
+                                </Badge>
                               ) : (
-                                "종료"
+                                "-"
                               )}
-                            </Button>
-                          </TableCell>
-                          <TableCell className="text-center font-medium">
-                            {position.coinSymbol}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {balance
-                              ? balance.krPrice.toLocaleString() + "원"
-                              : "-"}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {balance
-                              ? balance.frPrice.toLocaleString() + "$"
-                              : "-"}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {balance ? formatKRW(balance.krBalanceKrw) : "-"}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {balance ? formatKRW(balance.frBalanceKrw) : "-"}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {balance ? formatKRW(balance.totalInvestment) : "-"}
-                          </TableCell>
-                          <TableCell
-                            className={`text-center font-medium ${balance && balance.currentProfit >= 0 ? "text-green-600" : "text-red-600"}`}
-                          >
-                            {balance ? formatKRW(balance.currentProfit) : "-"}
-                          </TableCell>
-                          <TableCell
-                            className={`text-center font-medium ${balance && balance.profitRate >= 0 ? "text-green-600" : "text-red-600"}`}
-                          >
-                            {balance
-                              ? balance.profitRate.toFixed(2) + "%"
-                              : "-"}
-                          </TableCell>
-                          <TableCell className="text-center text-xs text-muted-foreground">
-                            {balance && balance.lastUpdated
-                              ? formatDateForDisplay(
-                                  new Date(balance.lastUpdated).toISOString()
-                                )
-                              : "-"}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                            </td>
+                            <td className="px-4 py-4 text-center text-xs text-muted-foreground tabular-nums">
+                              {balance && balance.lastUpdated
+                                ? formatDateForDisplay(
+                                    new Date(balance.lastUpdated).toISOString()
+                                  )
+                                : "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-
-              {/* <div className="flex justify-end gap-2 mt-4">
-                <Button
-                  onClick={() => {
-                    // 모든 포지션 새로 고침
-                    updatePositionBalances();
-                  }}
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  새로 고침
-                </Button>
-              </div> */}
-            </>
+            </div>
           )}
         </CardContent>
       </Card>
