@@ -133,7 +133,19 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
         pendingOperations,
         listeners,
       } = get();
-      if (!exchange || socket) return;
+      if (!exchange) return;
+
+      // 이미 연결된 소켓이 있고 OPEN 상태라면 재연결하지 않음
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        console.log("WebSocket already connected, skipping reconnection");
+        return;
+      }
+
+      // 연결 중인 소켓이 있다면 재연결하지 않음
+      if (socket && socket.readyState === WebSocket.CONNECTING) {
+        console.log("WebSocket is connecting, skipping reconnection");
+        return;
+      }
 
       // 소문자 exchange를 대문자로 변환
       const uppercaseExchange = exchange.toUpperCase() as UppercaseExchangeType;
@@ -213,12 +225,25 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
     },
 
     disconnectWebSocket: () => {
-      const { socket } = get();
-      if (socket && socket.readyState === WebSocket.OPEN) {
+      const { socket, reconnectTimeout } = get();
+
+      // 재연결 타이머가 있다면 제거
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        set({ reconnectTimeout: null });
+      }
+
+      // 소켓이 열려있거나 연결 중인 경우에만 닫기
+      if (
+        socket &&
+        (socket.readyState === WebSocket.OPEN ||
+          socket.readyState === WebSocket.CONNECTING)
+      ) {
         console.log("disconnectWebSocket called, closing socket");
         socket.close();
-        set({ socket: null });
       }
+
+      set({ socket: null, isConnected: false });
     },
 
     subscribeToTicker: (symbol) => {

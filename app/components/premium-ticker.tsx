@@ -1,7 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { ChevronDown, ChevronUp, Crown, Lock, Loader2 } from "lucide-react";
 import { Button } from "./button";
 import { toast } from "sonner";
+import { debounce } from "~/utils/debounce";
 import {
   Card,
   CardContent,
@@ -259,26 +266,31 @@ const PremiumTicker = React.memo(
       }
     }, [selectedItem, onItemSelected]);
 
-    // 검색 입력 시 자동완성 필터링
+    // 검색 입력 시 자동완성 필터링 (debounce 적용으로 성능 최적화)
+    const debouncedSearchUpdate = useCallback(
+      debounce((query: string, allItems: TickPayload[]) => {
+        if (query.trim() === "") {
+          setFilteredItems([]);
+          setShowSuggestions(false);
+          return;
+        }
+
+        // 티커 심볼로 필터링 (중복 포함)
+        const filtered = allItems
+          .filter((item) =>
+            item.symbol.toLowerCase().includes(query.toLowerCase())
+          )
+          .slice(0, 5); // 최대 5개까지만 표시
+
+        setFilteredItems(filtered);
+        setShowSuggestions(filtered.length > 0);
+      }, 300), // 300ms 대기
+      []
+    );
+
     useEffect(() => {
-      if (searchQuery.trim() === "") {
-        setFilteredItems([]);
-        setShowSuggestions(false);
-        return;
-      }
-
-      // 티커 심볼로 필터링 (중복 포함)
-      const filtered = items
-        .filter((item) =>
-          item.symbol.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-        .slice(0, 5); // 최대 5개까지만 표시
-
-      setFilteredItems(filtered);
-      setShowSuggestions(filtered.length > 0);
-    }, [searchQuery, items]);
-
-    // orderData 초기화
+      debouncedSearchUpdate(searchQuery, items);
+    }, [searchQuery, items, debouncedSearchUpdate]); // orderData 초기화
     const exchangeBalancesStr = useMemo(
       () => JSON.stringify(exchangeBalances),
       [exchangeBalances]

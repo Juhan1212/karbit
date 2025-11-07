@@ -389,6 +389,25 @@ export default function Dashboard() {
     };
   }, [koreanWebSocketStore, foreignWebSocketStore]);
 
+  // 얕은 비교로 배열 변경 감지 (성능 최적화)
+  const hasArrayChanged = useCallback((prev: any[], next: any[]): boolean => {
+    if (prev.length !== next.length) return true;
+    return prev.some((item, i) => {
+      const nextItem = next[i];
+      // 객체의 모든 키를 비교 (얕은 비교)
+      const keys = Object.keys(item);
+      return keys.some((key) => item[key] !== nextItem[key]);
+    });
+  }, []);
+
+  // 객체 얕은 비교
+  const hasObjectChanged = useCallback((prev: any, next: any): boolean => {
+    if (!prev || !next) return prev !== next;
+    const keys = Object.keys(prev);
+    if (keys.length !== Object.keys(next).length) return true;
+    return keys.some((key) => prev[key] !== next[key]);
+  }, []);
+
   // 활성 포지션 및 트레이딩 통계 폴링 함수
   const pollActivePositions = useCallback(
     async (showLoading = false) => {
@@ -423,19 +442,22 @@ export default function Dashboard() {
             })
           );
 
-          // 데이터가 실제로 변경되었는지 확인
+          // 얕은 비교로 변경 감지 (성능 개선)
           const positionsChanged =
-            JSON.stringify(polledActivePositionsRef.current) !==
-              JSON.stringify(transformedPositions) ||
-            activePositionCountRef.current !== data.activePositionCount;
+            hasArrayChanged(
+              polledActivePositionsRef.current,
+              transformedPositions
+            ) || activePositionCountRef.current !== data.activePositionCount;
 
-          const statsChanged =
-            JSON.stringify(tradingStatsRef.current) !==
-            JSON.stringify(data.tradingStats);
+          const statsChanged = hasObjectChanged(
+            tradingStatsRef.current,
+            data.tradingStats
+          );
 
-          const historyChanged =
-            JSON.stringify(tradingHistoryRef.current) !==
-            JSON.stringify(data.tradingHistory);
+          const historyChanged = hasArrayChanged(
+            tradingHistoryRef.current || [],
+            data.tradingHistory || []
+          );
 
           const dailyProfitChanged = data.dailyProfit !== dailyProfit;
 
@@ -488,7 +510,7 @@ export default function Dashboard() {
         }
       }
     },
-    [navigate]
+    [navigate, dailyProfit, hasArrayChanged, hasObjectChanged]
   );
 
   // 페이지 가시성에 따른 interval 제어 함수들

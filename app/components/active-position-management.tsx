@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Button } from "./button";
 import { Badge } from "./badge";
@@ -81,22 +81,19 @@ export const ActivePositionManagement = React.memo(
     const [closingPositions, setClosingPositions] = useState<Set<string>>(
       new Set()
     );
-    const [positionBalances, setPositionBalances] = useState<
-      Map<string, PositionBalance>
-    >(new Map());
 
     // Dashboard Store에서 Exit Average Price 구독
     const { krExitAveragePrice, frExitAveragePrice } = useDashboardStore();
-    // 모든 포지션의 가격 및 수익 정보 업데이트 (Store의 Exit Price 사용)
-    const updatePositionBalances = useCallback(async () => {
+
+    // 모든 포지션의 가격 및 수익 정보 업데이트 (useMemo로 계산 최적화)
+    const positionBalances = useMemo(() => {
       if (positions.length === 0) {
-        setPositionBalances(new Map());
-        return;
+        return new Map<string, PositionBalance>();
       }
 
-      // Exit Price가 없으면 업데이트 불가
+      // Exit Price가 없으면 계산 불가
       if (krExitAveragePrice === null || frExitAveragePrice === null) {
-        return;
+        return new Map<string, PositionBalance>();
       }
 
       const newBalances = new Map<string, PositionBalance>();
@@ -173,20 +170,13 @@ export const ActivePositionManagement = React.memo(
         }
       }
 
-      setPositionBalances(newBalances);
+      return newBalances;
     }, [
       positions,
       currentExchangeRate,
       krExitAveragePrice,
       frExitAveragePrice,
-    ]);
-
-    // 포지션 가격 및 수익 정보 초기화
-    useEffect(() => {
-      updatePositionBalances();
-    }, [updatePositionBalances]);
-
-    // 클로징 상태 업데이트
+    ]); // 클로징 상태 업데이트
     const handlePositionClose = (coinSymbol: string) => {
       if (closingPositions.has(coinSymbol)) {
         setClosingPositions((prev) => {
@@ -252,7 +242,7 @@ export const ActivePositionManagement = React.memo(
             </div>
             <Badge variant="secondary" className="gap-2 py-2 px-4">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="font-medium">5초마다 자동 업데이트</span>
+              <span className="font-medium">실시간</span>
             </Badge>
           </div>
         </CardHeader>
