@@ -25,32 +25,42 @@ const calculateAveragePrice = (
 ): number => {
   if (!entries.length || !orderAmount) return 0;
 
+  // orderAmount가 음수일 경우 100만원(1,000,000 KRW)을 기본값으로 사용
+  const calculationAmount = orderAmount > 0 ? orderAmount : 1000000;
+
   // 해외거래소의 경우 orderAmount를 USDT로 변환 (KRW 기준 orderAmount를 tetherPrice로 나누어 USDT 금액 계산)
   const effectiveOrderAmount = isKoreanExchange
-    ? orderAmount
+    ? calculationAmount
     : tetherPrice
-      ? orderAmount / tetherPrice
-      : orderAmount;
+      ? calculationAmount / tetherPrice
+      : calculationAmount;
 
   // 정렬: ask는 가격 오름차순 (최저가부터), bid는 가격 내림차순 (최고가부터)
   const sortedEntries = [...entries].sort((a, b) => {
     return type === "ask" ? a.price - b.price : b.price - a.price;
   });
 
-  let totalValue = 0;
-  let totalAmount = 0;
-  let remainingAmount = effectiveOrderAmount;
+  let totalValue = 0; // 총 금액 (KRW 또는 USDT)
+  let totalVolume = 0; // 총 수량 (코인)
+  let remainingAmount = effectiveOrderAmount; // 남은 주문 금액
 
   for (const entry of sortedEntries) {
     if (remainingAmount <= 0) break;
 
-    const useAmount = Math.min(remainingAmount, entry.total);
-    totalValue += entry.price * useAmount;
-    totalAmount += useAmount;
-    remainingAmount -= useAmount;
+    // entry.total은 해당 호가의 총 금액 (price * amount)
+    // remainingAmount는 주문 금액
+    const useValue = Math.min(remainingAmount, entry.total);
+
+    // 사용할 코인 수량 계산: 금액 / 가격 = 수량
+    const useVolume = useValue / entry.price;
+
+    totalValue += useValue;
+    totalVolume += useVolume;
+    remainingAmount -= useValue;
   }
 
-  return totalAmount > 0 ? totalValue / totalAmount : 0;
+  // 평균 가격 = 총 금액 / 총 수량
+  return totalVolume > 0 ? totalValue / totalVolume : 0;
 };
 
 // ============================================
@@ -186,6 +196,25 @@ export default function RealtimeOrderBook({
   const rafRef = useRef<number | undefined>(undefined);
   const pendingUpdateRef = useRef<OrderBookData | null>(null);
 
+  // 현재 symbol을 참조하기 위한 ref
+  const symbolRef = useRef(symbol);
+
+  // symbol이 변경될 때마다 ref 업데이트 및 orderBook 초기화
+  useEffect(() => {
+    symbolRef.current = symbol;
+    // symbol이 변경되면 오더북 초기화
+    setOrderBook({
+      bids: [],
+      asks: [],
+      timestamp: Date.now(),
+    });
+    pendingUpdateRef.current = null;
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = undefined;
+    }
+  }, [symbol]);
+
   // 스토어에서 연결 상태 가져오기
   const isConnected = useStore(store, (state) => state.isConnected);
 
@@ -221,8 +250,8 @@ export default function RealtimeOrderBook({
             exchange === "upbit" ||
             exchange === "bithumb";
 
-          // 1. 진입 시 평균 가격 계산 (orderAmount가 있을 때만)
-          if (orderAmount && orderAmount > 0 && onAveragePriceUpdate) {
+          // 1. 진입 시 평균 가격 계산 (orderAmount가 있을 때 - 음수일 경우에도 계산)
+          if (orderAmount !== undefined && onAveragePriceUpdate) {
             const entryType = isKoreanExchange ? "ask" : "bid";
             const entryEntries = isKoreanExchange
               ? pendingUpdateRef.current.asks
@@ -286,7 +315,7 @@ export default function RealtimeOrderBook({
   useEffect(() => {
     // orderAmount가 변경되면 현재 오더북 데이터로 평균 가격 재계산
     if (!orderBook.bids.length && !orderBook.asks.length) return;
-    if (!orderAmount || orderAmount <= 0) return;
+    if (orderAmount === undefined) return;
 
     const isKoreanExchange =
       exchange === "빗썸" ||
@@ -317,9 +346,10 @@ export default function RealtimeOrderBook({
 
   // ==================== WebSocket Store 연결 ====================
   useEffect(() => {
-    // orderbook 데이터 리스너 등록
+    // orderbook 데이터 리스너 등록 (ref를 사용하여 최신 symbol 참조)
     const handleMessage = (data: any) => {
-      if (data.channel === "orderbook" && data.symbol === symbol) {
+      // symbolRef.current를 사용하여 최신 symbol과 비교
+      if (data.channel === "orderbook" && data.symbol === symbolRef.current) {
         updateOrderBook(data);
       }
     };
@@ -343,7 +373,7 @@ export default function RealtimeOrderBook({
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [store, symbol]);
+  }, [store]); // symbol 제거하고 store만 의존성으로
   return (
     <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 h-full py-10 px-4">
       <div className="max-w-full mx-auto h-full">

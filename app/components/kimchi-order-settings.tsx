@@ -226,7 +226,7 @@ export default React.memo(
         symbol: selectedItem.symbol,
         interval: "1m",
       });
-    }, [koreanWebSocketStore, selectedItem, currentPair?.kr.name]);
+    }, [koreanWebSocketStore, selectedItem?.symbol, currentPair?.kr.name]);
 
     const frStore = useMemo(() => {
       if (!selectedItem || !currentPair) return null;
@@ -236,7 +236,22 @@ export default React.memo(
         symbol: selectedItem.symbol,
         interval: "1m",
       });
-    }, [foreignWebSocketStore, selectedItem, currentPair?.fr.name]);
+    }, [foreignWebSocketStore, selectedItem?.symbol, currentPair?.fr.name]);
+
+    // Symbol 변경 시 기존 store의 symbol 업데이트
+    useEffect(() => {
+      if (!selectedItem?.symbol) return;
+
+      // 한국 거래소 store symbol 업데이트
+      if (krStore && krStore.getState().symbol !== selectedItem.symbol) {
+        krStore.getState().setSymbol(selectedItem.symbol);
+      }
+
+      // 해외 거래소 store symbol 업데이트
+      if (frStore && frStore.getState().symbol !== selectedItem.symbol) {
+        frStore.getState().setSymbol(selectedItem.symbol);
+      }
+    }, [selectedItem?.symbol, krStore, frStore]);
 
     // 프리미엄 계산 (항상 최상위 레벨에서 호출)
     const premiums = useMemo(() => {
@@ -447,6 +462,12 @@ export default React.memo(
 
         if (!amount || !leverage) {
           toast.error("주문금액 또는 레버리지가 설정되지 않았습니다");
+          return;
+        }
+
+        // 주문금액이 0 이하일 경우 에러 처리
+        if (amount <= 0) {
+          toast.error("주문금액이 부족합니다");
           return;
         }
 

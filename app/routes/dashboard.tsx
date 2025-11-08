@@ -375,14 +375,12 @@ export default function Dashboard() {
   // WebSocket 연결 관리 (상위 컴포넌트에서 중앙화)
   useEffect(() => {
     if (koreanWebSocketStore && foreignWebSocketStore) {
-      console.log("Dashboard: Connecting WebSocket stores");
       koreanWebSocketStore.getState().connectWebSocket();
       foreignWebSocketStore.getState().connectWebSocket();
     }
 
     return () => {
       if (koreanWebSocketStore && foreignWebSocketStore) {
-        console.log("Dashboard: Disconnecting WebSocket stores");
         koreanWebSocketStore.getState().disconnectWebSocket();
         foreignWebSocketStore.getState().disconnectWebSocket();
       }
