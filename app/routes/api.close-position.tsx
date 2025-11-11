@@ -260,46 +260,30 @@ export async function action({ request }: ActionFunctionArgs) {
         CRYPTO_DECIMALS.FUNDS
       );
 
-      // 총 회수금액 = 한국 거래소 매도금 + 해외 거래소 매수금 * USDT 가격
-      const krSellAmount = safeNumeric(krSellOrder.filled, 0);
-      const frBuyAmountInKrw = preciseMultiply(
-        safeNumeric(positionSettlement.totalFrFunds + frBuyOrder.totalPnl, 0),
-        currentUsdtPrice,
-        CRYPTO_DECIMALS.FUNDS
-      );
-      const totalClosed = preciseAdd(
-        krSellAmount,
-        frBuyAmountInKrw,
+      // 최종 수익 계산
+      // 최종수익 = positionSettlement.totalKrFunds - (krSellOrder.filled - krSellOrder.fee) + frBuyOrder.totalPnl * currentUsdtPrice
+      // 종료 시점의 수수료를 뺀 금액이 정산금액
+      const krSettlementAmount = preciseSubtract(
+        safeNumeric(krSellOrder.filled, 0),
+        safeNumeric(krSellOrder.fee, 0),
         CRYPTO_DECIMALS.FUNDS
       );
 
-      // 총 수수료 = 기존 수수료 + 이번 거래 수수료
-      const existingKrFee = safeNumeric(positionSettlement.totalKrFee, 0);
-      const currentKrFee = safeNumeric(krSellOrder.fee, 0);
-      let totalKrFees = preciseAdd(
-        existingKrFee,
-        currentKrFee,
-        CRYPTO_DECIMALS.FEE
-      );
-      const totalFrFeeInKrw = preciseMultiply(
-        safeNumeric(frBuyOrder.totalFee, 0),
-        currentUsdtPrice,
-        CRYPTO_DECIMALS.FEE
-      );
-
-      const totalFees = preciseAdd(
-        totalKrFees,
-        totalFrFeeInKrw,
-        CRYPTO_DECIMALS.FEE
-      );
-
-      // 최종 수익 = 회수금액 - 투자금액 - 수수료
-      let profit = preciseSubtract(
-        totalClosed,
-        totalInvested,
+      const krProfit = preciseSubtract(
+        safeNumeric(positionSettlement.totalKrFunds, 0),
+        krSettlementAmount,
         CRYPTO_DECIMALS.PROFIT
       );
-      profit = preciseSubtract(profit, totalFees, CRYPTO_DECIMALS.PROFIT);
+
+      // 해외 거래소 PnL은 이미 수수료가 반영된 값
+      const frPnlInKrw = preciseMultiply(
+        safeNumeric(frBuyOrder.totalPnl, 0),
+        currentUsdtPrice,
+        CRYPTO_DECIMALS.PROFIT
+      );
+
+      // 최종 수익 = 한국 거래소 수익 + 해외 거래소 PnL (KRW 환산)
+      const profit = preciseAdd(krProfit, frPnlInKrw, CRYPTO_DECIMALS.PROFIT);
 
       // 수익률 = (수익 / 투자금액) * 100
       const profitRate =
@@ -311,7 +295,7 @@ export async function action({ request }: ActionFunctionArgs) {
           : 0;
 
       console.log(
-        `[수익률 계산] 수수료: ${totalFees}, 수익: ${profit}, 수익률: ${profitRate}%`
+        `[수익률 계산] 한국 수익: ${krProfit}, 해외 PnL(KRW): ${frPnlInKrw}, 총 수익: ${profit}, 수익률: ${profitRate}%`
       );
 
       // 7. 종료된 포지션을 DB에 기록
@@ -337,7 +321,7 @@ export async function action({ request }: ActionFunctionArgs) {
           0
         ),
         frFee: frBuyOrder.closeFee || 0,
-        entryRate: positionSettlement.avgEntryRate,
+        entryRate: exitRate,
         exitRate: exitRate,
         usdtPrice: currentUsdtPrice,
         profit: profit,
@@ -346,7 +330,20 @@ export async function action({ request }: ActionFunctionArgs) {
         exitTime: new Date(),
       });
 
-      // 사용자 통계 업데이트
+      // 사용자 통계 업데이트 - 총 회수 금액 계산
+      const totalClosed = preciseAdd(
+        preciseSubtract(
+          safeNumeric(krSellOrder.filled, 0),
+          safeNumeric(krSellOrder.fee, 0),
+          CRYPTO_DECIMALS.FUNDS
+        ),
+        preciseMultiply(
+          safeNumeric(positionSettlement.totalFrFunds + frBuyOrder.totalPnl, 0),
+          currentUsdtPrice,
+          CRYPTO_DECIMALS.FUNDS
+        ),
+        CRYPTO_DECIMALS.FUNDS
+      );
       await updateUserStatsAfterPosition(user.id, totalClosed);
 
       // 전략 성과 업데이트
