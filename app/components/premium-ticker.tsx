@@ -94,7 +94,8 @@ const PremiumTicker = React.memo(
     const [sortBy, setSortBy] = useState<"entry" | "exit" | "slippage">(
       "entry"
     );
-    const [selectedSeed, setSelectedSeed] = useState<number>(1000000);
+    const [displaySeed, setDisplaySeed] = useState<number>(1000000); // 드래그 중 UI 표시용
+    const [selectedSeed, setSelectedSeed] = useState<number>(1000000); // 실제 계산용
     const [selectedItem, setSelectedItem] = useState<TickPayload | null>(null);
     const [searchQuery, setSearchQuery] = useState<string>("");
     const [filteredItems, setFilteredItems] = useState<TickPayload[]>([]);
@@ -258,6 +259,11 @@ const PremiumTicker = React.memo(
         onAverageRateChange(averageRate, selectedSeed);
       }
     }, [averageRate, selectedSeed, onAverageRateChange]);
+
+    // displaySeed 초기화 (selectedSeed와 동기화)
+    useEffect(() => {
+      setDisplaySeed(selectedSeed);
+    }, [selectedSeed]);
 
     // 선택된 아이템 변경 시 콜백 호출
     useEffect(() => {
@@ -549,20 +555,27 @@ const PremiumTicker = React.memo(
             <div className="flex justify-between items-center">
               <label className="text-sm font-medium">시장가 주문금액</label>
               <span className="text-sm text-muted-foreground">
-                {formatKRW(selectedSeed)}
+                {formatKRW(displaySeed)}
               </span>
             </div>
             <div className="w-full">
               <Slider
-                value={[selectedSeed]}
-                onValueChange={([v]) => setSelectedSeed(v)}
+                value={[displaySeed]}
+                onValueChange={([v]) => setDisplaySeed(v)}
+                onValueCommit={([v]) => setSelectedSeed(v)}
                 max={100000000} // 1억
                 min={1000000} // 100만
                 step={1000000} // 100만 단위
+                showMarkers={true}
+                markerCount={5}
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-muted-foreground mt-2">
                 <span>100만원</span>
+                <span>2,000만원</span>
+                <span>4,000만원</span>
+                <span>6,000만원</span>
+                <span>8,000만원</span>
                 <span>1억원</span>
               </div>
             </div>

@@ -5,14 +5,22 @@ import * as SliderPrimitive from "@radix-ui/react-slider";
 
 import { cn } from "./utils";
 
+interface SliderProps
+  extends React.ComponentProps<typeof SliderPrimitive.Root> {
+  showMarkers?: boolean;
+  markerCount?: number;
+}
+
 function Slider({
   className,
   defaultValue,
   value,
   min = 0,
   max = 100,
+  showMarkers = false,
+  markerCount = 5,
   ...props
-}: React.ComponentProps<typeof SliderPrimitive.Root>) {
+}: SliderProps) {
   const _values = React.useMemo(
     () =>
       Array.isArray(value)
@@ -20,8 +28,20 @@ function Slider({
         : Array.isArray(defaultValue)
           ? defaultValue
           : [min, max],
-    [value, defaultValue, min, max],
+    [value, defaultValue, min, max]
   );
+
+  // 마커 위치 계산 (시작과 끝 제외, 중간 값들만)
+  const markers = React.useMemo(() => {
+    if (!showMarkers || markerCount <= 0) return [];
+
+    const positions = [];
+    for (let i = 1; i < markerCount; i++) {
+      const percentage = (i / markerCount) * 100;
+      positions.push(percentage);
+    }
+    return positions;
+  }, [showMarkers, markerCount]);
 
   return (
     <SliderPrimitive.Root
@@ -32,28 +52,41 @@ function Slider({
       max={max}
       className={cn(
         "relative flex w-full touch-none items-center select-none data-[disabled]:opacity-50 data-[orientation=vertical]:h-full data-[orientation=vertical]:min-h-44 data-[orientation=vertical]:w-auto data-[orientation=vertical]:flex-col",
-        className,
+        className
       )}
       {...props}
     >
       <SliderPrimitive.Track
         data-slot="slider-track"
         className={cn(
-          "bg-muted relative grow overflow-hidden rounded-full data-[orientation=horizontal]:h-4 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5",
+          "bg-muted relative grow overflow-hidden rounded-full data-[orientation=horizontal]:h-4 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5"
         )}
       >
         <SliderPrimitive.Range
           data-slot="slider-range"
           className={cn(
-            "bg-primary absolute data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full",
+            "bg-primary absolute data-[orientation=horizontal]:h-full data-[orientation=vertical]:w-full"
           )}
         />
       </SliderPrimitive.Track>
+      {/* 마커 표시 - Track 밖에 배치 */}
+      {showMarkers &&
+        markers.map((position, index) => (
+          <div
+            key={index}
+            className="absolute size-4 bg-background border-2 border-muted-foreground/40 rounded-full pointer-events-none z-0"
+            style={{
+              left: `${position}%`,
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+            }}
+          />
+        ))}
       {Array.from({ length: _values.length }, (_, index) => (
         <SliderPrimitive.Thumb
           data-slot="slider-thumb"
           key={index}
-          className="border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          className="border-primary bg-background ring-ring/50 block size-4 shrink-0 rounded-full border shadow-sm transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50 z-50 relative"
         />
       ))}
     </SliderPrimitive.Root>

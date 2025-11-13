@@ -307,6 +307,9 @@ export default function Dashboard() {
   const activePositionsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const legalExchangeRateIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Race Condition 방지를 위한 polling 플래그
+  const isPollingActivePositionsRef = useRef(false);
+
   // rawActivePositions를 올바른 형태로 변환
   const activePositions = useMemo(() => {
     if (!rawActivePositions || !Array.isArray(rawActivePositions)) {
@@ -398,6 +401,38 @@ export default function Dashboard() {
     });
   }, []);
 
+  // 포지션 배열 비교 (coinSymbol 기준, 순서 무관)
+  const hasPositionsChanged = useCallback(
+    (prev: any[], next: any[]): boolean => {
+      if (prev.length !== next.length) return true;
+
+      // coinSymbol을 키로 하는 Map 생성
+      const prevMap = new Map(prev.map((p) => [p.coinSymbol, p]));
+      const nextMap = new Map(next.map((p) => [p.coinSymbol, p]));
+
+      // 각 포지션의 주요 필드 비교
+      for (const [symbol, prevPos] of prevMap) {
+        const nextPos = nextMap.get(symbol);
+        if (!nextPos) return true; // 새로운 포지션이 사라짐
+
+        // 중요한 필드만 비교
+        if (prevPos.totalKrFunds !== nextPos.totalKrFunds) return true;
+        if (prevPos.totalFrFunds !== nextPos.totalFrFunds) return true;
+        if (prevPos.totalKrVolume !== nextPos.totalKrVolume) return true;
+        if (prevPos.totalFrVolume !== nextPos.totalFrVolume) return true;
+        if (prevPos.positionCount !== nextPos.positionCount) return true;
+      }
+
+      // 새로운 포지션이 추가되었는지 확인
+      for (const symbol of nextMap.keys()) {
+        if (!prevMap.has(symbol)) return true;
+      }
+
+      return false;
+    },
+    []
+  );
+
   // 객체 얕은 비교
   const hasObjectChanged = useCallback((prev: any, next: any): boolean => {
     if (!prev || !next) return prev !== next;
@@ -409,6 +444,14 @@ export default function Dashboard() {
   // 활성 포지션 및 트레이딩 통계 폴링 함수
   const pollActivePositions = useCallback(
     async (showLoading = false) => {
+      // Race Condition 방지: 이미 실행 중이면 스킵
+      if (isPollingActivePositionsRef.current) {
+        console.log("[DEBUG] Skipping poll - already in progress");
+        return;
+      }
+
+      isPollingActivePositionsRef.current = true;
+
       if (showLoading) {
         setIsLoadingPositions(true);
         setIsLoadingTradingData(true);
@@ -440,9 +483,9 @@ export default function Dashboard() {
             })
           );
 
-          // 얕은 비교로 변경 감지 (성능 개선)
+          // 포지션 비교로 변경 감지 (Map 기반, 순서 무관)
           const positionsChanged =
-            hasArrayChanged(
+            hasPositionsChanged(
               polledActivePositionsRef.current,
               transformedPositions
             ) || activePositionCountRef.current !== data.activePositionCount;
@@ -502,13 +545,22 @@ export default function Dashboard() {
       } catch (error) {
         console.error("Polling error:", error);
       } finally {
+        // 항상 플래그를 리셋하여 다음 폴링이 가능하도록 함
+        isPollingActivePositionsRef.current = false;
+
         if (showLoading) {
           setIsLoadingPositions(false);
           setIsLoadingTradingData(false);
         }
       }
     },
-    [navigate, dailyProfit, hasArrayChanged, hasObjectChanged]
+    [
+      navigate,
+      dailyProfit,
+      hasArrayChanged,
+      hasPositionsChanged,
+      hasObjectChanged,
+    ]
   );
 
   // 페이지 가시성에 따른 interval 제어 함수들
@@ -641,58 +693,28 @@ export default function Dashboard() {
     stopLegalExchangeRatePolling,
   ]);
 
-  // 환율 가져오기 및 visibilityChange 이벤트 설정
+  // 모든 폴링 시작 및 visibilityChange 이벤트 설정 (통합)
   useEffect(() => {
     // 초기 폴링 시작
     startExchangeRatePolling();
+    startActivePositionsPolling();
+    startLegalExchangeRatePolling();
 
-    // visibilityChange 이벤트 리스너 등록
+    // visibilityChange 이벤트 리스너 등록 (1번만!)
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      // cleanup: 이벤트 리스너 제거 및 interval 중지
+      // cleanup: 이벤트 리스너 제거 및 모든 interval 중지
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       stopExchangeRatePolling();
+      stopActivePositionsPolling();
+      stopLegalExchangeRatePolling();
     };
   }, [
     startExchangeRatePolling,
     stopExchangeRatePolling,
-    handleVisibilityChange,
-  ]);
-
-  // 활성 포지션 폴링 시작 및 visibilityChange 이벤트 설정
-  useEffect(() => {
-    // 초기 폴링 시작
-    startActivePositionsPolling();
-
-    // visibilityChange 이벤트 리스너 등록
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      // cleanup: 이벤트 리스너 제거 및 interval 중지
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      stopActivePositionsPolling();
-    };
-  }, [
     startActivePositionsPolling,
     stopActivePositionsPolling,
-    handleVisibilityChange,
-  ]);
-
-  // 법정화폐 환율 폴링 시작 및 visibilityChange 이벤트 설정
-  useEffect(() => {
-    // 초기 폴링 시작
-    startLegalExchangeRatePolling();
-
-    // visibilityChange 이벤트 리스너 등록
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      // cleanup: 이벤트 리스너 제거 및 interval 중지
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      stopLegalExchangeRatePolling();
-    };
-  }, [
     startLegalExchangeRatePolling,
     stopLegalExchangeRatePolling,
     handleVisibilityChange,
