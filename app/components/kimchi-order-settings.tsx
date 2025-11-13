@@ -978,136 +978,140 @@ export default React.memo(
                         </div>
                       </div>
 
-                      {/* Exit Exchange Rate Card - 현재 포지션이 있을 때만 표시 */}
-                      {currentPosition && (
-                        <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-orange-500/30 p-6 w-full max-w-sm">
-                          <div className="text-center space-y-4">
-                            <div className="flex items-center justify-center gap-2">
-                              <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
-                                <TrendingDown className="w-6 h-6 text-orange-500" />
-                              </div>
-                            </div>
-                            <div>
-                              <h3 className="text-lg font-bold text-white mb-2">
-                                {selectedItem.symbol} <br />
-                                현재 포지션 시장가 종료시 <br />
-                                실시간 환율
-                              </h3>
-                              <div className="space-y-3">
-                                <div className="text-3xl font-bold text-orange-400">
-                                  {krExitAveragePrice &&
-                                  frExitAveragePrice &&
-                                  krExitAveragePrice > 0 &&
-                                  frExitAveragePrice > 0
-                                    ? `₩${(krExitAveragePrice / frExitAveragePrice).toFixed(4)}`
-                                    : "계산중..."}
-                                </div>
-                                <div className="text-sm text-slate-400">
-                                  KR:{" "}
-                                  {krExitAveragePrice && krExitAveragePrice > 0
-                                    ? `₩${krExitAveragePrice.toLocaleString(
-                                        "ko-KR",
-                                        {
-                                          maximumFractionDigits: 10,
-                                          minimumFractionDigits: 0,
-                                        }
-                                      )}`
-                                    : "₩N/A"}{" "}
-                                  | FR:{" "}
-                                  {frExitAveragePrice && frExitAveragePrice > 0
-                                    ? `₩${frExitAveragePrice.toLocaleString(
-                                        "ko-KR",
-                                        {
-                                          maximumFractionDigits: 10,
-                                          minimumFractionDigits: 0,
-                                        }
-                                      )}`
-                                    : "₩N/A"}
-                                </div>
-                                <div className="text-sm text-slate-300 border-t border-slate-700 pt-3">
-                                  <p className="font-semibold mb-2">
-                                    현재 포지션 정보
-                                  </p>
-                                  <div className="space-y-1 text-xs">
-                                    <p>
-                                      진입 환율: ₩
-                                      {currentPosition.entryRate?.toFixed(4)}
-                                    </p>
-                                    <p>
-                                      주문량:{" "}
-                                      {currentPosition.totalKrVolume?.toFixed(
-                                        4
-                                      )}{" "}
-                                      {selectedItem.symbol}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex justify-center mt-3">
-                                  <button
-                                    onClick={async () => {
-                                      await handleForceClose(
-                                        selectedItem.symbol,
-                                        currentPosition.krExchange,
-                                        currentPosition.frExchange
-                                      );
-                                    }}
-                                    disabled={closingPositions.has(
-                                      selectedItem.symbol
-                                    )}
-                                    className="px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
-                                  >
-                                    {closingPositions.has(
-                                      selectedItem.symbol
-                                    ) ? (
-                                      <>
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        종료 중...
-                                      </>
-                                    ) : (
-                                      "포지션 종료"
-                                    )}
-                                  </button>
-                                </div>
-                                {krExitAveragePrice &&
-                                  frExitAveragePrice &&
-                                  currentPosition.entryRate && (
-                                    <div className="space-y-2">
-                                      <div
-                                        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
-                                          krExitAveragePrice /
-                                            frExitAveragePrice >
-                                          currentPosition.entryRate
-                                            ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                                            : "bg-red-500/20 text-red-400 border border-red-500/30"
-                                        }`}
-                                      >
-                                        <span>진입 대비</span>
-                                        <span>
-                                          {krExitAveragePrice /
-                                            frExitAveragePrice >
-                                          currentPosition.entryRate
-                                            ? "+"
-                                            : ""}
-                                          {(
-                                            ((krExitAveragePrice /
-                                              frExitAveragePrice -
-                                              currentPosition.entryRate) /
-                                              currentPosition.entryRate) *
-                                            100
-                                          ).toFixed(2)}
-                                          %
-                                        </span>
-                                      </div>
-                                    </div>
-                                  )}
-                              </div>
-                            </div>
-                            <div className="text-xs text-slate-500 border-t border-slate-700 pt-3">
-                              {currentTime.toLocaleString("ko-KR")}
+                      {/* Exit Exchange Rate Card - 항상 표시 */}
+                      <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl border border-orange-500/30 p-6 w-full max-w-sm">
+                        <div className="text-center space-y-4">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
+                              <TrendingDown className="w-6 h-6 text-orange-500" />
                             </div>
                           </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-white mb-2">
+                              {selectedItem.symbol} <br />
+                              시장가 종료시 <br />
+                              실시간 환율
+                            </h3>
+                            <div className="space-y-3">
+                              <div className="text-3xl font-bold text-orange-400">
+                                {krExitAveragePrice &&
+                                frExitAveragePrice &&
+                                krExitAveragePrice > 0 &&
+                                frExitAveragePrice > 0
+                                  ? `₩${(krExitAveragePrice / frExitAveragePrice).toFixed(4)}`
+                                  : "계산중..."}
+                              </div>
+                              <div className="text-sm text-slate-400">
+                                KR:{" "}
+                                {krExitAveragePrice && krExitAveragePrice > 0
+                                  ? `₩${krExitAveragePrice.toLocaleString(
+                                      "ko-KR",
+                                      {
+                                        maximumFractionDigits: 10,
+                                        minimumFractionDigits: 0,
+                                      }
+                                    )}`
+                                  : "₩N/A"}{" "}
+                                | FR:{" "}
+                                {frExitAveragePrice && frExitAveragePrice > 0
+                                  ? `₩${frExitAveragePrice.toLocaleString(
+                                      "ko-KR",
+                                      {
+                                        maximumFractionDigits: 10,
+                                        minimumFractionDigits: 0,
+                                      }
+                                    )}`
+                                  : "₩N/A"}
+                              </div>
+
+                              {/* currentPosition이 있을 때만 표시되는 섹션들 */}
+                              {currentPosition && (
+                                <>
+                                  <div className="text-sm text-slate-300 border-t border-slate-700 pt-3">
+                                    <p className="font-semibold mb-2">
+                                      현재 포지션 정보
+                                    </p>
+                                    <div className="space-y-1 text-xs">
+                                      <p>
+                                        진입 환율: ₩
+                                        {currentPosition.entryRate?.toFixed(4)}
+                                      </p>
+                                      <p>
+                                        주문량:{" "}
+                                        {currentPosition.totalKrVolume?.toFixed(
+                                          4
+                                        )}{" "}
+                                        {selectedItem.symbol}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-center mt-3">
+                                    <button
+                                      onClick={async () => {
+                                        await handleForceClose(
+                                          selectedItem.symbol,
+                                          currentPosition.krExchange,
+                                          currentPosition.frExchange
+                                        );
+                                      }}
+                                      disabled={closingPositions.has(
+                                        selectedItem.symbol
+                                      )}
+                                      className="px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
+                                    >
+                                      {closingPositions.has(
+                                        selectedItem.symbol
+                                      ) ? (
+                                        <>
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                          종료 중...
+                                        </>
+                                      ) : (
+                                        "포지션 종료"
+                                      )}
+                                    </button>
+                                  </div>
+                                  {krExitAveragePrice &&
+                                    frExitAveragePrice &&
+                                    currentPosition.entryRate && (
+                                      <div className="space-y-2">
+                                        <div
+                                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                                            krExitAveragePrice /
+                                              frExitAveragePrice >
+                                            currentPosition.entryRate
+                                              ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                              : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                          }`}
+                                        >
+                                          <span>진입 대비</span>
+                                          <span>
+                                            {krExitAveragePrice /
+                                              frExitAveragePrice >
+                                            currentPosition.entryRate
+                                              ? "+"
+                                              : ""}
+                                            {(
+                                              ((krExitAveragePrice /
+                                                frExitAveragePrice -
+                                                currentPosition.entryRate) /
+                                                currentPosition.entryRate) *
+                                              100
+                                            ).toFixed(2)}
+                                            %
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-500 border-t border-slate-700 pt-3">
+                            {currentTime.toLocaleString("ko-KR")}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     {/* Foreign Exchange Orderbook */}

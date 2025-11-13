@@ -678,11 +678,27 @@ export default function Dashboard() {
       startExchangeRatePolling();
       startActivePositionsPolling();
       startLegalExchangeRatePolling();
+
+      // WebSocket 재연결
+      if (koreanWebSocketStore) {
+        koreanWebSocketStore.getState().connectWebSocket();
+      }
+      if (foreignWebSocketStore) {
+        foreignWebSocketStore.getState().connectWebSocket();
+      }
     } else {
       // 페이지가 숨겨졌을 때 폴링 중지
       stopExchangeRatePolling();
       stopActivePositionsPolling();
       stopLegalExchangeRatePolling();
+
+      // WebSocket 연결 해제
+      if (koreanWebSocketStore) {
+        koreanWebSocketStore.getState().disconnectWebSocket();
+      }
+      if (foreignWebSocketStore) {
+        foreignWebSocketStore.getState().disconnectWebSocket();
+      }
     }
   }, [
     startExchangeRatePolling,
@@ -691,6 +707,8 @@ export default function Dashboard() {
     stopActivePositionsPolling,
     startLegalExchangeRatePolling,
     stopLegalExchangeRatePolling,
+    koreanWebSocketStore,
+    foreignWebSocketStore,
   ]);
 
   // 모든 폴링 시작 및 visibilityChange 이벤트 설정 (통합)

@@ -123,10 +123,16 @@ const PremiumTicker = React.memo(
     const esRef = useRef<EventSource | null>(null);
     const tableContainerRef = useRef<HTMLDivElement | null>(null);
 
-    useEffect(() => {
-      // ⭐ 모든 플랜에서 실시간 환율 데이터를 표시 (isLocked 체크 제거)
+    // EventSource 연결 함수 (재사용 가능)
+    const connectEventSource = useCallback(() => {
+      // 기존 연결이 있으면 먼저 종료
+      if (esRef.current) {
+        esRef.current.close();
+      }
+
       const es = new EventSource(endpoint);
       esRef.current = es;
+
       es.onmessage = (ev) => {
         try {
           const msg: TickMessage = JSON.parse(ev.data);
@@ -157,17 +163,47 @@ const PremiumTicker = React.memo(
           // ignore malformed lines
         }
       };
+
       es.onerror = () => {
-        // Attempt simple reconnect
         es.close();
         setTimeout(() => {
-          esRef.current = new EventSource(endpoint);
+          connectEventSource();
         }, 1500);
       };
-      return () => {
-        es.close();
+    }, [endpoint]);
+
+    // EventSource 연결 해제 함수
+    const disconnectEventSource = useCallback(() => {
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
+    }, []);
+
+    // Page Visibility API - 백그라운드/포그라운드 전환 감지
+    useEffect(() => {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          connectEventSource();
+        } else {
+          disconnectEventSource();
+        }
       };
-    }, [endpoint]); // ⭐ isLocked 의존성 제거
+
+      // 초기 연결
+      connectEventSource();
+
+      // visibilitychange 이벤트 리스너 등록
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      return () => {
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityChange
+        );
+        disconnectEventSource();
+      };
+    }, [connectEventSource, disconnectEventSource]);
 
     // 표 렌더링 - 항상 환율 기준으로 정렬된 모든 데이터 표시
     const sortedItems = useMemo(() => {

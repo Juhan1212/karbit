@@ -188,15 +188,15 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
       };
 
       ws.onclose = () => {
-        console.log("웹소켓 연결 종료");
+        set({ isConnected: false });
         // 재연결 타이머 설정
-        // if (!get().reconnectTimeout) {
-        //   const timeout = setTimeout(() => {
-        //     set({ isConnected: false, socket: null, reconnectTimeout: null });
-        //     get().connectWebSocket();
-        //   }, 1000);
-        //   set({ reconnectTimeout: timeout });
-        // }
+        if (!get().reconnectTimeout) {
+          const timeout = setTimeout(() => {
+            set({ socket: null, reconnectTimeout: null });
+            get().connectWebSocket();
+          }, 2000);
+          set({ reconnectTimeout: timeout });
+        }
       };
 
       ws.onerror = (error) => {
