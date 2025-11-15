@@ -94,8 +94,8 @@ export function AppSidebar({
   ];
 
   const sidebarClasses = isMobile
-    ? "h-full w-full bg-sidebar border-r border-sidebar-border"
-    : "fixed left-0 top-0 h-full w-64 bg-sidebar border-r border-sidebar-border";
+    ? "h-full w-full bg-sidebar border-r border-sidebar-border overflow-y-auto"
+    : "fixed left-0 top-0 h-full w-64 bg-sidebar border-r border-sidebar-border overflow-y-auto";
 
   return (
     <div className={sidebarClasses}>
@@ -141,7 +141,7 @@ export function AppSidebar({
 
       {/* User Info, Plan & Logout - Combined */}
       <div
-        className={`${isMobile ? "mt-8 mx-4" : "absolute bottom-6 left-4 right-4"}`}
+        className={`${isMobile ? "mt-8 mx-4 mb-4" : "absolute bottom-6 left-4 right-4"}`}
       >
         <Card className="p-4 gap-3">
           {/* User Info */}

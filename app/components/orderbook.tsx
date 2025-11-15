@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useRef, useMemo, memo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  memo,
+  useCallback,
+} from "react";
 import { Activity, Wifi, WifiOff, RefreshCw } from "lucide-react";
 import { createWebSocketStore } from "../stores/chartState";
 import type { OrderBookData } from "../types/marketInfo";
@@ -199,6 +206,30 @@ export default function RealtimeOrderBook({
   // 현재 symbol을 참조하기 위한 ref
   const symbolRef = useRef(symbol);
 
+  // 콜백 함수를 ref로 저장 (의존성 배열 문제 해결)
+  const onAveragePriceUpdateRef = useRef(onAveragePriceUpdate);
+  const onExitAveragePriceUpdateRef = useRef(onExitAveragePriceUpdate);
+
+  // props를 ref로 저장하여 의존성 배열 최적화
+  const orderAmountRef = useRef(orderAmount);
+  const tetherPriceRef = useRef(tetherPrice);
+  const currentPositionRef = useRef(currentPosition);
+
+  // ref 업데이트
+  useEffect(() => {
+    onAveragePriceUpdateRef.current = onAveragePriceUpdate;
+    onExitAveragePriceUpdateRef.current = onExitAveragePriceUpdate;
+    orderAmountRef.current = orderAmount;
+    tetherPriceRef.current = tetherPrice;
+    currentPositionRef.current = currentPosition;
+  }, [
+    onAveragePriceUpdate,
+    onExitAveragePriceUpdate,
+    orderAmount,
+    tetherPrice,
+    currentPosition,
+  ]);
+
   // symbol이 변경될 때마다 ref 업데이트 및 orderBook 초기화
   useEffect(() => {
     symbolRef.current = symbol;
@@ -236,113 +267,101 @@ export default function RealtimeOrderBook({
   }, [orderBook.asks, orderBook.bids]);
 
   // RequestAnimationFrame을 사용한 부드러운 업데이트
-  const updateOrderBook = (newData: OrderBookData) => {
-    pendingUpdateRef.current = newData;
+  const updateOrderBook = useCallback(
+    (newData: OrderBookData) => {
+      pendingUpdateRef.current = newData;
 
-    if (!rafRef.current) {
-      rafRef.current = requestAnimationFrame(() => {
-        if (pendingUpdateRef.current) {
-          setOrderBook(pendingUpdateRef.current);
+      if (!rafRef.current) {
+        rafRef.current = requestAnimationFrame(() => {
+          if (pendingUpdateRef.current) {
+            setOrderBook(pendingUpdateRef.current);
 
-          const isKoreanExchange =
-            exchange === "빗썸" ||
-            exchange === "업비트" ||
-            exchange === "upbit" ||
-            exchange === "bithumb";
+            const isKoreanExchange =
+              exchange === "빗썸" ||
+              exchange === "업비트" ||
+              exchange === "upbit" ||
+              exchange === "bithumb";
 
-          // 1. 진입 시 평균 가격 계산 (orderAmount가 있을 때 - 음수일 경우에도 계산)
-          if (orderAmount !== undefined && onAveragePriceUpdate) {
-            const entryType = isKoreanExchange ? "ask" : "bid";
-            const entryEntries = isKoreanExchange
-              ? pendingUpdateRef.current.asks
-              : pendingUpdateRef.current.bids;
+            // 1. 진입 시 평균 가격 계산 (orderAmount가 있을 때 - 음수일 경우에도 계산)
+            if (
+              orderAmountRef.current !== undefined &&
+              onAveragePriceUpdateRef.current
+            ) {
+              const entryType = isKoreanExchange ? "ask" : "bid";
+              const entryEntries = isKoreanExchange
+                ? pendingUpdateRef.current.asks
+                : pendingUpdateRef.current.bids;
 
-            // 오더북 데이터가 실제로 있는지 확인
-            if (entryEntries && entryEntries.length > 0) {
-              const entryAveragePrice = calculateAveragePrice(
-                entryEntries,
-                orderAmount,
-                entryType,
-                isKoreanExchange,
-                tetherPrice
-              );
+              // 오더북 데이터가 실제로 있는지 확인
+              if (entryEntries && entryEntries.length > 0) {
+                const entryAveragePrice = calculateAveragePrice(
+                  entryEntries,
+                  orderAmountRef.current,
+                  entryType,
+                  isKoreanExchange,
+                  tetherPriceRef.current
+                );
 
-              // 유효한 값일 때만 업데이트
-              if (entryAveragePrice > 0) {
-                onAveragePriceUpdate(entryAveragePrice);
+                // 유효한 값일 때만 업데이트
+                if (entryAveragePrice > 0) {
+                  onAveragePriceUpdateRef.current(entryAveragePrice);
+                }
               }
             }
-          }
 
-          // 2. 종료 시 평균 가격 계산 (포지션이 있을 때)
-          if (currentPosition && onExitAveragePriceUpdate) {
-            // 종료 시: 한국 거래소는 매도(bid), 해외 거래소는 매수(ask)
-            const exitType = isKoreanExchange ? "bid" : "ask";
-            const exitEntries = isKoreanExchange
-              ? pendingUpdateRef.current.bids
-              : pendingUpdateRef.current.asks;
+            // 2. 종료 시 평균 가격 계산
+            if (onExitAveragePriceUpdateRef.current) {
+              // 종료 시: 한국 거래소는 매도(bid), 해외 거래소는 매수(ask)
+              const exitType = isKoreanExchange ? "bid" : "ask";
+              const exitEntries = isKoreanExchange
+                ? pendingUpdateRef.current.bids
+                : pendingUpdateRef.current.asks;
 
-            // 포지션의 코인 수량 사용
-            const positionVolume = isKoreanExchange
-              ? currentPosition.totalKrVolume || 0
-              : currentPosition.totalFrVolume || 0;
+              if (exitEntries && exitEntries.length > 0) {
+                let exitAveragePrice = 0;
 
-            // 오더북 데이터와 포지션 볼륨이 유효한지 확인
-            if (exitEntries && exitEntries.length > 0 && positionVolume > 0) {
-              const exitAveragePrice = calculateAveragePriceByVolume(
-                exitEntries,
-                positionVolume,
-                exitType,
-                isKoreanExchange,
-                tetherPrice
-              );
+                // currentPosition이 있으면 코인 수량 기반 계산
+                if (currentPositionRef.current) {
+                  const positionVolume = isKoreanExchange
+                    ? currentPositionRef.current.totalKrVolume || 0
+                    : currentPositionRef.current.totalFrVolume || 0;
 
-              // 유효한 값일 때만 업데이트
-              if (exitAveragePrice > 0) {
-                onExitAveragePriceUpdate(exitAveragePrice);
+                  if (positionVolume > 0) {
+                    exitAveragePrice = calculateAveragePriceByVolume(
+                      exitEntries,
+                      positionVolume,
+                      exitType,
+                      isKoreanExchange,
+                      tetherPriceRef.current
+                    );
+                  }
+                }
+                // currentPosition이 없으면 orderAmount 기반 계산
+                else if (orderAmountRef.current !== undefined) {
+                  exitAveragePrice = calculateAveragePrice(
+                    exitEntries,
+                    orderAmountRef.current,
+                    exitType,
+                    isKoreanExchange,
+                    tetherPriceRef.current
+                  );
+                }
+
+                // 유효한 값일 때만 업데이트
+                if (exitAveragePrice > 0) {
+                  onExitAveragePriceUpdateRef.current(exitAveragePrice);
+                }
               }
             }
+
+            pendingUpdateRef.current = null;
           }
-
-          pendingUpdateRef.current = null;
-        }
-        rafRef.current = undefined;
-      });
-    }
-  };
-
-  // ==================== orderAmount 변경 시 재계산 ====================
-  useEffect(() => {
-    // orderAmount가 변경되면 현재 오더북 데이터로 평균 가격 재계산
-    if (!orderBook.bids.length && !orderBook.asks.length) return;
-    if (orderAmount === undefined) return;
-
-    const isKoreanExchange =
-      exchange === "빗썸" ||
-      exchange === "업비트" ||
-      exchange === "upbit" ||
-      exchange === "bithumb";
-
-    // 진입 시 평균 가격 재계산
-    if (onAveragePriceUpdate) {
-      const entryType = isKoreanExchange ? "ask" : "bid";
-      const entryEntries = isKoreanExchange ? orderBook.asks : orderBook.bids;
-
-      if (entryEntries && entryEntries.length > 0) {
-        const entryAveragePrice = calculateAveragePrice(
-          entryEntries,
-          orderAmount,
-          entryType,
-          isKoreanExchange,
-          tetherPrice
-        );
-
-        if (entryAveragePrice > 0) {
-          onAveragePriceUpdate(entryAveragePrice);
-        }
+          rafRef.current = undefined;
+        });
       }
-    }
-  }, [orderAmount, orderBook, exchange, tetherPrice, onAveragePriceUpdate]);
+    },
+    [exchange]
+  );
 
   // ==================== WebSocket Store 연결 ====================
   useEffect(() => {
