@@ -306,8 +306,8 @@ export class BybitWebSocketAdapter implements WebSocketAdapter {
           });
 
           // 정렬 유지 (bids: 가격 내림차순, asks: 가격 오름차순)
-          updatedBids.sort((a, b) => b.price - a.price);
-          updatedAsks.sort((a, b) => a.price - b.price);
+          // updatedBids.sort((a, b) => b.price - a.price);
+          // updatedAsks.sort((a, b) => a.price - b.price);
 
           // 원본 데이터 업데이트
           rawOrderBook = { bids: updatedBids, asks: updatedAsks };
