@@ -254,11 +254,8 @@ export async function action({ request }: ActionFunctionArgs) {
         currentUsdtPrice,
         CRYPTO_DECIMALS.FUNDS
       );
-      const totalInvested = preciseAdd(
-        krFundsTotal,
-        frFundsInKrw,
-        CRYPTO_DECIMALS.FUNDS
-      );
+      const totalInvested =
+        preciseAdd(krFundsTotal, frFundsInKrw, CRYPTO_DECIMALS.FUNDS) / 2;
 
       // 최종 수익 계산
       // 최종수익 = positionSettlement.totalKrFunds - (krSellOrder.filled - krSellOrder.fee) + frBuyOrder.totalPnl * currentUsdtPrice
@@ -270,8 +267,8 @@ export async function action({ request }: ActionFunctionArgs) {
       );
 
       const krProfit = preciseSubtract(
-        safeNumeric(positionSettlement.totalKrFunds, 0),
         krSettlementAmount,
+        safeNumeric(positionSettlement.totalKrFunds, 0),
         CRYPTO_DECIMALS.PROFIT
       );
 
