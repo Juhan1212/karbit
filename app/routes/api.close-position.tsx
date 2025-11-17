@@ -166,216 +166,28 @@ export async function action({ request }: ActionFunctionArgs) {
         `주문 완료 - 한국 거래소: ${krSellOrderId}, 해외 거래소: ${frBuyOrderId}`
       );
 
-      // 4. 주문 완료 후 상세 정보 조회 (체결 정보 포함)
-      // 시장가 주문의 경우 즉시 체결되지만, 안전을 위해 짧은 대기 후 조회
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1000ms 대기
-
-      // for mock test
-      // const krSellOrderId = "1fc437c5-4fb6-42f6-843e-b1d3a23eaa19";
-      // const frBuyOrderId = "2560f9ff-2065-4c36-9ae4-ff3018e1e310";
-
-      // 동시에 주문 상세 정보 조회
-      const [krSellOrderResult, frBuyOrderResult, frBuyOrderDetailResult] =
-        await Promise.allSettled([
-          krAdapter.getOrder(krSellOrderId, coinSymbol),
-          frAdapter.getClosedPnl(coinSymbol, frBuyOrderId),
-          frAdapter.getOrder(frBuyOrderId, coinSymbol), // 추가된 부분
-        ]);
-
-      // 한국 거래소 매도 주문 결과 처리
-      let krSellOrder;
-      if (krSellOrderResult.status === "fulfilled") {
-        krSellOrder = krSellOrderResult.value;
-      } else {
-        console.warn(
-          "한국 거래소 주문 조회 실패, 기본값 사용:",
-          krSellOrderResult.reason
-        );
-        throw new Error("한국 거래소 주문 정보를 조회할 수 없습니다.");
-      }
-
-      console.log("한국 거래소 매도 주문 결과:", krSellOrder);
-
-      let frBuyOrder;
-      if (frBuyOrderResult.status === "fulfilled") {
-        frBuyOrder = frBuyOrderResult.value;
-      } else {
-        console.warn(
-          "해외 거래소 주문 조회 실패, 기본값 사용:",
-          frBuyOrderResult.reason
-        );
-        throw new Error("해외 거래소 주문 정보를 조회할 수 없습니다.");
-      }
-
-      let frBuyOrderDetail;
-      if (frBuyOrderDetailResult.status === "fulfilled") {
-        frBuyOrderDetail = frBuyOrderDetailResult.value;
-      } else {
-        console.warn(
-          "해외 거래소 주문 상세 조회 실패, 기본값 사용:",
-          frBuyOrderDetailResult.reason
-        );
-        throw new Error("해외 거래소 주문 상세 정보를 조회할 수 없습니다.");
-      }
-
-      console.log("해외 거래소 매수 주문 결과:", frBuyOrder);
-
-      // USDT 가격 조회 (업비트 인스턴스 사용)
-      // Upbit USDT-KRW 시세 조회 (캐시 우선)
-      let currentUsdtPrice: number = 0;
-      try {
-        const cached = await getCache<{ data: any; timestamp: number }>(
-          "upbit:KRW-USDT"
-        );
-        if (cached && Date.now() - cached.timestamp < 10000) {
-          currentUsdtPrice = Number(cached.data[0]?.trade_price) || 0;
-        } else {
-          const upbitUrl = "https://api.upbit.com/v1/ticker?markets=KRW-USDT";
-          const response = await axios.get(upbitUrl);
-          currentUsdtPrice = Number(response.data[0]?.trade_price) || 0;
-        }
-      } catch (err) {
-        console.error("Upbit USDT-KRW 시세 조회 실패:", err);
-        currentUsdtPrice = 0;
-      }
-
-      // 5. 현재 환율 조회 (실제 수익률 계산용) - 정밀한 나눗셈 사용
-      const exitRate = preciseDivide(
-        safeNumeric(krSellOrder.price, 0),
-        safeNumeric(frBuyOrder.avgExitPrice, 0),
-        CRYPTO_DECIMALS.RATE
-      );
-
-      // 6. 수익률 계산 (실제 체결 결과 기반) - 정밀한 연산 사용
-      // 총 투자금액 = 한국 거래소 투자금 + 해외 거래소 투자금 * USDT 가격
-      const krFundsTotal = safeNumeric(positionSettlement.totalKrFunds, 0);
-      const frFundsInKrw = preciseMultiply(
-        safeNumeric(positionSettlement.totalFrFunds, 0),
-        currentUsdtPrice,
-        CRYPTO_DECIMALS.FUNDS
-      );
-      const totalInvested =
-        preciseAdd(krFundsTotal, frFundsInKrw, CRYPTO_DECIMALS.FUNDS) / 2;
-
-      // 최종 수익 계산
-      // 최종수익 = positionSettlement.totalKrFunds - (krSellOrder.filled - krSellOrder.fee) + frBuyOrder.totalPnl * currentUsdtPrice
-      // 종료 시점의 수수료를 뺀 금액이 정산금액
-      const krSettlementAmount = preciseSubtract(
-        safeNumeric(krSellOrder.filled, 0),
-        safeNumeric(krSellOrder.fee, 0),
-        CRYPTO_DECIMALS.FUNDS
-      );
-
-      const krProfit = preciseSubtract(
-        krSettlementAmount,
-        safeNumeric(positionSettlement.totalKrFunds, 0),
-        CRYPTO_DECIMALS.PROFIT
-      );
-
-      // 해외 거래소 PnL은 이미 수수료가 반영된 값
-      const frPnlInKrw = preciseMultiply(
-        safeNumeric(frBuyOrder.totalPnl, 0),
-        currentUsdtPrice,
-        CRYPTO_DECIMALS.PROFIT
-      );
-
-      // 최종 수익 = 한국 거래소 수익 + 해외 거래소 PnL (KRW 환산)
-      const profit = preciseAdd(krProfit, frPnlInKrw, CRYPTO_DECIMALS.PROFIT);
-
-      // 수익률 = (수익 / 투자금액) * 100
-      const profitRate =
-        totalInvested > 0
-          ? preciseProfitRate(
-              totalInvested,
-              preciseAdd(totalInvested, profit, CRYPTO_DECIMALS.PROFIT)
-            )
-          : 0;
-
-      console.log(
-        `[수익률 계산] 한국 수익: ${krProfit}, 해외 PnL(KRW): ${frPnlInKrw}, 총 수익: ${profit}, 수익률: ${profitRate}%`
-      );
-
-      // 7. 종료된 포지션을 DB에 기록
-      await insertClosedPosition({
-        userId: user.id,
-        strategyId: strategyId,
-        coinSymbol: coinSymbol,
-        leverage: leverage,
-        krExchange: krExchange,
-        krOrderId: krSellOrder.id,
-        krPrice: krSellOrder.price,
-        krVolume: krSellOrder.amount,
-        krFunds: krSellOrder.filled,
-        krFee: krSellOrder.fee || 0,
-        frExchange: frExchange,
-        frOrderId: frBuyOrderId,
-        frOriginalPrice: frBuyOrder.orderPrice,
-        frPrice: frBuyOrder.avgExitPrice,
-        frSlippage: frBuyOrderDetail.slippage,
-        frVolume: frBuyOrder.totalVolume,
-        frFunds: safeNumeric(
-          positionSettlement.totalFrFunds + frBuyOrder.totalPnl,
-          0
-        ),
-        frFee: frBuyOrder.closeFee || 0,
-        entryRate: exitRate,
-        exitRate: exitRate,
-        usdtPrice: currentUsdtPrice,
-        profit: profit,
-        profitRate: profitRate,
-        entryTime: new Date(),
-        exitTime: new Date(),
-      });
-
-      // 사용자 통계 업데이트 - 총 회수 금액 계산
-      const totalClosed = preciseAdd(
-        preciseSubtract(
-          safeNumeric(krSellOrder.filled, 0),
-          safeNumeric(krSellOrder.fee, 0),
-          CRYPTO_DECIMALS.FUNDS
-        ),
-        preciseMultiply(
-          safeNumeric(positionSettlement.totalFrFunds + frBuyOrder.totalPnl, 0),
-          currentUsdtPrice,
-          CRYPTO_DECIMALS.FUNDS
-        ),
-        CRYPTO_DECIMALS.FUNDS
-      );
-      await updateUserStatsAfterPosition(user.id, totalClosed);
-
-      // 전략 성과 업데이트
-      await updateStrategyStatsAfterPositionClose(
-        strategyId,
-        profit,
-        profitRate
-      );
-
+      // 4. 주문 체결 완료 - 즉시 응답 (Phase 1)
+      // DB 저장은 별도 엔드포인트에서 처리
       return Response.json({
         success: true,
         message: `${coinSymbol} 포지션이 성공적으로 종료되었습니다.`,
         data: {
-          profit: profit.toFixed(2),
-          profitRate: profitRate.toFixed(2),
-          settlementInfo: {
+          needsFinalization: true,
+          coinSymbol,
+          krExchange,
+          frExchange,
+          krOrderId: krSellOrderId,
+          frOrderId: frBuyOrderId,
+          userId: user.id,
+          strategyId: strategyId,
+          leverage: leverage,
+          positionSettlement: {
             avgEntryRate: positionSettlement.avgEntryRate,
             totalKrVolume: positionSettlement.totalKrVolume,
             totalKrFunds: positionSettlement.totalKrFunds,
             totalFrFunds: positionSettlement.totalFrFunds,
             positionsCount: positionSettlement.positionsCount,
           },
-          krOrder: {
-            id: krSellOrder.id,
-            filled: krSellOrder.filled,
-            price: krSellOrder.price,
-            fee: krSellOrder.fee,
-          },
-          frOrder: {
-            id: frBuyOrderId,
-            filled: frBuyOrder.totalVolume,
-            price: frBuyOrder.avgExitPrice,
-            fee: frBuyOrder.closeFee,
-          },
-          exitRate: exitRate,
         },
       });
     } catch (orderError) {

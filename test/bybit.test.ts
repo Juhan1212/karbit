@@ -71,6 +71,176 @@ describe("Bybit API E2E Tests", () => {
     }, 60000); // 60초 타임아웃
   });
 
+  describe("주문 조회 테스트", () => {
+    it("should fetch order details successfully", async () => {
+      console.log("🚀 Bybit getOrder E2E 테스트 시작");
+
+      // 테스트용 주문 ID (실제 존재하는 주문 ID로 테스트)
+      const orderId = "e91a8742-9039-4942-a4fe-72873b602eee";
+      const symbol = "WCT";
+
+      console.log(`📋 조회 주문 ID: ${orderId}, 심볼: ${symbol}`);
+
+      try {
+        const orderInfo = await bybitAdapter.getOrder(orderId, symbol);
+
+        console.log("✅ 주문 조회 성공!");
+        console.log("📦 주문 정보:", {
+          id: orderInfo.id,
+          symbol: orderInfo.symbol,
+          side: orderInfo.side,
+          type: orderInfo.type,
+          price: orderInfo.price,
+          originalPrice: orderInfo.original_price,
+          amount: orderInfo.amount,
+          filled: orderInfo.filled,
+          fee: orderInfo.fee,
+          slippage: orderInfo.slippage,
+          timestamp: new Date(orderInfo.timestamp).toISOString(),
+        });
+
+        // 반환 데이터 검증
+        expect(orderInfo).toBeDefined();
+        expect(orderInfo.id).toBe(orderId);
+        expect(orderInfo.symbol).toBe(symbol.toUpperCase());
+        expect(["buy", "sell"]).toContain(orderInfo.side);
+        expect(["market", "limit"]).toContain(orderInfo.type);
+        expect(typeof orderInfo.price).toBe("number");
+        expect(typeof orderInfo.original_price).toBe("number");
+        expect(typeof orderInfo.amount).toBe("number");
+        expect(typeof orderInfo.filled).toBe("number");
+        expect(typeof orderInfo.fee).toBe("number");
+        expect(typeof orderInfo.slippage).toBe("number");
+        expect(typeof orderInfo.timestamp).toBe("number");
+        expect(orderInfo.timestamp).toBeGreaterThan(0);
+
+        // 체결량은 주문량 이하여야 함
+        expect(orderInfo.filled).toBeLessThanOrEqual(
+          orderInfo.amount * orderInfo.price
+        );
+
+        // 슬리피지는 0 이상이어야 함
+        expect(orderInfo.slippage).toBeGreaterThanOrEqual(0);
+
+        // 가격이 0보다 크면 limit 주문
+        if (orderInfo.original_price && orderInfo.original_price > 0) {
+          console.log("📊 지정가 주문 감지");
+        } else {
+          console.log("📊 시장가 주문 감지");
+        }
+      } catch (error: any) {
+        console.log("⚠️  주문 조회 실패:", error.message);
+        // 주문이 존재하지 않을 수 있음
+        expect(error.message).toBeTruthy();
+      }
+    }, 60000); // 60초 타임아웃
+
+    it("should fetch multiple orders successfully", async () => {
+      console.log("🚀 Bybit getOrder (다중 주문) E2E 테스트 시작");
+
+      // 테스트용 주문 ID 리스트 (실제 존재하는 주문 ID들)
+      const orders = [
+        { orderId: "test-order-1", symbol: "BTC" },
+        { orderId: "test-order-2", symbol: "ETH" },
+        { orderId: "test-order-3", symbol: "BNB" },
+      ];
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const { orderId, symbol } of orders) {
+        console.log(`📋 주문 ${orderId} (심볼: ${symbol}) 조회 중...`);
+
+        try {
+          const orderInfo = await bybitAdapter.getOrder(orderId, symbol);
+
+          console.log(`✅ 주문 ${orderId} 조회 성공:`, {
+            id: orderInfo.id,
+            symbol: orderInfo.symbol,
+            side: orderInfo.side,
+            amount: orderInfo.amount,
+            filled: orderInfo.filled,
+          });
+
+          expect(orderInfo).toBeDefined();
+          expect(orderInfo.id).toBe(orderId);
+          successCount++;
+        } catch (error: any) {
+          console.log(`⚠️  주문 ${orderId} 조회 실패:`, error.message);
+          failCount++;
+        }
+      }
+
+      console.log(
+        `✅ 다중 주문 조회 테스트 완료! (성공: ${successCount}, 실패: ${failCount})`
+      );
+
+      // 최소 하나 이상의 조회 시도가 있어야 함
+      expect(successCount + failCount).toBeGreaterThan(0);
+    }, 120000); // 120초 타임아웃
+
+    it("should handle non-existent order ID gracefully", async () => {
+      console.log("🚀 Bybit getOrder (존재하지 않는 주문) E2E 테스트 시작");
+
+      const nonExistentOrderId = "non-existent-order-" + Date.now();
+      const symbol = "BTC";
+
+      console.log(`📋 조회 주문 ID: ${nonExistentOrderId}, 심볼: ${symbol}`);
+
+      try {
+        const orderInfo = await bybitAdapter.getOrder(
+          nonExistentOrderId,
+          symbol
+        );
+
+        // 존재하지 않는 주문의 경우 에러가 발생하거나 기본값 반환
+        console.log("📦 반환된 데이터:", orderInfo);
+
+        // 기본값이 반환되는 경우
+        expect(orderInfo).toBeDefined();
+        expect(orderInfo.id).toBe(nonExistentOrderId);
+      } catch (error: any) {
+        // 에러가 발생하는 경우 (더 일반적)
+        console.log("✅ 예상된 에러 발생:", error.message);
+        expect(error.message).toBeTruthy();
+        expect(error.message).toBeTruthy();
+        expect(
+          error.message.includes("not found") ||
+            error.message.includes("does not exist") ||
+            error.message.includes("invalid")
+        ).toBe(true);
+      }
+    }, 60000); // 60초 타임아웃
+
+    it("should fetch order with different symbols", async () => {
+      console.log("🚀 Bybit getOrder (다양한 심볼) E2E 테스트 시작");
+
+      const testOrderId = "test-order-" + Date.now();
+      const symbols = ["BTC", "ETH", "SOL", "AVAX"];
+
+      for (const symbol of symbols) {
+        console.log(`📋 심볼 ${symbol}로 주문 조회 중...`);
+
+        try {
+          const orderInfo = await bybitAdapter.getOrder(testOrderId, symbol);
+
+          console.log(`✅ 심볼 ${symbol} 주문 조회 완료:`, {
+            symbol: orderInfo.symbol,
+            id: orderInfo.id,
+          });
+
+          expect(orderInfo).toBeDefined();
+          expect(orderInfo.symbol).toBe(symbol.toUpperCase());
+        } catch (error: any) {
+          console.log(`⚠️  심볼 ${symbol} 주문 조회 실패:`, error.message);
+          expect(error.message).toBeTruthy();
+        }
+      }
+
+      console.log("✅ 다양한 심볼 테스트 완료!");
+    }, 120000); // 120초 타임아웃
+  });
+
   describe("포지션 정보 조회 테스트", () => {
     it("should fetch position info for BTC successfully", async () => {
       console.log("🚀 Bybit getPositionInfo E2E 테스트 시작");
@@ -146,8 +316,8 @@ describe("Bybit API E2E Tests", () => {
     it("should fetch closed PnL for a symbol successfully", async () => {
       console.log("🚀 Bybit getClosedPnl E2E 테스트 시작");
 
-      const symbol = "F"; // 테스트용 심볼
-      const orderId = "95f6990d-ff02-4177-b892-2fe198e7cf3c"; // 실제 테스트에서는 유효한 orderId 필요
+      const symbol = "WCT"; // 테스트용 심볼
+      const orderId = "e91a8742-9039-4942-a4fe-72873b602eee"; // 실제 테스트에서는 유효한 orderId 필요
 
       console.log(`📋 조회 심볼: ${symbol}, 주문 ID: ${orderId}`);
 

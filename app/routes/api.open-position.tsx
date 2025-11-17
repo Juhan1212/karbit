@@ -179,99 +179,24 @@ export async function action({ request }: ActionFunctionArgs) {
       side: "sell",
       amount: String(roundedVolume),
     });
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const frSellOrderResult = await frAdapter.getOrder(
-      frSellOrderId,
-      coinSymbol
-    );
-    if (!frSellOrderResult) {
-      throw new Error("해외 거래소 주문 정보를 조회할 수 없습니다.");
-    }
-    console.log("해외 거래소 매도 주문 결과:", frSellOrderResult);
+    console.log("해외 거래소 매도 주문 ID:", frSellOrderId);
 
-    // 결과 정리
-    const krBuyOrder = krBuyOrderResult;
-    const frSellOrder = frSellOrderResult;
-
-    // 5. DB에 OPEN 포지션 기록
-    // 전략 정보 조회
-    const activeStrategy = await getUserActiveStrategy(user.id);
-    if (!activeStrategy) {
-      return Response.json(
-        {
-          success: false,
-          message: "활성 전략을 찾을 수 없습니다.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Upbit USDT-KRW 시세 조회 (서버 내부에서 직접)
-
-    let usdtPrice: number | undefined = undefined;
-    try {
-      // Redis 캐시 우선 조회
-      const cached = await getCache<{ data: any; timestamp: number }>(
-        "upbit:KRW-USDT"
-      );
-      if (cached && Date.now() - cached.timestamp < 10000) {
-        usdtPrice = Number(cached.data[0]?.trade_price) || undefined;
-      } else {
-        // 캐시 없으면 직접 Upbit API 호출
-        const upbitUrl = "https://api.upbit.com/v1/ticker?markets=KRW-USDT";
-        const response = await axios.get(upbitUrl);
-        usdtPrice = Number(response.data[0]?.trade_price) || undefined;
-      }
-    } catch (err) {
-      console.error("Upbit USDT-KRW 시세 조회 실패:", err);
-      usdtPrice = undefined;
-    }
-
-    const krBuyAmount = safeNumeric(krBuyOrder.filled, 0);
-    const frSellAmountInKrw = preciseMultiply(
-      safeNumeric(frSellOrder.filled, 0),
-      usdtPrice ?? 0,
-      CRYPTO_DECIMALS.FUNDS
-    );
-    const totalClosed = preciseAdd(
-      krBuyAmount,
-      frSellAmountInKrw,
-      CRYPTO_DECIMALS.FUNDS
-    );
-
-    await insertOpenPosition({
-      userId: user.id,
-      strategyId: activeStrategy.id,
-      coinSymbol,
-      leverage: leverage,
-      krExchange,
-      krOrderId: krBuyOrder.id,
-      krPrice: krBuyOrder.price,
-      krVolume: krBuyOrder.amount,
-      krFunds: krBuyOrder.filled,
-      krFee: krBuyOrder.fee || 0,
-      frExchange,
-      frOrderId: frSellOrder.id,
-      frPrice: frSellOrder.price,
-      frOriginalPrice: frSellOrder.original_price, // 주문 시점 가격
-      frVolume: frSellOrder.amount,
-      frFunds: frSellOrder.filled,
-      frFee: frSellOrder.fee || 0,
-      entryRate:
-        Math.round((krBuyOrder.filled / frSellOrder.filled) * 100) / 100,
-      usdtPrice,
-      entryTime: new Date(),
-      frSlippage: frSellOrder.slippage,
-    });
-
-    await updateUserStatsAfterPosition(user.id, totalClosed);
-
-    // 6. 결과 반환
+    // 5. 주문 체결 완료 - 즉시 응답 (Phase 1)
+    // DB 저장은 별도 엔드포인트에서 처리
     return Response.json({
       success: true,
-      message: "포지션 진입 성공",
-      krBuyOrder,
-      frSellOrder,
+      message: `${coinSymbol} 포지션이 성공적으로 진입되었습니다.`,
+      data: {
+        needsFinalization: true,
+        coinSymbol,
+        krExchange,
+        frExchange,
+        krOrderId: krBuyOrderId,
+        frOrderId: frSellOrderId,
+        userId: user.id,
+        leverage: leverage,
+        amount: amount,
+      },
     });
   } catch (error) {
     console.error("포지션 진입 오류:", error);

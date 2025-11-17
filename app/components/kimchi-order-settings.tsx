@@ -446,7 +446,7 @@ export default React.memo(
       await handleOpenPosition(symbol, koreanEx, foreignEx);
     };
 
-    // 포지션 진입 핸들러
+    // 포지션 진입 핸들러 (2단계: 주문 체결 → DB 저장)
     const handleOpenPosition = async (
       symbol: string,
       koreanEx?: string,
@@ -471,7 +471,8 @@ export default React.memo(
           return;
         }
 
-        const res = await fetch("/api/open-position", {
+        // Phase 1: 주문 체결 (빠른 응답 - 2-3초)
+        const res1 = await fetch("/api/open-position", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -484,15 +485,49 @@ export default React.memo(
             leverage,
           }),
         });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          toast.success(`${symbol} 포지션진입 성공!`);
+        const data1 = await res1.json();
+
+        if (res1.ok && data1.success) {
+          // ✅ 첫 번째 토스트: 주문 체결 완료
+          toast.success(data1.message);
+
+          // Phase 2: DB 저장 및 통계 업데이트 (백그라운드 - 최대 5초)
+          if (data1.data.needsFinalization) {
+            try {
+              const res2 = await fetch("/api/finalize-open-position", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(data1.data),
+              });
+              const data2 = await res2.json();
+
+              if (res2.ok && data2.success) {
+                // ✅ 두 번째 토스트: DB 저장 완료
+                toast.success(data2.message);
+              } else {
+                toast.error(
+                  data2.message ||
+                    "포지션 진입 결과 기록 실패. 관리자에게 문의하세요."
+                );
+              }
+            } catch (finalizeError: any) {
+              console.error(
+                `포지션 진입 결과 기록 실패 (${symbol}):`,
+                finalizeError
+              );
+              toast.error(
+                `포지션 진입 결과 기록 실패. 나중에 관리자에게 문의하세요.`
+              );
+            }
+          }
         } else {
-          toast.error(data.message || `${symbol} 포지션진입 실패`);
+          toast.error(data1.message || `${symbol} 포지션진입 실패`);
           // 거래소 인증 에러인 경우 리다이렉트
-          if (data.redirectTo) {
+          if (data1.redirectTo) {
             setTimeout(() => {
-              window.location.href = data.redirectTo;
+              window.location.href = data1.redirectTo;
             }, 1000);
           }
         }
@@ -503,7 +538,7 @@ export default React.memo(
       }
     };
 
-    // 포지션 종료 핸들러
+    // 포지션 종료 핸들러 (2단계: 주문 체결 → DB 저장)
     const handleForceClose = async (
       coinSymbol: string,
       krExchange?: string,
@@ -516,7 +551,8 @@ export default React.memo(
         }
         setClosingPositions((prev) => new Set(prev).add(coinSymbol));
 
-        const res = await fetch("/api/close-position", {
+        // Phase 1: 주문 체결 (빠른 응답 - 2-3초)
+        const res1 = await fetch("/api/close-position", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -527,11 +563,45 @@ export default React.memo(
             frExchange: frExchange.toUpperCase(),
           }),
         });
-        const data = await res.json();
-        if (res.ok && data.success) {
-          toast.success(`${coinSymbol} 포지션이 성공적으로 종료되었습니다.`);
+        const data1 = await res1.json();
+
+        if (res1.ok && data1.success) {
+          // ✅ 첫 번째 토스트: 주문 체결 완료
+          toast.success(data1.message);
+
+          // Phase 2: DB 저장 및 통계 업데이트 (백그라운드 - 최대 10초)
+          if (data1.data.needsFinalization) {
+            try {
+              const res2 = await fetch("/api/finalize-close-position", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(data1.data),
+              });
+              const data2 = await res2.json();
+
+              if (res2.ok && data2.success) {
+                // ✅ 두 번째 토스트: DB 저장 완료
+                toast.success(data2.message);
+              } else {
+                toast.error(
+                  data2.message ||
+                    "포지션 결과 기록 실패. 관리자에게 문의하세요."
+                );
+              }
+            } catch (finalizeError: any) {
+              console.error(
+                `포지션 결과 기록 실패 (${coinSymbol}):`,
+                finalizeError
+              );
+              toast.error(
+                `포지션 결과 기록 실패. 나중에 관리자에게 문의하세요.`
+              );
+            }
+          }
         } else {
-          toast.error(data.message || `${coinSymbol} 포지션 종료 실패`);
+          toast.error(data1.message || `${coinSymbol} 포지션 종료 실패`);
         }
       } catch (error: any) {
         console.error(`포지션 강제 종료 실패 (${coinSymbol}):`, error);
