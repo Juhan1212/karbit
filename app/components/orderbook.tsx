@@ -199,6 +199,18 @@ export default function RealtimeOrderBook({
     null
   );
 
+  // 호가 단위 상태 추가
+  const isKoreanExchange = ["빗썸", "업비트", "upbit", "bithumb"].includes(
+    exchange.toLowerCase()
+  );
+
+  // 호가 단위 옵션 (0은 본래 단위를 의미)
+  const tickSizeOptions = isKoreanExchange
+    ? [0, 0.01, 0.1, 1, 10, 100, 1000]
+    : [0, 0.0001, 0.001, 0.01, 0.1, 1, 10];
+
+  const [selectedTickSize, setSelectedTickSize] = useState<number>(0);
+
   // RAF를 사용한 스로틀링
   const rafRef = useRef<number | undefined>(undefined);
   const pendingUpdateRef = useRef<OrderBookData | null>(null);
@@ -246,25 +258,81 @@ export default function RealtimeOrderBook({
     }
   }, [symbol]);
 
+  // exchange가 변경될 때 호가 단위 초기화
+  useEffect(() => {
+    setSelectedTickSize(0);
+  }, [exchange]);
+
   // 스토어에서 연결 상태 가져오기
   const isConnected = useStore(store, (state) => state.isConnected);
 
-  // 최대 total 값 계산 (useMemo로 캐싱)
-  const maxTotal = useMemo(() => {
-    const maxBid = Math.max(...orderBook.bids.map((b) => b.total), 0);
-    const maxAsk = Math.max(...orderBook.asks.map((a) => a.total), 0);
-    return Math.max(maxBid, maxAsk);
-  }, [orderBook.bids, orderBook.asks]);
+  // 호가 그룹화 함수
+  const groupOrderBookByPrice = useCallback(
+    (orders: OrderBookEntry[], tickSize: number): OrderBookEntry[] => {
+      // tickSize가 0이면 본래 단위 그대로 반환
+      if (orders.length === 0 || tickSize === 0) return orders;
 
-  // 스프레드 계산 (useMemo로 캐싱)
+      const grouped = new Map<number, { amount: number; total: number }>();
+
+      orders.forEach(({ price, amount, total }) => {
+        // 가격을 tickSize 단위로 내림 (floor)
+        const groupedPrice = Number(
+          (Math.floor(price / tickSize) * tickSize).toFixed(8)
+        );
+
+        if (grouped.has(groupedPrice)) {
+          const existing = grouped.get(groupedPrice)!;
+          grouped.set(groupedPrice, {
+            amount: existing.amount + amount,
+            total: existing.total + total,
+          });
+        } else {
+          grouped.set(groupedPrice, { amount, total });
+        }
+      });
+
+      return Array.from(grouped.entries()).map(
+        ([price, { amount, total }]) => ({
+          price,
+          amount,
+          total,
+        })
+      );
+    },
+    []
+  );
+
+  // 그룹화된 orderbook 데이터 (useMemo로 캐싱)
+  const groupedOrderBook = useMemo(() => {
+    return {
+      bids: groupOrderBookByPrice(orderBook.bids, selectedTickSize).sort(
+        (a, b) => b.price - a.price
+      ),
+      asks: groupOrderBookByPrice(orderBook.asks, selectedTickSize).sort(
+        (a, b) => a.price - b.price
+      ),
+      timestamp: orderBook.timestamp,
+    };
+  }, [orderBook, selectedTickSize, groupOrderBookByPrice]);
+
+  // 최대 total 값 계산 (그룹화된 데이터 기준)
+  const maxTotal = useMemo(() => {
+    const maxBid = Math.max(...groupedOrderBook.bids.map((b) => b.total), 0);
+    const maxAsk = Math.max(...groupedOrderBook.asks.map((a) => a.total), 0);
+    return Math.max(maxBid, maxAsk);
+  }, [groupedOrderBook.bids, groupedOrderBook.asks]);
+
+  // 스프레드 계산 (그룹화된 데이터 기준)
   const { spread, spreadPercent } = useMemo(() => {
     const s =
-      orderBook.asks[0] && orderBook.bids[0]
-        ? orderBook.asks[0].price - orderBook.bids[0].price
+      groupedOrderBook.asks[0] && groupedOrderBook.bids[0]
+        ? groupedOrderBook.asks[0].price - groupedOrderBook.bids[0].price
         : 0;
-    const sp = orderBook.bids[0] ? (s / orderBook.bids[0].price) * 100 : 0;
+    const sp = groupedOrderBook.bids[0]
+      ? (s / groupedOrderBook.bids[0].price) * 100
+      : 0;
     return { spread: s, spreadPercent: sp };
-  }, [orderBook.asks, orderBook.bids]);
+  }, [groupedOrderBook.asks, groupedOrderBook.bids]);
 
   // RequestAnimationFrame을 사용한 부드러운 업데이트
   const updateOrderBook = useCallback(
@@ -399,7 +467,24 @@ export default function RealtimeOrderBook({
         {/* Header */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex-1"></div>
+            <div className="flex-1">
+              {/* 호가 단위 선택 */}
+              <select
+                value={selectedTickSize}
+                onChange={(e) => setSelectedTickSize(Number(e.target.value))}
+                className="px-3 py-1.5 bg-slate-700 text-white text-sm rounded-lg border border-slate-600 hover:border-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              >
+                {tickSizeOptions.map((size) => (
+                  <option key={size} value={size}>
+                    {size === 0
+                      ? "본래 단위"
+                      : size >= 1
+                        ? `${size.toLocaleString()}`
+                        : size.toString()}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="text-center flex-1">
               <h2 className="text-xl font-bold text-white mb-1 whitespace-nowrap">
                 {title}
@@ -491,7 +576,7 @@ export default function RealtimeOrderBook({
 
           {/* 매도 호가 (Asks) - 역순으로 표시 */}
           <div className="space-y-0.5 py-2">
-            {orderBook.asks
+            {groupedOrderBook.asks
               .slice(0, 10)
               .reverse()
               .map((ask, index) => (
@@ -512,9 +597,9 @@ export default function RealtimeOrderBook({
               <Activity className="w-4 h-4 text-yellow-400 animate-pulse" />
               <span className="text-yellow-400 font-bold text-sm">현재가</span>
             </div>
-            <div className="text-white font-bold text-lg font-mono">
-              {orderBook.bids[0]
-                ? orderBook.bids[0].price.toLocaleString("ko-KR", {
+            <div className="text-white font-bold text-lg">
+              {groupedOrderBook.bids[0]
+                ? groupedOrderBook.bids[0].price.toLocaleString("ko-KR", {
                     maximumFractionDigits: 10,
                     minimumFractionDigits: 0,
                   })
@@ -524,7 +609,7 @@ export default function RealtimeOrderBook({
 
           {/* 매수 호가 (Bids) */}
           <div className="space-y-0.5 py-2">
-            {orderBook.bids.slice(0, 10).map((bid, index) => (
+            {groupedOrderBook.bids.slice(0, 10).map((bid, index) => (
               <OrderBookRow
                 key={`bid-${index}`}
                 entry={bid}

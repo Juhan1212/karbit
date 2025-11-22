@@ -11,6 +11,7 @@ import type { CryptoOption } from "../../stores/cryptoOptionState";
 import { useCryptoOptionsStore } from "../../stores/cryptoOptionState";
 import { createWebSocketStore } from "../../stores/chartState";
 import { useChartDataStore } from "../../stores/chartDataStore";
+import { add } from "node_modules/cheerio/dist/esm/api/traversing";
 
 const TickerInfoBar = memo(
   ({
@@ -62,9 +63,9 @@ const TickerInfoBar = memo(
 
     const handleMessage = useCallback(
       (data: TickerData | CandleBarData | PositionData | OrderBookData) => {
-        // OrderBookData는 무시
+        // TickerData 타입 체크: channel이 'futures.tickers'이고 symbol이 일치하는 경우
         if ("channel" in data && data.channel === "futures.tickers") {
-          const t = data as TickerData;
+          const t = data as unknown as TickerData;
           settickerData((prev) => ({
             ...prev,
             change_percentage:
@@ -80,7 +81,7 @@ const TickerInfoBar = memo(
           }));
         }
       },
-      []
+      [symbol]
     );
 
     // 심볼 변경 시 스토어의 심볼 업데이트

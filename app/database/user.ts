@@ -409,7 +409,7 @@ export async function incrementDailyEntryCount(userId: number): Promise<void> {
         .where(eq(users.id, userId));
     }
 
-    console.log(`사용자 ${userId} 일일 진입 카운트 업데이트 완료`);
+    // console.log(`사용자 ${userId} 일일 진입 카운트 업데이트 완료`);
   } catch (error) {
     console.error("일일 진입 카운트 업데이트 실패:", error);
     throw error;

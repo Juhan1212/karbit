@@ -20,7 +20,8 @@ export interface WebSocketAdapter {
 
 export interface WebSocketParams {
   interval?: string;
-  symbol?: string;
+  symbol?: string | string[]; // 단일 또는 배열 지원
+  selectedSymbol?: string; // selectedTickerItem의 symbol (추가 kline/ticker 구독용)
 }
 
 export class WebSocketAdapterFactory {

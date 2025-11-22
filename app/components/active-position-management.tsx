@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Button } from "./button";
 import { Badge } from "./badge";
@@ -13,6 +19,8 @@ import {
   TableRow,
 } from "./table";
 import { useDashboardStore } from "~/stores/dashboard-store";
+import { multiWebSocketCoordinator } from "~/stores/multi-websocket-coordinator";
+import type { OrderBookData } from "~/types/marketInfo";
 
 // 유틸리티 함수들
 const formatKRW = (amount: number) => {
@@ -36,6 +44,52 @@ function formatDateForDisplay(dateString: string) {
     return dateString;
   }
 }
+
+// ============================================
+// 오더북 엔트리 타입
+// ============================================
+interface OrderBookEntry {
+  price: number;
+  amount: number;
+  total: number;
+}
+
+// ============================================
+// 코인 수량 기반 평균 가격 계산 함수 (종료 시 사용)
+// orderbook.tsx의 calculateAveragePriceByVolume과 동일
+// ============================================
+const calculateAveragePriceByVolume = (
+  entries: OrderBookEntry[],
+  coinVolume: number,
+  type: "ask" | "bid",
+  isKoreanExchange: boolean,
+  tetherPrice?: number | null
+): number => {
+  if (!entries.length || !coinVolume) return 0;
+
+  // 정렬: ask는 가격 오름차순 (최저가부터), bid는 가격 내림차순 (최고가부터)
+  const sortedEntries = [...entries].sort((a, b) => {
+    return type === "ask" ? a.price - b.price : b.price - a.price;
+  });
+
+  let totalValue = 0; // 총 금액 (KRW 또는 USDT)
+  let totalVolume = 0; // 총 코인 수량
+  let remainingVolume = coinVolume;
+
+  for (const entry of sortedEntries) {
+    if (remainingVolume <= 0) break;
+
+    // entry.amount는 해당 호가의 코인 수량
+    const useVolume = Math.min(remainingVolume, entry.amount);
+    totalValue += entry.price * useVolume;
+    totalVolume += useVolume;
+    remainingVolume -= useVolume;
+  }
+
+  if (totalVolume === 0) return 0;
+
+  return totalValue / totalVolume;
+};
 
 interface ActivePosition {
   coinSymbol: string;
@@ -62,6 +116,7 @@ interface PositionBalance {
   currentProfit: number;
   profitRate: number;
   lastUpdated: number;
+  leverage?: number;
 }
 
 interface ActivePositionManagementProps {
@@ -82,17 +137,228 @@ export const ActivePositionManagement = React.memo(
       new Set()
     );
 
-    // Dashboard Store에서 Exit Average Price 구독
-    const { krExitAveragePrice, frExitAveragePrice } = useDashboardStore();
+    // 실시간 오더북 데이터로 계산된 평균 가격 저장
+    const [realtimePrices, setRealtimePrices] = useState<
+      Map<
+        string,
+        {
+          krExitPrice: number;
+          frExitPrice: number;
+          lastUpdated: number;
+        }
+      >
+    >(new Map());
+
+    // RAF를 사용한 스로틀링을 위한 ref
+    const rafRef = useRef<number | undefined>(undefined);
+    const pendingUpdatesRef = useRef<Map<string, any>>(new Map());
+
+    // realtimePrices를 ref로도 저장하여 클로저 문제 해결
+    const realtimePricesRef = useRef(realtimePrices);
+
+    // currentExchangeRate를 ref로 저장하여 의존성 배열에서 제거
+    const currentExchangeRateRef = useRef(currentExchangeRate);
+
+    // realtimePrices가 변경될 때마다 ref 업데이트
+    useEffect(() => {
+      realtimePricesRef.current = realtimePrices;
+    }, [realtimePrices]);
+
+    // currentExchangeRate가 변경될 때마다 ref 업데이트
+    useEffect(() => {
+      currentExchangeRateRef.current = currentExchangeRate;
+    }, [currentExchangeRate]);
+
+    // ==================== WebSocket 오더북 데이터 수신 ====================
+    useEffect(() => {
+      if (positions.length === 0) {
+        setRealtimePrices(new Map());
+        return;
+      }
+
+      // console.log(
+      //   "[ActivePositionManagement] Setting up WebSocket listeners for positions:",
+      //   positions.length
+      // );
+
+      // 각 거래소별로 별도의 핸들러 생성하여 거래소 정보를 클로저로 캡처
+      const storeHandlers = new Map<string, (data: any) => void>();
+
+      const stores = multiWebSocketCoordinator.getAllStores();
+
+      stores.forEach((store) => {
+        const exchangeName =
+          Array.from(multiWebSocketCoordinator["stores"].entries()).find(
+            ([_, s]) => s === store
+          )?.[0] || "";
+
+        const handleMessage = (data: any) => {
+          if (data.channel !== "orderbook") return;
+
+          const symbol = data.symbol;
+
+          // 이 거래소와 심볼에 해당하는 포지션 찾기
+          const position = positions.find((p) => {
+            const krExchange = p.krExchange?.toLowerCase();
+            const frExchange = p.frExchange?.toLowerCase();
+            return (
+              p.coinSymbol === symbol &&
+              (krExchange === exchangeName || frExchange === exchangeName)
+            );
+          });
+
+          if (!position) return;
+
+          // 포지션과 거래소 정보를 함께 저장
+          const key = `${symbol}_${exchangeName}`;
+          pendingUpdatesRef.current.set(key, {
+            position,
+            orderbook: data as OrderBookData,
+            exchange: exchangeName,
+          });
+
+          if (!rafRef.current) {
+            rafRef.current = requestAnimationFrame(() => {
+              // ref를 사용하여 최신 값 가져오기
+              const updates = new Map(realtimePricesRef.current);
+
+              // 심볼별로 그룹화
+              const symbolGroups = new Map<string, Map<string, any>>();
+
+              pendingUpdatesRef.current.forEach((value, key) => {
+                const symbol = value.position.coinSymbol;
+                if (!symbolGroups.has(symbol)) {
+                  symbolGroups.set(symbol, new Map());
+                }
+                symbolGroups.get(symbol)!.set(value.exchange, value);
+              });
+
+              // 각 심볼별로 처리
+              symbolGroups.forEach((exchangeData, symbol) => {
+                try {
+                  const position = Array.from(exchangeData.values())[0]
+                    .position;
+                  const krExchange = position.krExchange?.toLowerCase();
+                  const frExchange = position.frExchange?.toLowerCase();
+
+                  // 기존 값 가져오기 (없으면 0으로 초기화)
+                  const existing = updates.get(symbol) || {
+                    krExitPrice: 0,
+                    frExitPrice: 0,
+                    lastUpdated: 0,
+                  };
+
+                  let krExitPrice = existing.krExitPrice;
+                  let frExitPrice = existing.frExitPrice;
+
+                  // 한국 거래소 데이터 처리
+                  if (krExchange && exchangeData.has(krExchange)) {
+                    const krData = exchangeData.get(krExchange);
+                    if (
+                      krData &&
+                      krData.orderbook.bids &&
+                      krData.orderbook.bids.length > 0
+                    ) {
+                      const krVolume = position.totalKrVolume || 0;
+                      if (krVolume > 0) {
+                        const newKrPrice = calculateAveragePriceByVolume(
+                          krData.orderbook.bids,
+                          krVolume,
+                          "bid",
+                          true,
+                          null
+                        );
+                        if (newKrPrice > 0) {
+                          krExitPrice = newKrPrice;
+                        }
+                      }
+                    }
+                  }
+
+                  // 해외 거래소 데이터 처리
+                  if (frExchange && exchangeData.has(frExchange)) {
+                    const frData = exchangeData.get(frExchange);
+                    if (
+                      frData &&
+                      frData.orderbook.asks &&
+                      frData.orderbook.asks.length > 0
+                    ) {
+                      const frVolume = position.totalFrVolume || 0;
+                      if (frVolume > 0) {
+                        const newFrPrice = calculateAveragePriceByVolume(
+                          frData.orderbook.asks,
+                          frVolume,
+                          "ask",
+                          false,
+                          currentExchangeRateRef.current
+                        );
+                        if (newFrPrice > 0) {
+                          frExitPrice = newFrPrice;
+                        }
+                      }
+                    }
+                  }
+
+                  // 둘 다 0이 아닐 때만 업데이트 (초기 로딩 시 방지)
+                  if (krExitPrice > 0 && frExitPrice > 0) {
+                    updates.set(symbol, {
+                      krExitPrice,
+                      frExitPrice,
+                      lastUpdated: Date.now(),
+                    });
+                  }
+                } catch (error) {
+                  console.error(
+                    `[ActivePositionManagement] Error calculating price for ${symbol}:`,
+                    error
+                  );
+                }
+              });
+
+              setRealtimePrices(updates);
+              pendingUpdatesRef.current.clear();
+              rafRef.current = undefined;
+            });
+          }
+        };
+
+        storeHandlers.set(exchangeName, handleMessage);
+        store.getState().addMessageListener(handleMessage);
+      });
+
+      // console.log(
+      //   "[ActivePositionManagement] WebSocket listeners registered for",
+      //   stores.length,
+      //   "stores"
+      // );
+
+      return () => {
+        stores.forEach((store) => {
+          const exchangeName =
+            Array.from(multiWebSocketCoordinator["stores"].entries()).find(
+              ([_, s]) => s === store
+            )?.[0] || "";
+          const handler = storeHandlers.get(exchangeName);
+          if (handler) {
+            store.getState().removeMessageListener(handler);
+          }
+        });
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+        }
+        // console.log(
+        //   "[ActivePositionManagement] WebSocket listeners cleaned up"
+        // );
+      };
+    }, [positions]); // currentExchangeRate 제거 - ref로 관리
+
+    // Dashboard Store에서 Exit Average Price 구독 (더 이상 사용하지 않음 - 실시간 오더북 사용)
+    // const { krExitAveragePrice, frExitAveragePrice } = useDashboardStore();
 
     // 모든 포지션의 가격 및 수익 정보 업데이트 (useMemo로 계산 최적화)
     const positionBalances = useMemo(() => {
+      // 포지션이 없으면 빈 맵 반환
       if (positions.length === 0) {
-        return new Map<string, PositionBalance>();
-      }
-
-      // Exit Price가 없으면 계산 불가
-      if (krExitAveragePrice === null || frExitAveragePrice === null) {
         return new Map<string, PositionBalance>();
       }
 
@@ -100,6 +366,21 @@ export const ActivePositionManagement = React.memo(
 
       for (const position of positions) {
         try {
+          // 실시간 오더북 데이터에서 평균 가격 가져오기
+          const realtimePrice = realtimePrices.get(position.coinSymbol);
+
+          // 실시간 가격이 없으면 해당 포지션은 계산하지 않음
+          if (
+            !realtimePrice ||
+            realtimePrice.krExitPrice === 0 ||
+            realtimePrice.frExitPrice === 0
+          ) {
+            continue;
+          }
+
+          const krExitAveragePrice = realtimePrice.krExitPrice;
+          const frExitAveragePrice = realtimePrice.frExitPrice;
+
           // DB에서 받은 실제 보유량과 투자금액
           const totalKrVolume = position.totalKrVolume || 0;
           const totalKrFunds = position.totalKrFunds || 0;
@@ -160,7 +441,8 @@ export const ActivePositionManagement = React.memo(
             totalInvestment,
             currentProfit,
             profitRate,
-            lastUpdated: Date.now(),
+            lastUpdated: realtimePrice.lastUpdated,
+            leverage: position.leverage,
           });
         } catch (error) {
           console.error(
@@ -171,12 +453,9 @@ export const ActivePositionManagement = React.memo(
       }
 
       return newBalances;
-    }, [
-      positions,
-      currentExchangeRate,
-      krExitAveragePrice,
-      frExitAveragePrice,
-    ]); // 클로징 상태 업데이트
+    }, [positions, currentExchangeRate, realtimePrices]);
+
+    // 클로징 상태 업데이트
     const handlePositionClose = (coinSymbol: string) => {
       if (closingPositions.has(coinSymbol)) {
         setClosingPositions((prev) => {
@@ -226,7 +505,7 @@ export const ActivePositionManagement = React.memo(
     return (
       <Card className="shadow-lg">
         <CardHeader className="border-b border-blue-500/20 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+          <div className="relative flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-500/20 dark:bg-blue-500/30 rounded-lg">
                 <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -240,10 +519,12 @@ export const ActivePositionManagement = React.memo(
                 </p>
               </div>
             </div>
-            <Badge variant="secondary" className="gap-2 py-2 px-4">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="font-medium">실시간</span>
-            </Badge>
+            <div className="sm:static absolute right-0 top-0 sm:right-0 sm:top-0 z-10">
+              <Badge variant="secondary" className="gap-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                실시간
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-6">
@@ -274,13 +555,16 @@ export const ActivePositionManagement = React.memo(
                       </div>
                     </div>
                     <p className="text-2xl font-bold tabular-nums">
-                      {formatKRW(
-                        Array.from(positionBalances.values()).reduce(
+                      {(() => {
+                        const total = Array.from(
+                          positionBalances.values()
+                        ).reduce(
                           (sum, balance) =>
                             sum + balance.krBalanceKrw + balance.frBalanceKrw,
                           0
-                        )
-                      )}
+                        );
+                        return total === 0 ? "-" : formatKRW(total);
+                      })()}
                     </p>
                   </CardContent>
                 </Card>
@@ -296,12 +580,17 @@ export const ActivePositionManagement = React.memo(
                       </div>
                     </div>
                     <p className="text-2xl font-bold tabular-nums">
-                      {formatKRW(
-                        Array.from(positionBalances.values()).reduce(
+                      {(() => {
+                        const totalInvestment = Array.from(
+                          positionBalances.values()
+                        ).reduce(
                           (sum, balance) => sum + balance.totalInvestment,
                           0
-                        )
-                      )}
+                        );
+                        return totalInvestment === 0
+                          ? "-"
+                          : formatKRW(totalInvestment);
+                      })()}
                     </p>
                   </CardContent>
                 </Card>
@@ -378,6 +667,12 @@ export const ActivePositionManagement = React.memo(
                           코인
                         </th>
                         <th className="w-28 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          KR 거래소
+                        </th>
+                        <th className="w-28 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          FR 거래소
+                        </th>
+                        <th className="w-28 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
                           KR 가격
                         </th>
                         <th className="w-28 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
@@ -388,6 +683,9 @@ export const ActivePositionManagement = React.memo(
                         </th>
                         <th className="w-32 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
                           FR 자산
+                        </th>
+                        <th className="w-32 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
+                          FR 레버리지
                         </th>
                         <th className="w-32 px-4 py-4 text-right text-xs font-semibold text-gray-200 dark:text-gray-100 uppercase tracking-wider">
                           투자금액
@@ -454,6 +752,16 @@ export const ActivePositionManagement = React.memo(
                                 {position.coinSymbol}
                               </span>
                             </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className="font-bold text-base">
+                                {position.krExchange?.toUpperCase() || "-"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className="font-bold text-base">
+                                {position.frExchange?.toUpperCase() || "-"}
+                              </span>
+                            </td>
                             <td className="px-4 py-4 text-right tabular-nums font-medium">
                               {balance
                                 ? formatNumber(balance.krPrice, 0) + "원"
@@ -469,6 +777,11 @@ export const ActivePositionManagement = React.memo(
                             </td>
                             <td className="px-4 py-4 text-right tabular-nums font-semibold text-purple-600 dark:text-purple-400">
                               {balance ? formatKRW(balance.frBalanceKrw) : "-"}
+                            </td>
+                            <td className="px-4 py-4 text-right tabular-nums font-semibold text-purple-600 dark:text-purple-400">
+                              {position.leverage
+                                ? position.leverage + "x"
+                                : "-"}
                             </td>
                             <td className="px-4 py-4 text-right tabular-nums font-semibold">
                               {balance

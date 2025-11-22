@@ -3,6 +3,58 @@ import type { CandleBarData, OrderBookData } from "../../types/marketInfo";
 import { toUppercaseKRWSymbol } from "../common";
 
 export class UpbitWebSocketAdapter implements WebSocketAdapter {
+  /**
+   * symbols와 symbol을 머지하여 단일 구독 메시지 생성
+   * @param symbols - orderbook만 구독할 심볼들 (포지션)
+   * @param symbol - kline + orderbook 구독할 심볼 (selectedTickerItem)
+   * @param interval - 캔들 인터벌
+   */
+  getUpdateSubscriptionMessage(
+    symbols: string[],
+    symbol: string | null,
+    interval: string = "1m"
+  ) {
+    // 모든 심볼 수집 (중복 제거)
+    const allSymbols = new Set<string>(symbols);
+    if (symbol) {
+      allSymbols.add(symbol);
+    }
+    allSymbols.add("KRW-USDT"); // 환율용
+
+    const symbolArray = Array.from(allSymbols);
+    const codes = symbolArray.map((s) => toUppercaseKRWSymbol(s));
+
+    // interval 변환
+    let convertedInterval = interval;
+    if (interval === "1h") convertedInterval = "60m";
+    if (interval === "4h") convertedInterval = "240m";
+
+    // symbol이 있으면 kline도 구독
+    if (symbol) {
+      return [
+        { ticket: "test" },
+        {
+          type: "orderbook",
+          codes,
+        },
+        {
+          type: `candle.${convertedInterval}`,
+          codes: [toUppercaseKRWSymbol(symbol), "KRW-USDT"],
+        },
+        { format: "JSON_LIST" },
+      ];
+    }
+
+    // symbol이 없으면 orderbook만
+    return [
+      { ticket: "test" },
+      {
+        type: "orderbook",
+        codes,
+      },
+      { format: "JSON_LIST" },
+    ];
+  }
   getRequestMessage(type: string, params: WebSocketParams) {
     switch (type) {
       case "kline": {
@@ -36,6 +88,27 @@ export class UpbitWebSocketAdapter implements WebSocketAdapter {
         const symbols = Array.isArray(params.symbol)
           ? params.symbol
           : [params.symbol];
+
+        // selectedSymbol이 있는 경우 kline도 구독
+        if (params.selectedSymbol) {
+          let interval = params.interval || "1m";
+          if (interval === "1h") interval = "60m";
+          if (interval === "4h") interval = "240m";
+
+          return [
+            { ticket: "test" },
+            {
+              type: "orderbook",
+              codes: symbols.map((symbol) => toUppercaseKRWSymbol(symbol)),
+            },
+            {
+              type: `candle.${interval}`,
+              codes: [toUppercaseKRWSymbol(params.selectedSymbol)],
+            },
+            { format: "JSON_LIST" },
+          ];
+        }
+
         return [
           { ticket: "test" },
           {
@@ -49,27 +122,28 @@ export class UpbitWebSocketAdapter implements WebSocketAdapter {
     }
   }
 
-  getResponseMessage(
-    message: {
-      type: string;
-      code: string;
-      [key: string]: any;
-    }[]
-  ): CandleBarData | OrderBookData | null {
+  getResponseMessage(message: any): CandleBarData | OrderBookData | null {
     try {
-      if (message[0].type.startsWith("candle")) {
+      // 업비트는 배열로 데이터를 보냄
+      const data = Array.isArray(message) ? message[0] : message;
+
+      if (!data || !data.type) {
+        return null;
+      }
+
+      if (data.type.startsWith("candle")) {
         return {
           channel: "kline",
-          symbol: message[0].code.replace("KRW-", ""),
-          time: new Date(message[0].candle_date_time_utc + "Z").getTime(),
-          open: Number(message[0].opening_price),
-          high: Number(message[0].high_price),
-          low: Number(message[0].low_price),
-          close: Number(message[0].trade_price),
-          volume: Number(message[0].candle_acc_trade_volume),
+          symbol: data.code.replace("KRW-", ""),
+          time: new Date(data.candle_date_time_utc + "Z").getTime(),
+          open: Number(data.opening_price),
+          high: Number(data.high_price),
+          low: Number(data.low_price),
+          close: Number(data.trade_price),
+          volume: Number(data.candle_acc_trade_volume),
         } as CandleBarData;
-      } else if (message[0].type === "orderbook") {
-        const orderbookUnits = message[0].orderbook_units || [];
+      } else if (data.type === "orderbook") {
+        const orderbookUnits = data.orderbook_units || [];
         const bids: { price: number; amount: number; total: number }[] = [];
         const asks: { price: number; amount: number; total: number }[] = [];
 
@@ -88,14 +162,14 @@ export class UpbitWebSocketAdapter implements WebSocketAdapter {
 
         return {
           channel: "orderbook",
-          symbol: message[0].code.replace("KRW-", ""),
+          symbol: data.code.replace("KRW-", ""),
           bids,
           asks,
           timestamp: Date.now(),
         } as OrderBookData;
       }
     } catch (error) {
-      console.log(message);
+      // console.log(message);
       console.error("WebSocket message parsing error:", error);
     }
     return null;

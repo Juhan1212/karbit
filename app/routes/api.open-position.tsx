@@ -129,12 +129,12 @@ export async function action({ request }: ActionFunctionArgs) {
     // for mock test
     // const krBuyOrderId = "C1139000000000564138";
 
-    console.log("한국 거래소 매수 주문 ID:", krBuyOrderId);
+    // console.log("한국 거래소 매수 주문 ID:", krBuyOrderId);
 
     // 3.5. 주문 결과 조회 및 수량 추출
     await new Promise((resolve) => setTimeout(resolve, 500));
     const krBuyOrderResult = await krAdapter.getOrder(krBuyOrderId, coinSymbol);
-    console.log("한국 거래소 매수 주문 결과:", krBuyOrderResult);
+    // console.log("한국 거래소 매수 주문 결과:", krBuyOrderResult);
     if (!krBuyOrderResult || !krBuyOrderResult.amount) {
       throw new Error("한국 거래소 주문 정보를 조회할 수 없습니다.");
     }
@@ -179,7 +179,7 @@ export async function action({ request }: ActionFunctionArgs) {
       side: "sell",
       amount: String(roundedVolume),
     });
-    console.log("해외 거래소 매도 주문 ID:", frSellOrderId);
+    // console.log("해외 거래소 매도 주문 ID:", frSellOrderId);
 
     // 5. 주문 체결 완료 - 즉시 응답 (Phase 1)
     // DB 저장은 별도 엔드포인트에서 처리

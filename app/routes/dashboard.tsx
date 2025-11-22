@@ -40,7 +40,7 @@ import CompChart from "~/components/chart/CompChart";
 import "~/assets/styles/chart/index.scss";
 import { Badge } from "~/components/badge";
 import KimchiOrderSettings from "~/components/kimchi-order-settings";
-import { createWebSocketStore } from "~/stores/chartState";
+import { multiWebSocketCoordinator } from "~/stores/multi-websocket-coordinator";
 import {
   ExchangeTypeConverter,
   KoreanExchangeType,
@@ -251,6 +251,10 @@ export default function Dashboard() {
   const [selectedTickerItem, setSelectedTickerItem] = useState<any>(null);
   const selectedTickerItemRef = useRef<any>(null);
 
+  // Coordinator 초기화 완료 플래그 (중복 구독 방지)
+  // false: 초기화 전 | true: 초기화 직후 | "ready": 사용자 선택 처리 준비 완료
+  const isCoordinatorInitializedRef = useRef<false | true | "ready">(false);
+
   // selectedTickerItem을 설정하면서 ref도 함께 업데이트하는 wrapper 함수
   const updateSelectedTickerItem = useCallback((item: any) => {
     selectedTickerItemRef.current = item;
@@ -331,64 +335,119 @@ export default function Dashboard() {
     initialActivePositionCount
   );
 
-  // Exchange Rate Chart를 위한 상태 변수들
-  const [selectedTicker, setSelectedTicker] = useState(
-    activePositions[0]?.coinSymbol || "BTC"
-  );
+  // // Exchange Rate Chart를 위한 상태 변수들
+  // const [selectedTicker, setSelectedTicker] = useState(
+  //   activePositions[0]?.coinSymbol || "BTC"
+  // );
 
-  // 선택된 티커에 해당하는 포지션 찾기
-  const selectedPosition = useMemo(() => {
-    return (
-      polledActivePositions.find((p) => p.coinSymbol === selectedTicker) ||
-      polledActivePositions[0]
+  // // polledActivePositions 변경시 selectedTicker 유효성 검사
+  // useEffect(() => {
+  //   if (polledActivePositions.length > 0) {
+  //     const isValidTicker = polledActivePositions.some(
+  //       (p) => p.coinSymbol === selectedTicker
+  //     );
+  //     if (!isValidTicker) {
+  //       setSelectedTicker(polledActivePositions[0].coinSymbol);
+  //     }
+  //   }
+  // }, [polledActivePositions, selectedTicker]);
+
+  // Coordinator 초기화: rawActivePositions로 거래소별 웹소켓 스토어 생성
+  useEffect(() => {
+    if (
+      rawActivePositions &&
+      Array.isArray(rawActivePositions) &&
+      rawActivePositions.length > 0
+    ) {
+      // console.log(
+      //   "[Dashboard] Initializing coordinator with positions:",
+      //   rawActivePositions.length
+      // );
+
+      // 초기 selectedTickerItem 설정 (positions가 있는 경우)
+      const firstPosition = rawActivePositions[0] as any;
+      const initialSelectedItem = {
+        symbol: firstPosition.coin_symbol,
+        korean_ex: firstPosition.kr_exchange.toLowerCase(),
+        foreign_ex: firstPosition.fr_exchange.toLowerCase(),
+        premium: undefined,
+        krPrice: undefined,
+        globalPrice: undefined,
+        ts: Date.now(),
+        ex_rates: [],
+      };
+
+      // Coordinator 초기화 시 selectedTickerItem도 함께 전달
+      // -> 한 번의 WebSocket 연결로 모든 구독 처리
+      multiWebSocketCoordinator.initialize(
+        rawActivePositions as any,
+        "1m",
+        initialSelectedItem
+      );
+
+      // selectedTickerItem state도 함께 설정 (Phase 2 effect를 위해)
+      updateSelectedTickerItem(initialSelectedItem);
+
+      // positions가 있는 경우: 초기화 완료 플래그 설정 (이후 사용자 선택만 처리)
+      isCoordinatorInitializedRef.current = true;
+    } else {
+      // positions가 없는 경우: "ready" 상태로 설정하여 다음 selectedTickerItem 변경 시 바로 처리
+      isCoordinatorInitializedRef.current = "ready";
+    }
+
+    // console.log(
+    //   "isCoordinatorInitializedRef : ",
+    //   isCoordinatorInitializedRef.current
+    // );
+
+    // cleanup
+    return () => {
+      multiWebSocketCoordinator.cleanup();
+      isCoordinatorInitializedRef.current = false;
+    };
+  }, []); // 빈 deps - 마운트 시 한번만 실행
+
+  // selectedTickerItem 변경 시 coordinator 업데이트 (사용자가 티커 선택한 경우)
+  useEffect(() => {
+    if (!selectedTickerItem) return;
+
+    // 초기화 완료 전이면 스킵 (initialize에서 이미 구독 완료)
+    if (!isCoordinatorInitializedRef.current) {
+      // console.log("[Dashboard] Skipping - coordinator initializing");
+      return;
+    }
+
+    // 초기화 직후 첫 실행은 스킵 (initialize에서 이미 같은 값으로 구독함)
+    // 플래그를 false로 바꿔서 다음 변경부터만 실행
+    if (isCoordinatorInitializedRef.current === true) {
+      // console.log("[Dashboard] Skipping first update after initialization");
+      isCoordinatorInitializedRef.current = "ready"; // 문자열로 변경해서 구분
+      return;
+    }
+
+    // console.log("[Dashboard] User selected ticker, updating coordinator");
+    multiWebSocketCoordinator.updateSelectedTickerItem(
+      selectedTickerItem,
+      "1m"
     );
-  }, [polledActivePositions, selectedTicker]);
+  }, [selectedTickerItem]);
 
-  // polledActivePositions 변경시 selectedTicker 유효성 검사
+  // 포지션 변경 시 multiWebSocketCoordinator에 알림
   useEffect(() => {
     if (polledActivePositions.length > 0) {
-      const isValidTicker = polledActivePositions.some(
-        (p) => p.coinSymbol === selectedTicker
-      );
-      if (!isValidTicker) {
-        setSelectedTicker(polledActivePositions[0].coinSymbol);
-      }
+      // console.log(
+      //   "[Dashboard] Updating coordinator positions:",
+      //   polledActivePositions.length
+      // );
+      // polledActivePositions는 변환된 형식이므로 coin_symbol로 재매핑
+      const positionsForCoordinator = polledActivePositions.map((p) => ({
+        coin_symbol: p.coinSymbol,
+        kr_exchange: p.krExchange,
+        fr_exchange: p.frExchange,
+      }));
+      multiWebSocketCoordinator.updatePositions(positionsForCoordinator);
     }
-  }, [polledActivePositions, selectedTicker]);
-
-  // WebSocket 스토어 생성 (공통으로 사용)
-  const koreanWebSocketStore = useMemo(() => {
-    if (!selectedTickerItem) return null;
-    return createWebSocketStore({
-      exchange: selectedTickerItem.korean_ex || "UPBIT",
-      symbol: selectedTickerItem.symbol,
-      interval: "1m",
-    });
-  }, [selectedTickerItem?.korean_ex, selectedTickerItem?.symbol]);
-
-  const foreignWebSocketStore = useMemo(() => {
-    if (!selectedTickerItem) return null;
-    return createWebSocketStore({
-      exchange: selectedTickerItem.foreign_ex || "BYBIT",
-      symbol: selectedTickerItem.symbol,
-      interval: "1m",
-    });
-  }, [selectedTickerItem?.foreign_ex, selectedTickerItem?.symbol]);
-
-  // WebSocket 연결 관리 (상위 컴포넌트에서 중앙화)
-  useEffect(() => {
-    if (koreanWebSocketStore && foreignWebSocketStore) {
-      koreanWebSocketStore.getState().connectWebSocket();
-      foreignWebSocketStore.getState().connectWebSocket();
-    }
-
-    return () => {
-      if (koreanWebSocketStore && foreignWebSocketStore) {
-        koreanWebSocketStore.getState().disconnectWebSocket();
-        foreignWebSocketStore.getState().disconnectWebSocket();
-      }
-    };
-  }, [koreanWebSocketStore, foreignWebSocketStore]);
+  }, [polledActivePositions]);
 
   // 얕은 비교로 배열 변경 감지 (성능 최적화)
   const hasArrayChanged = useCallback((prev: any[], next: any[]): boolean => {
@@ -446,7 +505,7 @@ export default function Dashboard() {
     async (showLoading = false) => {
       // Race Condition 방지: 이미 실행 중이면 스킵
       if (isPollingActivePositionsRef.current) {
-        console.log("[DEBUG] Skipping poll - already in progress");
+        // console.log("[DEBUG] Skipping poll - already in progress");
         return;
       }
 
@@ -479,6 +538,7 @@ export default function Dashboard() {
               totalFrFunds: parseFloat(position.total_fr_funds) || 0,
               positionCount: parseInt(position.position_count) || 0,
               latestEntryTime: position.latest_entry_time,
+              leverage: position.leverage,
               entryRate: parseFloat(position.avg_entry_rate) || 0,
             })
           );
@@ -504,6 +564,7 @@ export default function Dashboard() {
 
           // 변경된 경우에만 상태 업데이트
           if (positionsChanged) {
+            // console.log("[DEBUG] Active positions changed, updating state");
             setPolledActivePositions(transformedPositions);
             setActivePositionCountLocal(data.activePositionCount);
             polledActivePositionsRef.current = transformedPositions;
@@ -679,26 +740,22 @@ export default function Dashboard() {
       startActivePositionsPolling();
       startLegalExchangeRatePolling();
 
-      // WebSocket 재연결
-      if (koreanWebSocketStore) {
-        koreanWebSocketStore.getState().connectWebSocket();
-      }
-      if (foreignWebSocketStore) {
-        foreignWebSocketStore.getState().connectWebSocket();
-      }
+      // WebSocket 재연결 - coordinator를 통해 모든 스토어 재연결
+      const allStores = multiWebSocketCoordinator.getAllStores();
+      allStores.forEach((store) => {
+        store.getState().connectWebSocket();
+      });
     } else {
       // 페이지가 숨겨졌을 때 폴링 중지
       stopExchangeRatePolling();
       stopActivePositionsPolling();
       stopLegalExchangeRatePolling();
 
-      // WebSocket 연결 해제
-      if (koreanWebSocketStore) {
-        koreanWebSocketStore.getState().disconnectWebSocket();
-      }
-      if (foreignWebSocketStore) {
-        foreignWebSocketStore.getState().disconnectWebSocket();
-      }
+      // WebSocket 연결 해제 - coordinator를 통해 모든 스토어 연결 해제
+      const allStores = multiWebSocketCoordinator.getAllStores();
+      allStores.forEach((store) => {
+        store.getState().disconnectWebSocket();
+      });
     }
   }, [
     startExchangeRatePolling,
@@ -707,8 +764,6 @@ export default function Dashboard() {
     stopActivePositionsPolling,
     startLegalExchangeRatePolling,
     stopLegalExchangeRatePolling,
-    koreanWebSocketStore,
-    foreignWebSocketStore,
   ]);
 
   // 모든 폴링 시작 및 visibilityChange 이벤트 설정 (통합)
@@ -1128,10 +1183,6 @@ export default function Dashboard() {
           // 포지션 종료 후 새로고침 (로딩 표시)
           pollActivePositions(true);
         }}
-        onTickerSelect={(coinSymbol: string) => {
-          // 티커 선택 시 차트 업데이트
-          setSelectedTicker(coinSymbol);
-        }}
       />
 
       {/* TradingView Widget - Upbit USDTKRW 5분봉 */}
@@ -1234,8 +1285,6 @@ export default function Dashboard() {
                       frExchange: selectedTickerItem.foreign_ex,
                     },
                   ]}
-                  koreanWebSocketStore={koreanWebSocketStore}
-                  foreignWebSocketStore={foreignWebSocketStore}
                 />
               </div>
             </CardContent>
@@ -1323,8 +1372,6 @@ export default function Dashboard() {
             };
           })}
         selectedItem={selectedTickerItem}
-        koreanWebSocketStore={koreanWebSocketStore}
-        foreignWebSocketStore={foreignWebSocketStore}
         tetherPrice={currentExchangeRate}
         legalExchangeRate={legalExchangeRate?.rate}
         activePositions={polledActivePositions}
@@ -1368,8 +1415,6 @@ export default function Dashboard() {
               interval="1m"
               activePositions={polledActivePositions}
               onSymbolChange={setSelectedTicker}
-              koreanWebSocketStore={koreanWebSocketStore}
-              foreignWebSocketStore={foreignWebSocketStore}
             />
           </CardContent>
         </Card>

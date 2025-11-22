@@ -14,7 +14,8 @@ import { UppercaseExchangeType, ExchangeInfoMap } from "../types/exchange";
 
 interface WebSocketState {
   exchange: string;
-  symbol: string;
+  symbol: string; // selectedTickerItem용 (단일 심볼)
+  symbols: string[]; // positions용 (다중 심볼)
   interval: string;
   listeners: ((
     data: TickerData | CandleBarData | PositionData | OrderBookData
@@ -24,9 +25,13 @@ interface WebSocketState {
   reconnectTimeout: NodeJS.Timeout | null;
   isConnected: boolean;
   isReconnecting: boolean;
+  onReconnect?: (exchange: string) => void; // 재연결 시 콜백
 
   setExchange: (exchange: string) => void;
   setSymbol: (symbol: string) => void;
+  setSymbolWithoutReconnect: (symbol: string) => void;
+  setSymbols: (symbols: string[]) => void;
+  updateSubscriptions: (symbols: string[]) => void; // 동적 구독 변경
   setInterval: (interval: string) => void;
   addMessageListener: (
     listener: (
@@ -39,11 +44,12 @@ interface WebSocketState {
     ) => void
   ) => void;
   sendMessage: (type: string, message: WebSocketParams) => void;
+  sendMessages: (messages: object | object[]) => void;
   connectWebSocket: () => void;
   disconnectWebSocket: () => void;
   subscribeToTicker: (symbol: string) => void;
   unsubscribeFromTicker: (symbol: string) => void;
-  subscribeToCandleBars: () => void;
+  subscribeToCandleBars: (symbol?: string) => void;
   unsubscribeFromCandleBars: (symbol: string, interval: string) => void;
   subscribeToOrderBook: (symbol: string) => void;
   unsubscribeFromOrderBook: (symbol: string) => void;
@@ -66,14 +72,16 @@ const socketMap: Record<string, string> = {
 export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
   createStore<WebSocketState>((set, get) => ({
     exchange: initialState.exchange!,
-    symbol: initialState.symbol!,
-    interval: initialState.interval!,
+    symbol: initialState.symbol || "",
+    symbols: initialState.symbols || [],
+    interval: initialState.interval || "1m",
     listeners: [],
     pendingOperations: [],
     socket: null,
     reconnectTimeout: null,
     isConnected: false,
     isReconnecting: false,
+    onReconnect: initialState.onReconnect,
 
     setExchange: (exchange) => set({ exchange }),
     setSymbol: (symbol) => {
@@ -82,14 +90,63 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
       get().disconnectWebSocket();
       get().connectWebSocket();
     },
+    setSymbolWithoutReconnect: (symbol) => {
+      // 심볼만 변경 (재연결 없이) - coordinator용
+      // symbols 배열로 이미 구독되어 있는 경우 사용
+      set({ symbol });
+    },
+    setSymbols: (symbols) => {
+      // symbols 변경: 상태만 변경 (구독은 updateSubscriptions로)
+      set({ symbols });
+    },
+    updateSubscriptions: (symbols) => {
+      // 웹소켓 연결 유지하면서 구독만 업데이트
+      const { socket, exchange } = get();
+
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        console.warn("[updateSubscriptions] WebSocket not connected");
+        // 연결되지 않았으면 symbols만 업데이트하고 나중에 연결 시 구독
+        set({ symbols });
+        return;
+      }
+
+      // symbols 상태 업데이트
+      set({ symbols });
+
+      const uppercaseExchange = exchange.toUpperCase() as UppercaseExchangeType;
+      const exchangeAdapter =
+        WebSocketAdapterFactory.getAdapter(uppercaseExchange);
+
+      // 한국 거래소: kline 구독 (orderbook 자동 포함)
+      if (
+        uppercaseExchange === UppercaseExchangeType.UPBIT ||
+        uppercaseExchange === UppercaseExchangeType.BITHUMB
+      ) {
+        const klineMsg = exchangeAdapter.getRequestMessage("kline", {
+          symbol: symbols,
+          interval: get().interval,
+        });
+        socket.send(JSON.stringify(klineMsg));
+        // console.log(
+        //   `[updateSubscriptions] ${exchange} kline subscribed:`,
+        //   symbols
+        // );
+      }
+      // 해외 거래소: orderbook 구독
+      else {
+        const orderbookMsg = exchangeAdapter.getRequestMessage("orderbook", {
+          symbol: symbols,
+        });
+        socket.send(JSON.stringify(orderbookMsg));
+        // console.log(
+        //   `[updateSubscriptions] ${exchange} orderbook subscribed:`,
+        //   symbols
+        // );
+      }
+    },
     setInterval: (interval) => {
-      // 인터벌 변경: 상태만 변경 후 ws 재연결
-      set({ interval, isReconnecting: true });
-      get().disconnectWebSocket();
-      setTimeout(() => {
-        get().connectWebSocket();
-        set({ isReconnecting: false });
-      }, 10000); // 10초(10000ms) 대기 후 재연결
+      // 인터벌만 변경 (재연결 없이) - coordinator에서 관리
+      set({ interval });
     },
 
     addMessageListener: (listener) => {
@@ -125,6 +182,26 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
       }
     },
 
+    sendMessages: (messages: object | object[]) => {
+      const { socket } = get();
+      const MAX_RETRIES = 5;
+      let idx = 0;
+
+      while (idx <= MAX_RETRIES) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          // console.log(
+          //   `WebSocket not connected, retrying sendMessages... (${idx + 1}/${MAX_RETRIES})`
+          // );
+          idx++;
+          setTimeout(() => {}, 500);
+          continue;
+        } else {
+          socket.send(JSON.stringify(messages));
+          break;
+        }
+      }
+    },
+
     connectWebSocket: () => {
       const {
         exchange,
@@ -137,13 +214,13 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
 
       // 이미 연결된 소켓이 있고 OPEN 상태라면 재연결하지 않음
       if (socket && socket.readyState === WebSocket.OPEN) {
-        console.log("WebSocket already connected, skipping reconnection");
+        // console.log("WebSocket already connected, skipping reconnection");
         return;
       }
 
       // 연결 중인 소켓이 있다면 재연결하지 않음
       if (socket && socket.readyState === WebSocket.CONNECTING) {
-        console.log("WebSocket is connecting, skipping reconnection");
+        // console.log("WebSocket is connecting, skipping reconnection");
         return;
       }
 
@@ -163,6 +240,13 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
           set({ reconnectTimeout: null });
         }
 
+        // 재연결 콜백 호출 (MultiWebSocketCoordinator가 구독 메시지 전송)
+        const { onReconnect, exchange } = get();
+        if (onReconnect) {
+          // console.log(`[chartState] Calling onReconnect for ${exchange}`);
+          onReconnect(exchange);
+        }
+
         // 대기 중인 메시지 전송
         pendingOperations.forEach((operation) => {
           get().sendMessage(operation.type, operation.params);
@@ -170,21 +254,57 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
         // 대기 중인 작업 초기화
         set({ pendingOperations: [] });
 
-        // 연결되면 kline 구독
-        get().subscribeToCandleBars();
-        // 연결되면 orderbook 구독 (upbit, bithumb 제외 - kline과 함께 구독됨)
+        const { symbol, symbols, interval } = get();
         const uppercaseExchange =
           exchange.toUpperCase() as UppercaseExchangeType;
-        if (
-          uppercaseExchange !== UppercaseExchangeType.UPBIT &&
-          uppercaseExchange !== UppercaseExchangeType.BITHUMB
-        ) {
-          get().subscribeToOrderBook(get().symbol);
-        }
-        // 연결되면 ticker 구독 (해외 거래소만)
-        if (ExchangeInfoMap[uppercaseExchange]?.isForeign) {
-          get().subscribeToTicker(get().symbol);
-        }
+
+        // // symbols 배열이 있으면 다중 심볼 구독
+        // if (symbols && symbols.length > 0) {
+        //   // 한국 거래소: orderbook 구독 (kline 자동 포함)
+        //   if (
+        //     uppercaseExchange === UppercaseExchangeType.UPBIT ||
+        //     uppercaseExchange === UppercaseExchangeType.BITHUMB
+        //   ) {
+        //     const requestMessage = exchangeAdapter.getRequestMessage(
+        //       "orderbook",
+        //       {
+        //         symbol: symbols,
+        //         selectedSymbol: symbol, // selectedTickerItem의 symbol 전달
+        //         interval,
+        //       }
+        //     );
+        //     ws.send(JSON.stringify(requestMessage));
+        //     console.log(
+        //       `[WebSocket] Subscribed to orderbook for symbols: ${symbols.join(", ")}${symbol ? ` + kline for ${symbol}` : ""}`
+        //     );
+        //   } else {
+        //     // 해외 거래소: orderbook + symbol이 있으면 kline + ticker도 구독
+        //     const orderbookMessage = exchangeAdapter.getRequestMessage(
+        //       "orderbook",
+        //       {
+        //         symbol: symbols,
+        //         selectedSymbol: symbol, // selectedTickerItem의 symbol 전달
+        //         interval,
+        //       }
+        //     );
+        //     ws.send(JSON.stringify(orderbookMessage));
+        //     console.log(
+        //       `[WebSocket] Subscribed to orderbook for symbols: ${symbols.join(", ")}${symbol ? ` + kline/ticker for ${symbol}` : ""}`
+        //     );
+        //   }
+        // } else if (symbol) {
+        //   // 기존 단일 심볼 구독 로직 유지
+        //   get().subscribeToCandleBars();
+        //   if (
+        //     uppercaseExchange !== UppercaseExchangeType.UPBIT &&
+        //     uppercaseExchange !== UppercaseExchangeType.BITHUMB
+        //   ) {
+        //     get().subscribeToOrderBook(symbol);
+        //   }
+        //   if (ExchangeInfoMap[uppercaseExchange]?.isForeign) {
+        //     get().subscribeToTicker(symbol);
+        //   }
+        // }
       };
 
       ws.onclose = () => {
@@ -217,8 +337,19 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
         }
         const data = JSON.parse(jsonStr);
         const transformedData = exchangeAdapter.getResponseMessage(data);
-        if (!transformedData) return;
-        listeners.forEach((listener) => listener(transformedData));
+
+        // 디버깅: transformedData가 null인 경우 로그
+        if (!transformedData) {
+          // console.log(
+          //   `[${get().exchange}] transformedData is null, raw data:`,
+          //   data
+          // );
+          return;
+        }
+
+        // 클로저 문제 해결: 최신 listeners 배열을 가져와서 호출
+        const currentListeners = get().listeners;
+        currentListeners.forEach((listener) => listener(transformedData));
       };
 
       set({ socket: ws });
@@ -233,17 +364,20 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
         set({ reconnectTimeout: null });
       }
 
+      // onReconnect 콜백 제거 (재연결 방지)
+      set({ onReconnect: undefined });
+
       // 소켓이 열려있거나 연결 중인 경우에만 닫기
       if (
         socket &&
         (socket.readyState === WebSocket.OPEN ||
           socket.readyState === WebSocket.CONNECTING)
       ) {
-        console.log("disconnectWebSocket called, closing socket");
+        // console.log("disconnectWebSocket called, closing socket");
         socket.close();
       }
 
-      set({ socket: null, isConnected: false });
+      set({ socket: null, isConnected: false, isReconnecting: false });
     },
 
     subscribeToTicker: (symbol) => {
@@ -278,10 +412,21 @@ export const createWebSocketStore = (initialState: Partial<WebSocketState>) =>
       // });
     },
 
-    subscribeToCandleBars: () => {
-      const { symbol, interval, sendMessage } = get();
+    subscribeToCandleBars: (symbolParam?: string) => {
+      const { symbol: stateSymbol, interval, sendMessage, exchange } = get();
+      const symbol = symbolParam || stateSymbol;
       if (!symbol || !interval) return;
 
+      // Bithumb은 candle API가 없으므로 구독하지 않음
+      const uppercaseExchange = exchange.toUpperCase() as UppercaseExchangeType;
+      if (uppercaseExchange === UppercaseExchangeType.BITHUMB) {
+        console.log(
+          `[subscribeToCandleBars] Skipping kline subscription for ${exchange} (not supported)`
+        );
+        return;
+      }
+
+      // console.log(`[subscribeToCandleBars] Subscribing to kline for ${symbol}`);
       sendMessage("kline", {
         symbol,
         interval,

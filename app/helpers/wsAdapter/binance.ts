@@ -22,6 +22,10 @@ export class BinanceWebSocketAdapter implements WebSocketAdapter {
     if (!params.symbol) {
       throw new Error("티커를 지정해야 합니다.");
     }
+    const symbols = Array.isArray(params.symbol)
+      ? params.symbol
+      : [params.symbol];
+
     switch (type) {
       case "kline": {
         if (!params.interval) {
@@ -29,21 +33,23 @@ export class BinanceWebSocketAdapter implements WebSocketAdapter {
         }
         return {
           method: "SUBSCRIBE",
-          params: [`${params.symbol}usdt@kline_${params.interval}`],
+          params: symbols.map(
+            (symbol) => `${symbol}usdt@kline_${params.interval}`
+          ),
           id: Date.now(),
         };
       }
       case "ticker": {
         return {
           method: "SUBSCRIBE",
-          params: [`${params.symbol}usdt@ticker`],
+          params: symbols.map((symbol) => `${symbol}usdt@ticker`),
           id: Date.now(),
         };
       }
       case "orderbook": {
         return {
           method: "SUBSCRIBE",
-          params: [`${params.symbol}usdt@depth20`],
+          params: symbols.map((symbol) => `${symbol}usdt@depth20`),
           id: Date.now(),
         };
       }

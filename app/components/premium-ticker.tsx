@@ -484,7 +484,7 @@ const PremiumTicker = React.memo(
       koreanEx?: string,
       foreignEx?: string
     ) => {
-      console.log("Opening confirm dialog for", symbol, koreanEx, foreignEx);
+      // console.log("Opening confirm dialog for", symbol, koreanEx, foreignEx);
       const order = orderData.find(
         (o) => o.krExchange === koreanEx && o.frExchange === foreignEx
       );
