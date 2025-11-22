@@ -272,6 +272,7 @@ const CompTradingviewChart = memo(
           });
           if (!response.ok) throw new Error("Network error");
           const data = await response.json();
+          // console.log("Fetched candles:", data);
           setCandleFetcherData(data);
         } catch (err) {
           setCandleFetcherError(err);
@@ -566,7 +567,7 @@ const CompTradingviewChart = memo(
               });
             }
           } catch (error) {
-            console.log(time);
+            // console.log(time);
             console.error("Error updating USDT line series:", error);
           }
           return;
@@ -983,6 +984,7 @@ const CompTradingviewChart = memo(
       volumeSeriesEx2Ref.current?.setData([]);
       lineSeriesRef.current?.setData([]);
 
+      // console.log("Fetching initial candles...");
       // 캔들 데이터 가져오기 (CSR fetch)
       fetchCandles({
         exchanges: [exchange1, exchange2],
@@ -1218,11 +1220,11 @@ const CompTradingviewChart = memo(
         return;
       }
 
-      // 심볼 변경시에 발동되는 useEffect는 무시
-      if (symbolChangeRef.current) {
-        symbolChangeRef.current = false;
-        return;
-      }
+      // // 심볼 변경시에 발동되는 useEffect는 무시
+      // if (symbolChangeRef.current) {
+      //   symbolChangeRef.current = false;
+      //   return;
+      // }
 
       isLoadingRef.current = false;
 
@@ -1239,6 +1241,7 @@ const CompTradingviewChart = memo(
         return;
       }
       const data = candleFetcherData as CandleData;
+      // console.log(`Fetched ${data.candleData.length} candles.`);
 
       const originalData = datafeedRef.current.getData() || {
         candleData: [],

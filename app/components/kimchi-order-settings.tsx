@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import RealtimeOrderBook from "./orderbook";
-import { createWebSocketStore } from "../stores/chartState";
+import { multiWebSocketCoordinator } from "../stores/multi-websocket-coordinator";
 import { motion } from "framer-motion";
 import type { StoreApi } from "zustand";
 import type { WebSocketState } from "../stores/chartState";
@@ -56,8 +56,6 @@ interface KimchiOrderSettingsProps {
     currency: string;
   }>;
   selectedItem?: TickPayload;
-  koreanWebSocketStore?: StoreApi<WebSocketState> | null;
-  foreignWebSocketStore?: StoreApi<WebSocketState> | null;
   tetherPrice?: number | null;
   legalExchangeRate?: number | null;
   activePositions?: any[];
@@ -67,8 +65,6 @@ export default React.memo(
   function KimchiOrderSettings({
     exchangeBalances,
     selectedItem,
-    koreanWebSocketStore,
-    foreignWebSocketStore,
     tetherPrice,
     legalExchangeRate,
     activePositions,
@@ -217,39 +213,67 @@ export default React.memo(
       exchangeBalances.length,
     ]);
 
-    // WebSocket 스토어 생성 (항상 useMemo 호출하여 Hook 순서 유지)
-    const krStore = useMemo(() => {
-      if (!selectedItem || !currentPair) return null;
-      if (koreanWebSocketStore) return koreanWebSocketStore;
-      return createWebSocketStore({
-        exchange: currentPair.kr.name.toLowerCase(),
-        symbol: selectedItem.symbol,
-        interval: "1m",
-      });
-    }, [koreanWebSocketStore, selectedItem?.symbol, currentPair?.kr.name]);
+    // WebSocket 스토어 가져오기 - coordinator에서 직접 가져옴
+    const [krStore, setKrStore] = useState<StoreApi<WebSocketState> | null>(
+      null
+    );
+    const [frStore, setFrStore] = useState<StoreApi<WebSocketState> | null>(
+      null
+    );
 
-    const frStore = useMemo(() => {
-      if (!selectedItem || !currentPair) return null;
-      if (foreignWebSocketStore) return foreignWebSocketStore;
-      return createWebSocketStore({
-        exchange: currentPair.fr.name.toLowerCase(),
-        symbol: selectedItem.symbol,
-        interval: "1m",
-      });
-    }, [foreignWebSocketStore, selectedItem?.symbol, currentPair?.fr.name]);
+    useEffect(() => {
+      // console.log("Selected Item changed:", selectedItem);
+      if (
+        !selectedItem ||
+        !selectedItem.korean_ex ||
+        !selectedItem.foreign_ex
+      ) {
+        setKrStore(null);
+        setFrStore(null);
+        return;
+      }
 
-    // Symbol 변경 시 기존 store의 symbol 업데이트
+      const koreanExchange = selectedItem.korean_ex;
+      const foreignExchange = selectedItem.foreign_ex;
+
+      let korean = multiWebSocketCoordinator.getStore(koreanExchange);
+      let foreign = multiWebSocketCoordinator.getStore(foreignExchange);
+
+      // Store가 없는 경우 짧은 지연 후 재시도 (WebSocket 연결 대기)
+      if (!korean || !foreign) {
+        const retryTimer = setTimeout(() => {
+          const retryKorean =
+            multiWebSocketCoordinator.getStore(koreanExchange);
+          const retryForeign =
+            multiWebSocketCoordinator.getStore(foreignExchange);
+
+          setKrStore(retryKorean || null);
+          setFrStore(retryForeign || null);
+        }, 100); // 100ms 대기 후 재시도
+
+        return () => clearTimeout(retryTimer);
+      }
+
+      setKrStore(korean || null);
+      setFrStore(foreign || null);
+    }, [
+      selectedItem?.symbol,
+      selectedItem?.korean_ex,
+      selectedItem?.foreign_ex,
+    ]);
+
+    // Symbol 변경 시 기존 store의 symbol 업데이트 (reconnection 방지)
     useEffect(() => {
       if (!selectedItem?.symbol) return;
 
       // 한국 거래소 store symbol 업데이트
       if (krStore && krStore.getState().symbol !== selectedItem.symbol) {
-        krStore.getState().setSymbol(selectedItem.symbol);
+        krStore.getState().setSymbolWithoutReconnect(selectedItem.symbol);
       }
 
       // 해외 거래소 store symbol 업데이트
       if (frStore && frStore.getState().symbol !== selectedItem.symbol) {
-        frStore.getState().setSymbol(selectedItem.symbol);
+        frStore.getState().setSymbolWithoutReconnect(selectedItem.symbol);
       }
     }, [selectedItem?.symbol, krStore, frStore]);
 
@@ -1320,8 +1344,6 @@ export default React.memo(
       selectedItemEqual &&
       prevProps.tetherPrice === nextProps.tetherPrice &&
       prevProps.legalExchangeRate === nextProps.legalExchangeRate &&
-      prevProps.koreanWebSocketStore === nextProps.koreanWebSocketStore &&
-      prevProps.foreignWebSocketStore === nextProps.foreignWebSocketStore &&
       JSON.stringify(prevProps.exchangeBalances) ===
         JSON.stringify(nextProps.exchangeBalances) &&
       JSON.stringify(prevProps.activePositions) ===

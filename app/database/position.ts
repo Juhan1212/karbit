@@ -73,9 +73,10 @@ export async function getUserActivePositions(userId: number) {
            sum(p.fr_volume) as total_fr_volume,
            sum(p.kr_funds) as total_kr_funds,
            sum(p.fr_funds) as total_fr_funds,
-           sum(p.kr_funds) / sum(p.fr_funds) as avg_entry_rate,
+           sum(p.kr_funds) / NULLIF(sum(p.fr_funds), 0) as avg_entry_rate,
            COUNT(*) as position_count,
-           MAX(p.entry_time) as latest_entry_time
+           MAX(p.entry_time) as latest_entry_time,
+           MAX(p.leverage) as leverage
     FROM positions p
     LEFT JOIN latest_closed lc ON p.coin_symbol = lc.coin_symbol
     WHERE p.user_id = ${userId} 
@@ -512,7 +513,7 @@ export async function closePositionByCoinSymbol(
       )
   `);
 
-  console.log(`포지션 종료 완료: ${coinSymbol}, 사용자: ${userId}`);
+  // console.log(`포지션 종료 완료: ${coinSymbol}, 사용자: ${userId}`);
 }
 
 /**

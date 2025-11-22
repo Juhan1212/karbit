@@ -66,119 +66,180 @@ export class BybitWebSocketAdapter implements WebSocketAdapter {
   > = new Map();
 
   /**
-   * 원래 호가 단위(tick size)를 감지합니다.
-   * 연속된 가격들의 최소 차이를 계산하여 판단합니다.
+   * symbols와 symbol을 머지하여 단일 구독 메시지 생성
+   * @param symbols - orderbook만 구독할 심볼들 (포지션)
+   * @param symbol - orderbook + kline + ticker 구독할 심볼 (selectedTickerItem)
+   * @param interval - 캔들 인터벌
    */
-  private detectTickSize(
-    orders: { price: number; amount: number; total: number }[]
-  ): number {
-    if (orders.length < 2) return 0.001; // 기본값
-
-    // 가격 차이들을 계산
-    const differences: number[] = [];
-    for (let i = 1; i < Math.min(orders.length, 20); i++) {
-      const diff = Math.abs(orders[i].price - orders[i - 1].price);
-      if (diff > 0) {
-        // 부동소수점 오차 보정: 소수점 8자리로 반올림
-        differences.push(Number(diff.toFixed(8)));
-      }
+  getUpdateSubscriptionMessage(
+    symbols: string[],
+    symbol: string | null,
+    interval: string = "1m"
+  ) {
+    // 모든 심볼 수집 (중복 제거)
+    const allSymbols = new Set<string>(symbols);
+    if (symbol) {
+      allSymbols.add(symbol);
     }
 
-    if (differences.length === 0) return 0.001;
+    const args: string[] = [];
 
-    // 최소 차이 찾기
-    const minDiff = Math.min(...differences);
+    // 모든 심볼에 대해 orderbook 구독 (Bybit은 depth 1, 50, 500만 지원)
+    allSymbols.forEach((s) => {
+      args.push(`orderbook.50.${s}USDT`);
+    });
 
-    // 일반적인 tick size 중에서 가장 가까운 값 찾기
-    const commonTickSizes = [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10, 100];
-
-    for (const tickSize of commonTickSizes) {
-      // minDiff가 tickSize의 0.5배 이상이면 해당 tickSize로 판단
-      if (minDiff >= tickSize * 0.5) {
-        return tickSize;
-      }
+    // symbol이 있으면 kline + ticker 추가 구독
+    if (symbol) {
+      const convertedInterval =
+        interval_map[interval as keyof typeof interval_map] || "1";
+      args.push(`kline.${convertedInterval}.${symbol}USDT`);
+      args.push(`tickers.${symbol}USDT`);
     }
 
-    return 0.001; // 기본값
+    return {
+      op: "subscribe",
+      args,
+    };
   }
 
   /**
-   * 호가를 특정 단위로 그룹화
-   * 예: 1.1234, 1.1233, 1.1232 -> 1.123으로 합침
-   *
-   * @param orders 원본 호가 데이터
-   * @param targetTickSize 그룹화할 목표 단위 (예: 0.001)
-   * @returns 그룹화된 호가 데이터
+   * 구독 해제 메시지 생성
+   * @param symbols - 구독 해제할 심볼들
+   * @param symbol - 구독 해제할 selectedTickerItem 심볼 (kline/ticker 포함)
+   * @param interval - 캔들 인터벌
    */
-  private groupOrderBookByPrice(
-    orders: { price: number; amount: number; total: number }[],
-    targetTickSize: number = 0.001
-  ): { price: number; amount: number; total: number }[] {
-    if (orders.length === 0) return [];
+  getUnsubscribeMessage(
+    symbols: string[],
+    symbol: string | null,
+    interval: string = "1m"
+  ) {
+    const args: string[] = [];
 
-    // 원래 호가 단위 감지
-    const originalTickSize = this.detectTickSize(orders);
+    // symbols에 대해 orderbook 구독 해제
+    symbols.forEach((s) => {
+      args.push(`orderbook.50.${s}USDT`);
+    });
 
-    // 원래 호가 단위가 목표 단위보다 크거나 같으면 그룹화하지 않음
-    if (originalTickSize >= targetTickSize) {
-      return orders;
+    // symbol이 있으면 kline + ticker도 구독 해제
+    if (symbol) {
+      const convertedInterval =
+        interval_map[interval as keyof typeof interval_map] || "1";
+      args.push(`kline.${convertedInterval}.${symbol}USDT`);
+      args.push(`tickers.${symbol}USDT`);
     }
 
-    // 그룹화 실행
-    const grouped = new Map<number, { amount: number; total: number }>();
+    return {
+      op: "unsubscribe",
+      args,
+    };
+  }
 
-    orders.forEach(({ price, amount, total }) => {
-      // 가격을 targetTickSize 단위로 내림 (floor)
-      // 부동소수점 오차 방지를 위해 반올림 처리
-      const groupedPrice = Number(
-        (Math.floor(price / targetTickSize) * targetTickSize).toFixed(8)
-      );
+  /**
+   * 특정 심볼의 특정 채널만 구독 해제
+   * @param symbol - 심볼
+   * @param channels - 구독 해제할 채널 목록 ['kline', 'ticker', 'orderbook']
+   * @param interval - 캔들 인터벌
+   */
+  getUnsubscribeChannelsMessage(
+    symbol: string,
+    channels: string[],
+    interval: string = "1m"
+  ) {
+    const args: string[] = [];
+    const convertedInterval =
+      interval_map[interval as keyof typeof interval_map] || "1";
 
-      if (grouped.has(groupedPrice)) {
-        const existing = grouped.get(groupedPrice)!;
-        grouped.set(groupedPrice, {
-          amount: existing.amount + amount,
-          total: existing.total + total,
-        });
-      } else {
-        grouped.set(groupedPrice, { amount, total });
+    channels.forEach((channel) => {
+      if (channel === "kline") {
+        args.push(`kline.${convertedInterval}.${symbol}USDT`);
+      } else if (channel === "ticker") {
+        args.push(`tickers.${symbol}USDT`);
+      } else if (channel === "orderbook") {
+        args.push(`orderbook.50.${symbol}USDT`);
       }
     });
 
-    // Map을 배열로 변환
-    return Array.from(grouped.entries()).map(([price, { amount, total }]) => ({
-      price,
-      amount,
-      total,
-    }));
+    return {
+      op: "unsubscribe",
+      args,
+    };
+  }
+
+  /**
+   * 특정 심볼의 특정 채널만 구독
+   * @param symbol - 심볼
+   * @param channels - 구독할 채널 목록 ['kline', 'ticker', 'orderbook']
+   * @param interval - 캔들 인터벌
+   */
+  getSubscribeChannelsMessage(
+    symbol: string,
+    channels: string[],
+    interval: string = "1m"
+  ) {
+    const args: string[] = [];
+    const convertedInterval =
+      interval_map[interval as keyof typeof interval_map] || "1";
+
+    channels.forEach((channel) => {
+      if (channel === "kline") {
+        args.push(`kline.${convertedInterval}.${symbol}USDT`);
+      } else if (channel === "ticker") {
+        args.push(`tickers.${symbol}USDT`);
+      } else if (channel === "orderbook") {
+        args.push(`orderbook.50.${symbol}USDT`);
+      }
+    });
+
+    return {
+      op: "subscribe",
+      args,
+    };
   }
 
   getRequestMessage(type: string, params: WebSocketParams) {
     if (!params.symbol) {
       throw new Error("티커를 지정해야 합니다.");
     }
+    const symbols = Array.isArray(params.symbol)
+      ? params.symbol
+      : [params.symbol];
+
     switch (type) {
       case "kline": {
         if (!params.interval) {
           throw new Error("인터벌을 지정해야 합니다.");
         }
+        const interval =
+          interval_map[params.interval as keyof typeof interval_map];
         return {
           op: "subscribe",
-          args: [
-            `kline.${interval_map[params.interval as keyof typeof interval_map]}.${params.symbol}USDT`,
-          ],
+          args: symbols.map((symbol) => `kline.${interval}.${symbol}USDT`),
         };
       }
       case "ticker": {
         return {
           op: "subscribe",
-          args: [`tickers.${params.symbol}USDT`],
+          args: symbols.map((symbol) => `tickers.${symbol}USDT`),
         };
       }
       case "orderbook": {
+        // orderbook 구독 args 생성 (Bybit은 depth 1, 50, 500만 지원)
+        const args = symbols.map((symbol) => `orderbook.50.${symbol}USDT`);
+
+        // selectedSymbol이 있으면, kline과 ticker 추가
+        if (params.selectedSymbol) {
+          if (params.interval) {
+            const interval =
+              interval_map[params.interval as keyof typeof interval_map];
+            args.push(`kline.${interval}.${params.selectedSymbol}USDT`);
+          }
+          args.push(`tickers.${params.selectedSymbol}USDT`);
+        }
+
         return {
           op: "subscribe",
-          args: [`orderbook.200.${params.symbol}USDT`],
+          args,
         };
       }
       default:
@@ -317,27 +378,21 @@ export class BybitWebSocketAdapter implements WebSocketAdapter {
           return null;
         }
 
-        // 원본 데이터가 있으면 그룹화하여 반환
+        // 원본 데이터가 있으면 반환 (그룹화는 UI에서 처리)
         if (rawOrderBook) {
-          // 0.001 단위로 그룹화
-          const groupedBids = this.groupOrderBookByPrice(
-            rawOrderBook.bids,
-            0.001
+          // 정렬만 수행
+          const sortedBids = [...rawOrderBook.bids].sort(
+            (a, b) => b.price - a.price
           );
-          const groupedAsks = this.groupOrderBookByPrice(
-            rawOrderBook.asks,
-            0.001
+          const sortedAsks = [...rawOrderBook.asks].sort(
+            (a, b) => a.price - b.price
           );
-
-          // 그룹화 후 정렬
-          groupedBids.sort((a, b) => b.price - a.price);
-          groupedAsks.sort((a, b) => a.price - b.price);
 
           return {
             channel: "orderbook",
             symbol,
-            bids: groupedBids,
-            asks: groupedAsks,
+            bids: sortedBids,
+            asks: sortedAsks,
             timestamp: Date.now(),
           } as OrderBookData;
         }

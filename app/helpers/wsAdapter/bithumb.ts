@@ -3,6 +3,36 @@ import type { CandleBarData, OrderBookData } from "../../types/marketInfo";
 import { toUppercaseKRWSymbol } from "../common";
 
 export class BithumbWebSocketAdapter implements WebSocketAdapter {
+  /**
+   * symbols와 symbol을 머지하여 단일 구독 메시지 생성
+   * 빗썸은 candle 웹소켓을 제공하지 않으므로 orderbook만 구독
+   * @param symbols - orderbook 구독할 심볼들 (포지션)
+   * @param symbol - orderbook 구독할 심볼 (selectedTickerItem)
+   * @param interval - 사용되지 않음 (빗썸은 candle 미지원)
+   */
+  getUpdateSubscriptionMessage(
+    symbols: string[],
+    symbol: string | null,
+    interval: string = "1m"
+  ) {
+    // 모든 심볼 수집 (중복 제거)
+    const allSymbols = new Set<string>(symbols);
+    if (symbol) {
+      allSymbols.add(symbol);
+    }
+
+    const symbolArray = Array.from(allSymbols);
+    const codes = symbolArray.map((s) => toUppercaseKRWSymbol(s));
+    codes.push("KRW-USDT"); // 환율용
+
+    return [
+      { ticket: "test" },
+      {
+        type: "orderbook",
+        codes,
+      },
+    ];
+  }
   getRequestMessage(type: string, params: WebSocketParams) {
     switch (type) {
       case "kline": {
@@ -19,10 +49,51 @@ export class BithumbWebSocketAdapter implements WebSocketAdapter {
         return [
           { ticket: "test" },
           {
+            type: `candle.${interval}`,
+            codes: symbols.map((symbol) => toUppercaseKRWSymbol(symbol)),
+          },
+          {
             type: "orderbook",
             codes: symbols.map((symbol) => toUppercaseKRWSymbol(symbol)),
           },
           { format: "JSON_LIST" },
+        ];
+      }
+      case "orderbook": {
+        if (!params.symbol) {
+          throw new Error("심볼을 지정해야 합니다.");
+        }
+        const symbols = Array.isArray(params.symbol)
+          ? params.symbol
+          : [params.symbol];
+
+        // 빗썸은 아직 candle 웹소켓 지원 안 함
+        // selectedSymbol이 있고 symbols에 포함되지 않은 경우 kline도 구독
+        // if (params.selectedSymbol) {
+        //   let interval = params.interval || "1m";
+        //   if (interval === "1h") interval = "60m";
+        //   if (interval === "4h") interval = "240m";
+
+        //   return [
+        //     { ticket: "test" },
+        //     {
+        //       type: "orderbook",
+        //       codes: symbols.map((symbol) => toUppercaseKRWSymbol(symbol)),
+        //     },
+        //     {
+        //       type: `candle.${interval}`,
+        //       codes: [toUppercaseKRWSymbol(params.selectedSymbol)],
+        //     },
+        //     { format: "JSON_LIST" },
+        //   ];
+        // }
+
+        return [
+          { ticket: "test" },
+          {
+            type: "orderbook",
+            codes: symbols.map((symbol) => toUppercaseKRWSymbol(symbol)),
+          },
         ];
       }
       default:
@@ -32,24 +103,26 @@ export class BithumbWebSocketAdapter implements WebSocketAdapter {
 
   getResponseMessage(message: any): CandleBarData | OrderBookData | null {
     try {
-      // 배열인지 확인하고, 첫 번째 요소가 존재하는지 확인
-      if (
-        Array.isArray(message) &&
-        message[0] &&
-        message[0].type?.startsWith("candle")
-      ) {
+      // 배열로 데이터를 받는 경우 첫 번째 요소 사용
+      const data = Array.isArray(message) ? message[0] : message;
+
+      if (!data || !data.type) {
+        return null;
+      }
+
+      if (data.type.startsWith("candle")) {
         return {
           channel: "kline",
-          symbol: message[0].code.replace("KRW-", ""),
-          time: new Date(message[0].candle_date_time_utc + "Z").getTime(),
-          open: Number(message[0].opening_price),
-          high: Number(message[0].high_price),
-          low: Number(message[0].low_price),
-          close: Number(message[0].trade_price),
-          volume: Number(message[0].candle_acc_trade_volume),
+          symbol: data.code.replace("KRW-", ""),
+          time: new Date(data.candle_date_time_utc + "Z").getTime(),
+          open: Number(data.opening_price),
+          high: Number(data.high_price),
+          low: Number(data.low_price),
+          close: Number(data.trade_price),
+          volume: Number(data.candle_acc_trade_volume),
         } as CandleBarData;
-      } else if (message.type === "orderbook") {
-        const orderbookUnits = message.orderbook_units || [];
+      } else if (data.type === "orderbook") {
+        const orderbookUnits = data.orderbook_units || [];
         const bids: { price: number; amount: number; total: number }[] = [];
         const asks: { price: number; amount: number; total: number }[] = [];
 
@@ -68,14 +141,14 @@ export class BithumbWebSocketAdapter implements WebSocketAdapter {
 
         return {
           channel: "orderbook",
-          symbol: message.code.replace("KRW-", ""),
+          symbol: data.code.replace("KRW-", ""),
           bids,
           asks,
           timestamp: Date.now(),
         } as OrderBookData;
       }
     } catch (error) {
-      console.log("Bithumb adapter error - received message:", message);
+      // console.log("Bithumb adapter error - received message:", message);
       console.error("WebSocket message parsing error:", error);
     }
     return null;

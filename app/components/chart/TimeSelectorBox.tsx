@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import Icon from "../shared/SVGIcon";
 import { createWebSocketStore } from "../../stores/chartState";
+import { multiWebSocketCoordinator } from "../../stores/multi-websocket-coordinator";
 
 const timeIntervals = [
   ["1m", "5m", "15m", "30m"],
@@ -19,7 +20,12 @@ export default function TimeSelector({
 
   const handleIntervalChange = useCallback(
     (time: string) => {
+      // MultiWebSocketCoordinator를 통해 interval 변경 및 재구독
+      multiWebSocketCoordinator.updateInterval(time);
+
+      // 로컬 상태도 업데이트
       setInterval(time);
+
       if (onIntervalChange) {
         onIntervalChange(time);
       }

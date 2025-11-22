@@ -263,7 +263,7 @@ export class BybitAdapter extends ExchangeAdapter {
         orderParams.price = params.price.toString();
       }
 
-      console.log("Bybit placeOrder params:", orderParams);
+      // console.log("Bybit placeOrder params:", orderParams);
       const result = await this.client.submitOrder(orderParams);
 
       if (result.retCode !== 0) {
@@ -465,7 +465,7 @@ export class BybitAdapter extends ExchangeAdapter {
 
       const result = await this.client.getClosedPnL(params);
 
-      console.log(JSON.stringify(result, null, 2));
+      // console.log(JSON.stringify(result, null, 2));
 
       if (result.retCode !== 0) {
         throw new Error(`Bybit getClosedPnl failed: ${result.retMsg}`);

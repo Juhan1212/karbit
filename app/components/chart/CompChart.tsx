@@ -1,5 +1,5 @@
-import { useMemo, useEffect } from "react";
-import { createWebSocketStore } from "../../stores/chartState";
+import { useMemo, useEffect, useState } from "react";
+import { multiWebSocketCoordinator } from "../../stores/multi-websocket-coordinator";
 import TickerInfoBar from "./TickerInfoBar";
 import CompTradingviewChart from "./CompTradingviewChart";
 import TimeSelector from "./TimeSelectorBox";
@@ -18,8 +18,6 @@ interface CompChartProps {
     frExchange: string;
   }>;
   onSymbolChange?: (newSymbol: string) => void;
-  koreanWebSocketStore?: StoreApi<WebSocketState> | null;
-  foreignWebSocketStore?: StoreApi<WebSocketState> | null;
 }
 
 export const CompChart = ({
@@ -29,40 +27,92 @@ export const CompChart = ({
   interval,
   activePositions,
   onSymbolChange,
-  koreanWebSocketStore,
-  foreignWebSocketStore,
 }: CompChartProps) => {
-  const store1 =
-    koreanWebSocketStore ||
-    useMemo(
-      () =>
-        createWebSocketStore({
-          exchange: koreanEx,
-          symbol,
-          interval,
-        }),
-      [koreanEx, symbol, interval]
-    );
-  const store2 =
-    foreignWebSocketStore ||
-    useMemo(
-      () =>
-        createWebSocketStore({
-          exchange: foreignEx,
-          symbol,
-          interval,
-        }),
-      [foreignEx, symbol, interval]
-    );
+  // Coordinator에서 스토어 가져오기
+  const [koreanStore, setKoreanStore] =
+    useState<StoreApi<WebSocketState> | null>(null);
+  const [foreignStore, setForeignStore] =
+    useState<StoreApi<WebSocketState> | null>(null);
 
-  // WebSocket 연결 관리는 상위 컴포넌트(dashboard)에서 처리하므로 제거
+  useEffect(() => {
+    const korean = multiWebSocketCoordinator.getStore(koreanEx);
+    const foreign = multiWebSocketCoordinator.getStore(foreignEx);
 
-  // 아래와 같이 스토어로부터 동기화를 시켜야 CompTradingviewChart에 매개변수로 전달해줘서 티커, 봉이 바뀔 때에 CompTradingviewChart가 리렌더링될 수 있다.
-  const storeSymbol = useStore(store1, (state) => state.symbol);
-  const storeInterval = useStore(store1, (state) => state.interval);
-  const isReconnecting1 = useStore(store1, (state) => state.isReconnecting);
-  const isReconnecting2 = useStore(store2, (state) => state.isReconnecting);
+    // Store가 없는 경우 짧은 지연 후 재시도 (WebSocket 연결 대기)
+    if (!korean || !foreign) {
+      const retryTimer = setTimeout(() => {
+        const retryKorean = multiWebSocketCoordinator.getStore(koreanEx);
+        const retryForeign = multiWebSocketCoordinator.getStore(foreignEx);
+
+        setKoreanStore(retryKorean || null);
+        setForeignStore(retryForeign || null);
+      }, 100); // 100ms 대기 후 재시도
+
+      return () => clearTimeout(retryTimer);
+    }
+
+    setKoreanStore(korean || null);
+    setForeignStore(foreign || null);
+  }, [koreanEx, foreignEx]);
+
+  // Hooks는 항상 같은 순서로 호출되어야 함 - 조건부 체크 전에 모든 훅 선언
+  const store1 = koreanStore;
+  const store2 = foreignStore;
+
+  // useStore 훅들을 조건부 이전에 호출 (null일 경우를 위해 더미 스토어 제공)
+  const dummyStore: StoreApi<WebSocketState> = {
+    getState: () =>
+      ({
+        symbol: symbol || "",
+        interval: interval || "1m",
+        isReconnecting: false,
+      }) as WebSocketState,
+    setState: () => {},
+    subscribe: () => () => {},
+    destroy: () => {},
+  } as any;
+
+  const storeSymbol = useStore(store1 || dummyStore, (state) => state.symbol);
+  const storeInterval = useStore(
+    store1 || dummyStore,
+    (state) => state.interval
+  );
+  const isReconnecting1 = useStore(
+    store1 || dummyStore,
+    (state) => state.isReconnecting
+  );
+  const isReconnecting2 = useStore(
+    store2 || dummyStore,
+    (state) => state.isReconnecting
+  );
   const isReconnecting = isReconnecting1 || isReconnecting2;
+
+  // 스토어가 없으면 로딩 표시
+  if (!koreanStore || !foreignStore) {
+    return (
+      <div
+        className="chart-container"
+        style={{
+          position: "relative",
+          backgroundColor: "rgb(19, 18, 21)",
+          minHeight: "500px",
+          width: "100%",
+          height: "auto",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ color: "#eee", fontSize: "1.2rem" }}>
+          웹소켓 연결 중...
+        </div>
+      </div>
+    );
+  }
+
+  // 이 시점에서 store는 null이 아님이 보장됨
+  const guaranteedStore1 = store1 as StoreApi<WebSocketState>;
+  const guaranteedStore2 = store2 as StoreApi<WebSocketState>;
 
   return (
     <div
@@ -125,25 +175,25 @@ export const CompChart = ({
       <TickerInfoBar
         exchange={foreignEx}
         symbol={storeSymbol}
-        store={store2}
+        store={guaranteedStore2}
         activePositions={activePositions}
         onSymbolChange={(newSymbol: string) => {
-          store1.getState().setSymbol(newSymbol);
-          store2.getState().setSymbol(newSymbol);
+          guaranteedStore1.getState().setSymbolWithoutReconnect(newSymbol);
+          guaranteedStore2.getState().setSymbolWithoutReconnect(newSymbol);
           onSymbolChange?.(newSymbol);
         }}
       />
       <div className="chart-wrapper">
         <TimeSelector
-          store={store1}
+          store={guaranteedStore1}
           onIntervalChange={(newInterval) => {
-            store1.getState().setInterval(newInterval);
-            store2.getState().setInterval(newInterval);
+            guaranteedStore1.getState().setInterval(newInterval);
+            guaranteedStore2.getState().setInterval(newInterval);
           }}
         />
         <CompTradingviewChart
-          store1={store1}
-          store2={store2}
+          store1={guaranteedStore1}
+          store2={guaranteedStore2}
           symbol={storeSymbol}
           interval={storeInterval}
           exchange1={koreanEx}
